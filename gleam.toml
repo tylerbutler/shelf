@@ -1,0 +1,14 @@
+name = "shelf"
+version = "0.1.0"
+description = "Persistent ETS tables backed by DETS — fast in-memory access with automatic disk persistence for the BEAM"
+licences = ["MIT"]
+repository = { type = "github", user = "tylerbutler", repo = "shelf" }
+gleam = ">= 1.7.0"
+target = "erlang"
+
+[dependencies]
+gleam_stdlib = ">= 0.48.0 and < 2.0.0"
+gleam_erlang = ">= 1.0.0 and < 2.0.0"
+
+[dev-dependencies]
+startest = ">= 0.8.0 and < 1.0.0"

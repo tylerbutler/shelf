@@ -1,0 +1,21 @@
+# Build artifacts
+*.beam
+*.ez
+/build
+erl_crash.dump
+
+# Coverage
+/coverage
+*.lcov
+
+# IDE
+.idea/
+*.swp
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local settings
+.claude/settings.local.json
