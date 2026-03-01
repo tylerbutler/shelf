@@ -7,22 +7,9 @@ on:
 
 jobs:
   auto-tag:
-    if: github.event.pull_request.merged && contains(github.event.pull_request.labels.*.name, 'release')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Generate app token
-        id: app-token
-        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # ratchet:actions/create-github-app-token@v2
-        with:
-          app-id: ${{ secrets.RELEASE_APP_ID }}
-          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
-        with:
-          token: ${{ steps.app-token.outputs.token }}
-
-      - uses: tylerbutler/actions/changie-auto-tag@c697a813534c6364a835de8e2ed2c4e0c3638bbe # ratchet:tylerbutler/actions/changie-auto-tag@main
-        id: auto-tag
-        with:
-          create-release: true
-          token: ${{ steps.app-token.outputs.token }}
+    uses: tylerbutler/actions/.github/workflows/auto-tag.yml@c697a813534c6364a835de8e2ed2c4e0c3638bbe # ratchet:tylerbutler/actions/.github/workflows/auto-tag.yml@main
+    with:
+      create-release: true
+    secrets:
+      app-id: ${{ secrets.RELEASE_APP_ID }}
+      app-private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
