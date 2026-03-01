@@ -17,6 +17,7 @@
 /// let assert Ok(Nil) = bag.close(table)
 /// ```
 ///
+import gleam/result
 import shelf.{
   type Config, type ShelfError, type WriteMode, Config, WriteBack, WriteThrough,
 }
@@ -33,10 +34,8 @@ pub opaque type PBag(k, v) {
 ///
 pub fn open_config(config: Config) -> Result(PBag(k, v), ShelfError) {
   let Config(name:, path:, write_mode:) = config
-  case ffi_open_bag(name, path) {
-    Ok(#(ets, dets)) -> Ok(PBag(ets:, dets:, write_mode:))
-    Error(err) -> Error(err)
-  }
+  ffi_open_bag(name, path)
+  |> result.map(fn(refs) { PBag(ets: refs.0, dets: refs.1, write_mode:) })
 }
 
 /// Open a persistent bag table with defaults (WriteBack mode).
@@ -70,14 +69,10 @@ pub fn with_table(
   path path: String,
   fun fun: fn(PBag(k, v)) -> Result(a, ShelfError),
 ) -> Result(a, ShelfError) {
-  case open(name:, path:) {
-    Ok(table) -> {
-      let result = fun(table)
-      let _ = close(table)
-      result
-    }
-    Error(err) -> Error(err)
-  }
+  use table <- result.try(open(name:, path:))
+  let result = fun(table)
+  let _ = close(table)
+  result
 }
 
 // ── Read ────────────────────────────────────────────────────────────────
@@ -132,10 +127,8 @@ pub fn insert(
   key key: k,
   value value: v,
 ) -> Result(Nil, ShelfError) {
-  case ffi_insert(table.ets, table.dets, #(key, value)) {
-    Ok(Nil) -> maybe_write_through(table)
-    Error(err) -> Error(err)
-  }
+  use _ <- result.try(ffi_insert(table.ets, table.dets, #(key, value)))
+  maybe_write_through(table)
 }
 
 /// Insert multiple key-value pairs.
@@ -144,10 +137,8 @@ pub fn insert_list(
   into table: PBag(k, v),
   entries entries: List(#(k, v)),
 ) -> Result(Nil, ShelfError) {
-  case ffi_insert_list(table.ets, table.dets, entries) {
-    Ok(Nil) -> maybe_write_through(table)
-    Error(err) -> Error(err)
-  }
+  use _ <- result.try(ffi_insert_list(table.ets, table.dets, entries))
+  maybe_write_through(table)
 }
 
 // ── Delete ──────────────────────────────────────────────────────────────
@@ -155,10 +146,8 @@ pub fn insert_list(
 /// Delete all values for the given key.
 ///
 pub fn delete_key(from table: PBag(k, v), key key: k) -> Result(Nil, ShelfError) {
-  case ffi_delete_key(table.ets, key) {
-    Ok(Nil) -> maybe_write_through(table)
-    Error(err) -> Error(err)
-  }
+  use _ <- result.try(ffi_delete_key(table.ets, key))
+  maybe_write_through(table)
 }
 
 /// Delete a specific key-value pair.
@@ -171,19 +160,15 @@ pub fn delete_object(
   key key: k,
   value value: v,
 ) -> Result(Nil, ShelfError) {
-  case ffi_delete_object(table.ets, key, value) {
-    Ok(Nil) -> maybe_write_through(table)
-    Error(err) -> Error(err)
-  }
+  use _ <- result.try(ffi_delete_object(table.ets, key, value))
+  maybe_write_through(table)
 }
 
 /// Delete all entries (keeps the table open).
 ///
 pub fn delete_all(from table: PBag(k, v)) -> Result(Nil, ShelfError) {
-  case ffi_delete_all(table.ets) {
-    Ok(Nil) -> maybe_write_through(table)
-    Error(err) -> Error(err)
-  }
+  use _ <- result.try(ffi_delete_all(table.ets))
+  maybe_write_through(table)
 }
 
 // ── Persistence ─────────────────────────────────────────────────────────

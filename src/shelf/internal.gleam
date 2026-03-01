@@ -6,8 +6,3 @@ pub type EtsRef
 
 /// Raw DETS table reference (Erlang atom).
 pub type DetsRef
-
-/// A pair of ETS + DETS references returned by the FFI open functions.
-pub type TableRefs {
-  TableRefs(ets: EtsRef, dets: DetsRef)
-}

@@ -1,5 +1,6 @@
 import gleam/dynamic.{type Dynamic}
 import gleam/list
+import gleam/string
 import shelf
 import shelf/bag
 import startest.{describe, it}
@@ -33,7 +34,7 @@ pub fn bag_tests() {
         let assert Ok(Nil) = bag.insert(table, "color", "red")
         let assert Ok(Nil) = bag.insert(table, "color", "blue")
         let assert Ok(values) = bag.lookup(table, "color")
-        let sorted = list.sort(values, string_compare)
+        let sorted = list.sort(values, string.compare)
         expect.to_equal(sorted, ["blue", "red"])
         let assert Ok(Nil) = bag.close(table)
         cleanup(path)
@@ -90,11 +91,3 @@ pub fn bag_tests() {
     ]),
   ])
 }
-
-import gleam/string
-
-fn string_compare(a: String, b: String) -> order.Order {
-  string.compare(a, b)
-}
-
-import gleam/order
