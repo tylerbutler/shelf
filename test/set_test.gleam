@@ -1,5 +1,6 @@
 import gleam/dynamic.{type Dynamic}
 import gleam/list
+import gleam/string
 import shelf
 import shelf/set
 import startest.{describe, it}
@@ -136,7 +137,7 @@ pub fn set_tests() {
         let assert Ok(table) = set.open(name: "set_to_list", path: path)
         let assert Ok(Nil) = set.insert_list(table, [#("a", 1), #("b", 2)])
         let assert Ok(entries) = set.to_list(table)
-        let sorted = list.sort(entries, fn(a, b) { string_compare(a.0, b.0) })
+        let sorted = list.sort(entries, fn(a, b) { string.compare(a.0, b.0) })
         expect.to_equal(sorted, [#("a", 1), #("b", 2)])
         let assert Ok(Nil) = set.close(table)
         cleanup(path)
@@ -184,11 +185,3 @@ pub fn set_tests() {
     ]),
   ])
 }
-
-import gleam/string
-
-fn string_compare(a: String, b: String) -> order.Order {
-  string.compare(a, b)
-}
-
-import gleam/order

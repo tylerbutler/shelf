@@ -16,6 +16,7 @@
 /// let assert Ok(Nil) = set.close(table)   // auto-saves on close
 /// ```
 ///
+import gleam/result
 import shelf.{
   type Config, type ShelfError, type WriteMode, Config, WriteBack, WriteThrough,
 }
@@ -45,10 +46,8 @@ pub opaque type PSet(k, v) {
 ///
 pub fn open_config(config: Config) -> Result(PSet(k, v), ShelfError) {
   let Config(name:, path:, write_mode:) = config
-  case ffi_open_set(name, path) {
-    Ok(#(ets, dets)) -> Ok(PSet(ets:, dets:, write_mode:))
-    Error(err) -> Error(err)
-  }
+  ffi_open_set(name, path)
+  |> result.map(fn(refs) { PSet(ets: refs.0, dets: refs.1, write_mode:) })
 }
 
 /// Open a persistent set table with defaults (WriteBack mode).
@@ -88,14 +87,10 @@ pub fn with_table(
   path path: String,
   fun fun: fn(PSet(k, v)) -> Result(a, ShelfError),
 ) -> Result(a, ShelfError) {
-  case open(name:, path:) {
-    Ok(table) -> {
-      let result = fun(table)
-      let _ = close(table)
-      result
-    }
-    Error(err) -> Error(err)
-  }
+  use table <- result.try(open(name:, path:))
+  let result = fun(table)
+  let _ = close(table)
+  result
 }
 
 // ── Read (always from ETS — fast) ───────────────────────────────────────
@@ -156,10 +151,8 @@ pub fn insert(
   key key: k,
   value value: v,
 ) -> Result(Nil, ShelfError) {
-  case ffi_insert(table.ets, table.dets, #(key, value)) {
-    Ok(Nil) -> maybe_write_through(table)
-    Error(err) -> Error(err)
-  }
+  use _ <- result.try(ffi_insert(table.ets, table.dets, #(key, value)))
+  maybe_write_through(table)
 }
 
 /// Insert multiple key-value pairs at once.
@@ -168,10 +161,8 @@ pub fn insert_list(
   into table: PSet(k, v),
   entries entries: List(#(k, v)),
 ) -> Result(Nil, ShelfError) {
-  case ffi_insert_list(table.ets, table.dets, entries) {
-    Ok(Nil) -> maybe_write_through(table)
-    Error(err) -> Error(err)
-  }
+  use _ <- result.try(ffi_insert_list(table.ets, table.dets, entries))
+  maybe_write_through(table)
 }
 
 /// Insert a key-value pair only if the key does not already exist.
@@ -183,10 +174,8 @@ pub fn insert_new(
   key key: k,
   value value: v,
 ) -> Result(Nil, ShelfError) {
-  case ffi_insert_new(table.ets, table.dets, #(key, value)) {
-    Ok(Nil) -> maybe_write_through(table)
-    Error(err) -> Error(err)
-  }
+  use _ <- result.try(ffi_insert_new(table.ets, table.dets, #(key, value)))
+  maybe_write_through(table)
 }
 
 // ── Delete ──────────────────────────────────────────────────────────────
@@ -194,10 +183,8 @@ pub fn insert_new(
 /// Delete the entry with the given key.
 ///
 pub fn delete_key(from table: PSet(k, v), key key: k) -> Result(Nil, ShelfError) {
-  case ffi_delete_key(table.ets, key) {
-    Ok(Nil) -> maybe_write_through(table)
-    Error(err) -> Error(err)
-  }
+  use _ <- result.try(ffi_delete_key(table.ets, key))
+  maybe_write_through(table)
 }
 
 /// Delete a specific key-value pair.
@@ -210,19 +197,15 @@ pub fn delete_object(
   key key: k,
   value value: v,
 ) -> Result(Nil, ShelfError) {
-  case ffi_delete_object(table.ets, key, value) {
-    Ok(Nil) -> maybe_write_through(table)
-    Error(err) -> Error(err)
-  }
+  use _ <- result.try(ffi_delete_object(table.ets, key, value))
+  maybe_write_through(table)
 }
 
 /// Delete all entries (keeps the table open).
 ///
 pub fn delete_all(from table: PSet(k, v)) -> Result(Nil, ShelfError) {
-  case ffi_delete_all(table.ets) {
-    Ok(Nil) -> maybe_write_through(table)
-    Error(err) -> Error(err)
-  }
+  use _ <- result.try(ffi_delete_all(table.ets))
+  maybe_write_through(table)
 }
 
 // ── Persistence ─────────────────────────────────────────────────────────
@@ -281,17 +264,13 @@ pub fn update_counter(
   key key: k,
   increment amount: Int,
 ) -> Result(Int, ShelfError) {
-  case ffi_update_counter(table.ets, key, amount) {
-    Ok(new_val) -> {
-      case table.write_mode {
-        WriteThrough -> {
-          let _ = ffi_save(table.ets, table.dets)
-          Ok(new_val)
-        }
-        WriteBack -> Ok(new_val)
-      }
+  use new_val <- result.try(ffi_update_counter(table.ets, key, amount))
+  case table.write_mode {
+    WriteThrough -> {
+      let _ = ffi_save(table.ets, table.dets)
+      Ok(new_val)
     }
-    Error(err) -> Error(err)
+    WriteBack -> Ok(new_val)
   }
 }
 

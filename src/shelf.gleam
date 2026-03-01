@@ -34,7 +34,9 @@
 /// - No ordered set (DETS doesn't support it)
 /// - DETS performs disk I/O — `save()` has real latency
 ///
-/// Errors that can occur during shelf operations.
+/// ## Errors
+///
+/// Operations return `Result` with `ShelfError` for failures.
 pub type ShelfError {
   /// No value found for the given key
   NotFound
