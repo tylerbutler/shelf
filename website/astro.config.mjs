@@ -21,6 +21,13 @@ export default defineConfig({
 			description:
 				"Persistent ETS tables backed by DETS for Gleam.",
 			lastUpdated: true,
+			logo: {
+				light: "./src/assets/shelf-wordmark.webp",
+				dark: "./src/assets/shelf-wordmark-dark.webp",
+				replacesTitle: true,
+				alt: "shelf logo",
+			},
+			favicon: "./src/assets/favicon.png",
 			customCss: [
 				"@fontsource/metropolis/400.css",
 				"@fontsource/metropolis/600.css",
