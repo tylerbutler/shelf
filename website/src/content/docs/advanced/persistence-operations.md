@@ -79,13 +79,18 @@ let assert Ok(Nil) = {
 
 ## Persistence Flow
 
-```
-WriteBack mode:
-  insert → ETS only
-  save() → ETS ──snapshot──→ DETS
-  sync() → DETS ──flush──→ filesystem
-
-WriteThrough mode:
-  insert → ETS + automatic save() → DETS
-  sync() → DETS ──flush──→ filesystem
+```mermaid
+flowchart LR
+  subgraph wb["WriteBack mode"]
+    direction LR
+    I1[insert] -->|write| E1[ETS]
+    E1 -->|"save()"| D1[DETS]
+    D1 -->|"sync()"| F1[filesystem]
+  end
+  subgraph wt["WriteThrough mode"]
+    direction LR
+    I2[insert] -->|write| E2[ETS]
+    E2 -->|"auto save()"| D2[DETS]
+    D2 -->|"sync()"| F2[filesystem]
+  end
 ```
