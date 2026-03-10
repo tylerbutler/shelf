@@ -31,6 +31,16 @@ pub opaque type PDuplicateBag(k, v) {
 
 /// Open a persistent duplicate bag table with full configuration.
 ///
+/// If the DETS file exists, its contents are loaded into a fresh ETS
+/// table. If no file exists, both tables start empty.
+///
+/// ```gleam
+/// let config =
+///   shelf.config(name: "events", path: "data/events.dets")
+///   |> shelf.write_mode(shelf.WriteThrough)
+/// let assert Ok(table) = duplicate_bag.open_config(config)
+/// ```
+///
 pub fn open_config(config: Config) -> Result(PDuplicateBag(k, v), ShelfError) {
   let Config(name:, path:, write_mode:) = config
   ffi_open_duplicate_bag(name, path)
@@ -187,17 +197,30 @@ pub fn delete_all(from table: PDuplicateBag(k, v)) -> Result(Nil, ShelfError) {
 
 /// Snapshot the current ETS contents to DETS.
 ///
+/// Uses `ets:to_dets/2` internally — atomically replaces all DETS
+/// contents with the current ETS state. This is efficient: the
+/// transfer happens in the Erlang VM without materializing the
+/// entire table as a list.
+///
 pub fn save(table: PDuplicateBag(k, v)) -> Result(Nil, ShelfError) {
   ffi_save(table.ets, table.dets)
 }
 
 /// Discard unsaved ETS changes and reload from DETS.
 ///
+/// Clears the ETS table and loads all DETS contents into it.
+/// Only useful in WriteBack mode — in WriteThrough mode, ETS and
+/// DETS are always in sync.
+///
 pub fn reload(table: PDuplicateBag(k, v)) -> Result(Nil, ShelfError) {
   ffi_load(table.ets, table.dets)
 }
 
 /// Flush the DETS write buffer to the OS.
+///
+/// DETS buffers writes internally. This forces them to be written
+/// to the underlying filesystem. Most useful in WriteThrough mode
+/// when you want to guarantee durability.
 ///
 pub fn sync(table: PDuplicateBag(k, v)) -> Result(Nil, ShelfError) {
   ffi_sync_dets(table.dets)

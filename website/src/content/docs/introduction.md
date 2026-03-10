@@ -11,17 +11,13 @@ shelf combines **ETS** (fast, in-memory) with **DETS** (persistent, on-disk) to 
 
 ## How it works
 
-```
-┌─────────────────────────────────────┐
-│           Your Application          │
-├─────────────────────────────────────┤
-│         shelf (this library)        │
-├──────────────────┬──────────────────┤
-│    ETS (memory)  │   DETS (disk)    │
-│  • μs reads      │  • persistence   │
-│  • μs writes     │  • survives      │
-│  • in-process    │    restarts      │
-└──────────────────┴──────────────────┘
+```mermaid
+block-beta
+  columns 2
+  App["Your Application"]:2
+  Shelf["shelf (this library)"]:2
+  ETS["ETS (memory)\n• μs reads\n• μs writes\n• in-process"]
+  DETS["DETS (disk)\n• persistence\n• survives restarts"]
 ```
 
 **Reads** always go to ETS — consistent microsecond latency regardless of table size.

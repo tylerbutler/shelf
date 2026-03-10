@@ -34,6 +34,14 @@
 /// - No ordered set (DETS doesn't support it)
 /// - DETS performs disk I/O — `save()` has real latency
 ///
+/// ## Process Ownership
+///
+/// ETS tables are owned by the process that calls `open()`. If that process
+/// exits or crashes, the ETS table is automatically deleted and any unsaved
+/// data is lost. The DETS file on disk is preserved — the next `open()` call
+/// reloads it. In long-running applications, ensure the owning process is
+/// supervised.
+///
 /// ## Errors
 ///
 /// Operations return `Result` with `ShelfError` for failures.

@@ -228,6 +228,47 @@ set.update_counter(t, "page_views", 1)   // Ok(1)
 set.update_counter(t, "page_views", 10)  // Ok(11)
 ```
 
+## Common Operations
+
+### Batch Insert
+
+```gleam
+let assert Ok(Nil) = set.insert_list(into: t, entries: [
+  #("alice", 42),
+  #("bob", 99),
+  #("charlie", 7),
+])
+```
+
+### Delete
+
+```gleam
+let assert Ok(Nil) = set.delete_key(from: t, key: "alice")
+let assert Ok(Nil) = set.delete_all(from: t)
+```
+
+For bag tables, `delete_object` removes a specific value while keeping others:
+
+```gleam
+let assert Ok(Nil) = bag.delete_object(from: t, key: "color", value: "red")
+// Other values for "color" are preserved
+```
+
+### Fold, Size, and Export
+
+```gleam
+// Count entries
+let assert Ok(n) = set.size(of: t)
+
+// Fold to compute aggregates
+let assert Ok(total) = set.fold(over: t, from: 0, with: fn(sum, _key, val) {
+  sum + val
+})
+
+// Export all data (careful — loads entire table into memory)
+let assert Ok(entries) = set.to_list(from: t)
+```
+
 ## Limitations
 
 - **DETS file size**: 2 GB maximum per table
@@ -235,6 +276,7 @@ set.update_counter(t, "page_views", 10)  // Ok(11)
 - **Erlang only**: Requires the BEAM runtime (no JavaScript target)
 - **Single node**: DETS is local to one node (use Mnesia for distribution)
 - **Table names**: Must be unique across all ETS tables in the VM
+- **Process ownership**: ETS tables are owned by the process that created them. If that process exits, the ETS table is deleted and unsaved data is lost. The DETS file on disk is preserved and reloaded on the next `open()`. In long-running applications, ensure the process that opens tables is supervised.
 
 ## See Also
 
