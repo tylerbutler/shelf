@@ -9,7 +9,7 @@
 /// ```gleam
 /// import shelf/set
 ///
-/// let assert Ok(table) = set.open("users", "data/users.dets")
+/// let assert Ok(table) = set.open(name: "users", path: "data/users.dets")
 /// let assert Ok(Nil) = set.insert(table, "alice", 42)
 /// let assert Ok(42) = set.lookup(table, "alice")
 /// let assert Ok(Nil) = set.save(table)    // persist to disk
@@ -53,7 +53,7 @@ pub fn open_config(config: Config) -> Result(PSet(k, v), ShelfError) {
 /// Open a persistent set table with defaults (WriteBack mode).
 ///
 /// ```gleam
-/// let assert Ok(table) = set.open("users", "data/users.dets")
+/// let assert Ok(table) = set.open(name: "users", path: "data/users.dets")
 /// ```
 ///
 pub fn open(
