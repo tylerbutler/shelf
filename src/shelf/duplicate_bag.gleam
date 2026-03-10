@@ -9,7 +9,7 @@
 /// ```gleam
 /// import shelf/duplicate_bag
 ///
-/// let assert Ok(table) = duplicate_bag.open("events", "data/events.dets")
+/// let assert Ok(table) = duplicate_bag.open(name: "events", path: "data/events.dets")
 /// let assert Ok(Nil) = duplicate_bag.insert(table, "click", "btn_1")
 /// let assert Ok(Nil) = duplicate_bag.insert(table, "click", "btn_1")
 /// let assert Ok(["btn_1", "btn_1"]) = duplicate_bag.lookup(table, "click")
@@ -42,7 +42,7 @@ pub fn open_config(config: Config) -> Result(PDuplicateBag(k, v), ShelfError) {
 /// Open a persistent duplicate bag table with defaults (WriteBack mode).
 ///
 /// ```gleam
-/// let assert Ok(table) = duplicate_bag.open("events", "data/events.dets")
+/// let assert Ok(table) = duplicate_bag.open(name: "events", path: "data/events.dets")
 /// ```
 ///
 pub fn open(

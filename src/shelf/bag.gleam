@@ -9,7 +9,7 @@
 /// ```gleam
 /// import shelf/bag
 ///
-/// let assert Ok(table) = bag.open("tags", "data/tags.dets")
+/// let assert Ok(table) = bag.open(name: "tags", path: "data/tags.dets")
 /// let assert Ok(Nil) = bag.insert(table, "color", "red")
 /// let assert Ok(Nil) = bag.insert(table, "color", "blue")
 /// let assert Ok(["red", "blue"]) = bag.lookup(table, "color")
@@ -41,7 +41,7 @@ pub fn open_config(config: Config) -> Result(PBag(k, v), ShelfError) {
 /// Open a persistent bag table with defaults (WriteBack mode).
 ///
 /// ```gleam
-/// let assert Ok(table) = bag.open("tags", "data/tags.dets")
+/// let assert Ok(table) = bag.open(name: "tags", path: "data/tags.dets")
 /// ```
 ///
 pub fn open(

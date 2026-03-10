@@ -10,7 +10,7 @@
 /// import shelf
 /// import shelf/set
 ///
-/// let assert Ok(table) = set.open("cache", "data/cache.dets")
+/// let assert Ok(table) = set.open(name: "cache", path: "data/cache.dets")
 /// let assert Ok(Nil) = set.insert(table, "key", "value")
 /// let assert Ok("value") = set.lookup(table, "key")
 /// let assert Ok(Nil) = set.save(table)   // persist to disk
