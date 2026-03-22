@@ -37,11 +37,11 @@ test:
 
 # Format source code
 format:
-    gleam format src test
+    gleam format src test examples/src
 
 # Check formatting without changes
 format-check:
-    gleam format --check src test
+    gleam format --check src test examples/src
 
 # Type check without building
 check:
@@ -73,10 +73,20 @@ changelog:
 clean:
     rm -rf build
 
+# === EXAMPLES ===
+
+# Type-check example applications
+check-examples:
+    cd examples && gleam check
+
+# Build example applications
+build-examples:
+    cd examples && gleam build
+
 # === CI ===
 
 # Run all CI checks (format, check, test, build)
-ci: format-check check test build-strict
+ci: format-check check test build-strict check-examples
 
 # Alias for PR checks
 alias pr := ci
