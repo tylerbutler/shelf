@@ -7,6 +7,7 @@
 /// 2. **Manual save/reload cycle** — checkpoint your data with save(),
 ///    then undo unsaved changes with reload(). Finish with sync() to
 ///    ensure the DETS write buffer is flushed to the OS.
+import gleam/dynamic/decode
 import gleam/io
 import gleam/string
 import shelf/set
@@ -27,22 +28,28 @@ fn pattern_1_with_table() {
   // automatically — even if the callback fails. The return value of the
   // callback is forwarded as the overall result.
   let assert Ok(greeting) =
-    set.with_table("safe_auto", "/tmp/shelf_examples_safe_auto.dets", fn(table) {
-      // Inside the callback the table is open and ready to use.
-      let assert Ok(Nil) =
-        set.insert(into: table, key: "language", value: "Gleam")
-      let assert Ok(Nil) =
-        set.insert(into: table, key: "runtime", value: "BEAM")
-      io.println("  Inserted 'language' and 'runtime'")
+    set.with_table(
+      "safe_auto",
+      "/tmp/shelf_examples_safe_auto.dets",
+      decode.string,
+      decode.string,
+      fn(table) {
+        // Inside the callback the table is open and ready to use.
+        let assert Ok(Nil) =
+          set.insert(into: table, key: "language", value: "Gleam")
+        let assert Ok(Nil) =
+          set.insert(into: table, key: "runtime", value: "BEAM")
+        io.println("  Inserted 'language' and 'runtime'")
 
-      // Look up a value and build a result to return.
-      let assert Ok(lang) = set.lookup(from: table, key: "language")
-      let message = "Hello from " <> lang <> "!"
-      io.println("  Looked up language → " <> lang)
+        // Look up a value and build a result to return.
+        let assert Ok(lang) = set.lookup(from: table, key: "language")
+        let message = "Hello from " <> lang <> "!"
+        io.println("  Looked up language → " <> lang)
 
-      // The callback's Ok value becomes with_table's Ok value.
-      Ok(message)
-    })
+        // The callback's Ok value becomes with_table's Ok value.
+        Ok(message)
+      },
+    )
 
   // The table is now closed — we only have the returned value.
   io.println("  Table auto-closed.")
@@ -57,7 +64,12 @@ fn pattern_2_save_reload() {
 
   // --- Step 1: Open the table manually ---
   let assert Ok(table) =
-    set.open(name: "safe_manual", path: "/tmp/shelf_examples_safe_manual.dets")
+    set.open(
+      name: "safe_manual",
+      path: "/tmp/shelf_examples_safe_manual.dets",
+      key: decode.string,
+      value: decode.string,
+    )
   io.println("  Opened table 'safe_manual'")
 
   // --- Step 2: Insert initial data and checkpoint with save ---

@@ -1,13 +1,15 @@
 -module(shelf_ffi).
 -export([
     open_set/2, open_bag/2, open_duplicate_bag/2,
-    close/2,
+    open_no_load/3,
+    close/2, cleanup/2,
     insert/3, insert_list/3, insert_new/3,
     lookup_set/2, lookup_bag/2, member/2,
     delete_key/2, delete_object/3, delete_all/1,
     to_list/1, fold/3, size/1,
     save/2, load/2, sync_dets/1,
-    update_counter/3
+    update_counter/3,
+    dets_to_list/1
 ]).
 
 %% ── Open ────────────────────────────────────────────────────────────────
@@ -52,6 +54,59 @@ do_open(Name, Path, Type) ->
             {error, translate_error(Reason)};
         _:Reason ->
             {error, translate_error(Reason)}
+    end.
+
+%% ── Open (no load) ──────────────────────────────────────────────────────
+%% Creates an ETS table + opens a DETS file but does NOT load DETS into ETS.
+%% Used by the validated loading path where Gleam decodes entries before insertion.
+
+open_no_load(Name, Path, TypeBin) ->
+    EtsName = binary_to_atom(Name, utf8),
+    DetsName = binary_to_atom(Path, utf8),
+    Type = binary_to_existing_atom(TypeBin, utf8),
+    try
+        {ok, Dets} = dets:open_file(DetsName, [
+            {file, binary_to_list(Path)},
+            {type, Type},
+            {repair, true}
+        ]),
+        Ets = ets:new(EtsName, [Type, public, named_table, {keypos, 1}]),
+        {ok, {Ets, Dets}}
+    catch
+        _:badarg ->
+            case ets:whereis(EtsName) of
+                undefined ->
+                    {error, {erlang_error, <<"Failed to create table">>}};
+                _ ->
+                    {error, name_conflict}
+            end;
+        _:{badmatch, {error, Reason}} ->
+            {error, translate_error(Reason)};
+        _:Reason ->
+            {error, translate_error(Reason)}
+    end.
+
+%% ── DETS to list ───────────────────────────────────────────────────────
+%% Returns all entries from a DETS table as a list of raw Erlang terms.
+
+dets_to_list(Dets) ->
+    try
+        Result = dets:foldl(fun(Entry, Acc) -> [Entry | Acc] end, [], Dets),
+        {ok, Result}
+    catch
+        _:Reason -> {error, translate_error(Reason)}
+    end.
+
+%% ── Cleanup ─────────────────────────────────────────────────────────────
+%% Delete ETS table and close DETS without saving. Used on validation failure.
+
+cleanup(Ets, Dets) ->
+    try
+        _ = dets:close(Dets),
+        _ = ets:delete(Ets),
+        {ok, nil}
+    catch
+        _:_ -> {ok, nil}
     end.
 
 %% ── Close ───────────────────────────────────────────────────────────────
@@ -214,6 +269,7 @@ update_counter(Ets, Key, Increment) ->
 translate_error(not_found) -> not_found;
 translate_error(key_already_present) -> key_already_present;
 translate_error(name_conflict) -> name_conflict;
+translate_error(type_mismatch) -> type_mismatch;
 translate_error(badarg) -> table_closed;
 translate_error({file_error, _, enoent}) -> {file_error, <<"File not found">>};
 translate_error({file_error, _, eacces}) -> {file_error, <<"Permission denied">>};

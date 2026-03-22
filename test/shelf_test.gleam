@@ -12,6 +12,7 @@ pub fn config_defaults_test() {
   expect.to_equal(config.name, "test")
   expect.to_equal(config.path, "test.dets")
   expect.to_equal(config.write_mode, shelf.WriteBack)
+  expect.to_equal(config.decode_policy, shelf.Strict)
 }
 
 pub fn config_write_mode_test() {

@@ -7,6 +7,7 @@
 ///
 /// Scenario: We maintain a tag→article index where each tag (String) maps
 /// to one or more article IDs (Int).
+import gleam/dynamic/decode
 import gleam/int
 import gleam/io
 import gleam/string
@@ -16,7 +17,12 @@ pub fn main() {
   // --- 1. Open a persistent bag table ---
   // The table is backed by an ETS bag in memory and a DETS file on disk.
   let assert Ok(tags) =
-    bag.open("tag_index", "/tmp/shelf_examples_tag_index.dets")
+    bag.open(
+      "tag_index",
+      "/tmp/shelf_examples_tag_index.dets",
+      decode.string,
+      decode.int,
+    )
 
   // --- 2. Insert tag → article mappings ---
   // A bag allows the same key to appear with different values.

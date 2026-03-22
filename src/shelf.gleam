@@ -7,10 +7,13 @@
 /// ## Quick Start
 ///
 /// ```gleam
+/// import gleam/dynamic/decode
 /// import shelf
 /// import shelf/set
 ///
-/// let assert Ok(table) = set.open(name: "cache", path: "data/cache.dets")
+/// let assert Ok(table) =
+///   set.open(name: "cache", path: "data/cache.dets",
+///     key: decode.string, value: decode.string)
 /// let assert Ok(Nil) = set.insert(table, "key", "value")
 /// let assert Ok("value") = set.lookup(table, "key")
 /// let assert Ok(Nil) = set.save(table)   // persist to disk
@@ -58,8 +61,23 @@ pub type ShelfError {
   NameConflict
   /// DETS file exceeds the 2 GB limit
   FileSizeLimitExceeded
+  /// Data loaded from DETS did not match the expected types.
+  ///
+  /// Returned when opening a table whose DETS file contains entries that
+  /// fail to decode with the provided key/value decoders.
+  TypeMismatch
   /// Erlang-level error (catch-all)
   ErlangError(String)
+}
+
+/// Controls how decode failures are handled when loading data from DETS.
+pub type DecodePolicy {
+  /// Any entry that fails to decode causes the open to fail with
+  /// `TypeMismatch`. This is the default and recommended policy.
+  Strict
+  /// Entries that fail to decode are silently skipped. Only successfully
+  /// decoded entries are loaded into the ETS table.
+  Lenient
 }
 
 /// Controls when writes are persisted to disk.
@@ -85,17 +103,19 @@ pub type Config {
     path: String,
     /// When to persist writes to disk
     write_mode: WriteMode,
+    /// How to handle entries that fail to decode when loading from DETS
+    decode_policy: DecodePolicy,
   )
 }
 
-/// Create a config with the default write mode (WriteBack).
+/// Create a config with defaults (WriteBack mode, Strict decode policy).
 ///
 /// ```gleam
 /// let conf = shelf.config(name: "users", path: "data/users.dets")
 /// ```
 ///
 pub fn config(name name: String, path path: String) -> Config {
-  Config(name:, path:, write_mode: WriteBack)
+  Config(name:, path:, write_mode: WriteBack, decode_policy: Strict)
 }
 
 /// Set the write mode on a config.
@@ -108,4 +128,19 @@ pub fn config(name name: String, path path: String) -> Config {
 ///
 pub fn write_mode(config config: Config, mode mode: WriteMode) -> Config {
   Config(..config, write_mode: mode)
+}
+
+/// Set the decode policy on a config.
+///
+/// ```gleam
+/// let conf =
+///   shelf.config(name: "users", path: "data/users.dets")
+///   |> shelf.decode_policy(shelf.Lenient)
+/// ```
+///
+pub fn decode_policy(
+  config config: Config,
+  policy policy: DecodePolicy,
+) -> Config {
+  Config(..config, decode_policy: policy)
 }

@@ -3,6 +3,7 @@
 /// Uses `update_counter` to atomically increment integer values in an
 /// ETS-backed persistent set table. This is the recommended pattern for
 /// counters, rate limiters, and similar "increment a value by key" use cases.
+import gleam/dynamic/decode
 import gleam/int
 import gleam/io
 import gleam/string
@@ -12,7 +13,12 @@ pub fn main() {
   // ── 1. Open a persistent set table ────────────────────────────────
   // Keys are page paths (String), values are hit counts (Int).
   let assert Ok(counter) =
-    set.open(name: "hit_counter", path: "/tmp/shelf_examples_hit_counter.dets")
+    set.open(
+      name: "hit_counter",
+      path: "/tmp/shelf_examples_hit_counter.dets",
+      key: decode.string,
+      value: decode.int,
+    )
 
   // ── 2. Initialize counters for several pages ──────────────────────
   // Setting each page's count to 0 so every page has a known starting value.

@@ -1,4 +1,5 @@
 import gleam/dynamic.{type Dynamic}
+import gleam/dynamic/decode
 import shelf
 import shelf/set
 import startest.{describe, it}
@@ -22,14 +23,25 @@ pub fn write_through_tests() {
       let config =
         shelf.config(name: "wt_persist_1", path: path)
         |> shelf.write_mode(shelf.WriteThrough)
-      let assert Ok(table) = set.open_config(config)
+      let assert Ok(table) =
+        set.open_config(
+          config: config,
+          key: decode.string,
+          value: decode.string,
+        )
       let assert Ok(Nil) = set.insert(table, "key", "value")
 
       // Close without explicit save — but WriteThrough already persisted
       let assert Ok(Nil) = set.close(table)
 
       // Reopen and verify data is there
-      let assert Ok(table) = set.open(name: "wt_persist_2", path: path)
+      let assert Ok(table) =
+        set.open(
+          name: "wt_persist_2",
+          path: path,
+          key: decode.string,
+          value: decode.string,
+        )
       let assert Ok("value") = set.lookup(table, "key")
       let assert Ok(Nil) = set.close(table)
       cleanup(path)
@@ -42,14 +54,21 @@ pub fn write_through_tests() {
       let config =
         shelf.config(name: "wt_delete_1", path: path)
         |> shelf.write_mode(shelf.WriteThrough)
-      let assert Ok(table) = set.open_config(config)
+      let assert Ok(table) =
+        set.open_config(config: config, key: decode.string, value: decode.int)
       let assert Ok(Nil) = set.insert(table, "a", 1)
       let assert Ok(Nil) = set.insert(table, "b", 2)
       let assert Ok(Nil) = set.delete_key(table, "a")
       let assert Ok(Nil) = set.close(table)
 
       // Reopen — "a" should be gone, "b" should remain
-      let assert Ok(table) = set.open(name: "wt_delete_2", path: path)
+      let assert Ok(table) =
+        set.open(
+          name: "wt_delete_2",
+          path: path,
+          key: decode.string,
+          value: decode.int,
+        )
       expect.to_equal(set.lookup(table, "a"), Error(shelf.NotFound))
       let assert Ok(2) = set.lookup(table, "b")
       let assert Ok(Nil) = set.close(table)
@@ -63,13 +82,20 @@ pub fn write_through_tests() {
       let config =
         shelf.config(name: "wt_counter_1", path: path)
         |> shelf.write_mode(shelf.WriteThrough)
-      let assert Ok(table) = set.open_config(config)
+      let assert Ok(table) =
+        set.open_config(config: config, key: decode.string, value: decode.int)
       let assert Ok(Nil) = set.insert(table, "count", 0)
       let assert Ok(5) = set.update_counter(table, "count", 5)
       let assert Ok(Nil) = set.close(table)
 
       // Reopen and verify counter persisted
-      let assert Ok(table) = set.open(name: "wt_counter_2", path: path)
+      let assert Ok(table) =
+        set.open(
+          name: "wt_counter_2",
+          path: path,
+          key: decode.string,
+          value: decode.int,
+        )
       let assert Ok(5) = set.lookup(table, "count")
       let assert Ok(Nil) = set.close(table)
       cleanup(path)
