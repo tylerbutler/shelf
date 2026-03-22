@@ -22,7 +22,7 @@ If you only need ETS or DETS individually, check out these excellent standalone 
 - **[bravo](https://hex.pm/packages/bravo)** — Type-safe ETS wrapper for Gleam
 - **[slate](https://hex.pm/packages/slate)** — Type-safe DETS wrapper for Gleam
 
-Shelf coordinates both together, using Erlang's native `ets:to_dets/2` and `ets:from_dets/2` for efficient bulk transfers between the two.
+Shelf coordinates both together, using Erlang's native `ets:to_dets/2` for efficient bulk saves from memory to disk.
 
 ## Quick Start
 
@@ -224,7 +224,9 @@ let assert Ok(t) =
     key: decode.string, value: decode.int)
 ```
 
-Within a running session, Gleam's type system guarantees correctness — decoders only validate the DETS→ETS boundary at open time.
+Within a running session, Gleam's type system guarantees correctness — decoders only validate the DETS→ETS boundary at open time. The `save()` path is unaffected and still uses Erlang's efficient `ets:to_dets/2` bulk transfer.
+
+> **Performance note**: Loading from DETS (on `open` and `reload`) validates entries individually rather than using `ets:from_dets/2` bulk transfer. This is a one-time startup cost — all subsequent reads and writes remain at raw ETS speed.
 
 ### Decode Policy
 
