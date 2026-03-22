@@ -31,12 +31,16 @@ gleam add shelf
 ```
 
 ```gleam
+import gleam/dynamic/decode
 import shelf
 import shelf/set
 
 pub fn main() {
   // Open a persistent set — loads existing data from disk
-  let assert Ok(table) = set.open(name: "users", path: "data/users.dets")
+  // Decoders validate data loaded from the DETS file
+  let assert Ok(table) =
+    set.open(name: "users", path: "data/users.dets",
+      key: decode.string, value: decode.int)
 
   // Fast writes (to ETS)
   let assert Ok(Nil) = set.insert(table, "alice", 42)
@@ -86,7 +90,9 @@ On next startup, `set.open` automatically loads the saved data back into ETS.
 Writes go to ETS only. You control when to persist:
 
 ```gleam
-let assert Ok(table) = set.open(name: "sessions", path: "data/sessions.dets")
+let assert Ok(table) =
+  set.open(name: "sessions", path: "data/sessions.dets",
+    key: decode.string, value: session_decoder)
 
 // These are ETS-only (fast)
 let assert Ok(Nil) = set.insert(table, "user:123", session)
@@ -111,7 +117,9 @@ let config =
   shelf.config(name: "accounts", path: "data/accounts.dets")
   |> shelf.write_mode(shelf.WriteThrough)
 
-let assert Ok(table) = set.open_config(config)
+let assert Ok(table) =
+  set.open_config(config: config,
+    key: decode.string, value: account_decoder)
 
 // This writes to both ETS and DETS
 let assert Ok(Nil) = set.insert(table, "acct:789", account)
@@ -126,7 +134,9 @@ Each table type uses an opaque handle — `PSet(k, v)`, `PBag(k, v)`, or `PDupli
 ```gleam
 import shelf/set
 
-let assert Ok(t) = set.open(name: "cache", path: "cache.dets")
+let assert Ok(t) =
+  set.open(name: "cache", path: "cache.dets",
+    key: decode.string, value: decode.string)
 let assert Ok(Nil) = set.insert(t, "key", "value")       // overwrites if exists
 let assert Ok(Nil) = set.insert_new(t, "key", "value2")  // Error(KeyAlreadyPresent)
 let assert Ok("value") = set.lookup(t, "key")
@@ -138,7 +148,9 @@ let assert Ok(True) = set.member(of: t, key: "key")      // check existence
 ```gleam
 import shelf/bag
 
-let assert Ok(t) = bag.open(name: "tags", path: "tags.dets")
+let assert Ok(t) =
+  bag.open(name: "tags", path: "tags.dets",
+    key: decode.string, value: decode.string)
 let assert Ok(Nil) = bag.insert(t, "color", "red")
 let assert Ok(Nil) = bag.insert(t, "color", "blue")
 let assert Ok(Nil) = bag.insert(t, "color", "red")    // ignored (duplicate)
@@ -150,7 +162,9 @@ let assert Ok(["red", "blue"]) = bag.lookup(t, "color")
 ```gleam
 import shelf/duplicate_bag
 
-let assert Ok(t) = duplicate_bag.open(name: "events", path: "events.dets")
+let assert Ok(t) =
+  duplicate_bag.open(name: "events", path: "events.dets",
+    key: decode.string, value: decode.string)
 let assert Ok(Nil) = duplicate_bag.insert(t, "click", "btn")
 let assert Ok(Nil) = duplicate_bag.insert(t, "click", "btn")  // kept!
 let assert Ok(["btn", "btn"]) = duplicate_bag.lookup(t, "click")
@@ -180,7 +194,8 @@ Not all operations are available on every table type:
 Use `with_table` to ensure tables are always closed:
 
 ```gleam
-use table <- set.with_table("cache", "data/cache.dets")
+use table <- set.with_table("cache", "data/cache.dets",
+  key: decode.string, value: decode.string)
 set.insert(table, "key", "value")
 // table is auto-closed when the callback returns
 ```
@@ -196,6 +211,36 @@ set.insert(table, "key", "value")
 
 **`save` vs `sync`**: `save()` copies ETS contents into DETS — use this in WriteBack mode to persist your changes. `sync()` flushes DETS's internal write buffer to the OS filesystem — use this in WriteThrough mode when you need to guarantee durability after a write (DETS buffers writes for performance).
 
+## Type Safety
+
+All data loaded from DETS is validated through `gleam/dynamic/decode` decoders when a table is opened. This ensures types match your expectations, even when the DETS file was written by a previous session or a different version of your application.
+
+```gleam
+import gleam/dynamic/decode
+
+// Decoders are required when opening any table
+let assert Ok(t) =
+  set.open(name: "users", path: "users.dets",
+    key: decode.string, value: decode.int)
+```
+
+Within a running session, Gleam's type system guarantees correctness — decoders only validate the DETS→ETS boundary at open time.
+
+### Decode Policy
+
+By default, shelf uses `Strict` mode: if any entry in the DETS file fails decoding, `open` returns `Error(TypeMismatch)`. Use `Lenient` to skip invalid entries instead:
+
+```gleam
+let config =
+  shelf.config(name: "cache", path: "data/cache.dets")
+  |> shelf.decode_policy(shelf.Lenient)
+
+let assert Ok(table) =
+  set.open_config(config: config,
+    key: decode.string, value: decode.int)
+// Entries that don't match the decoders are silently dropped
+```
+
 ## Error Handling
 
 All operations return `Result(value, ShelfError)`. The error type covers all failure modes:
@@ -208,11 +253,15 @@ All operations return `Result(value, ShelfError)`. The error type covers all fai
 | `NameConflict` | An ETS table with this name is already open |
 | `FileError(String)` | DETS file couldn't be found, created, or opened |
 | `FileSizeLimitExceeded` | DETS file exceeds the 2 GB limit |
+| `TypeMismatch` | Data loaded from DETS failed decoder validation |
 | `ErlangError(String)` | Catch-all for unexpected Erlang-level errors |
 
 ```gleam
-case set.open(name: "cache", path: "data/cache.dets") {
+case set.open(name: "cache", path: "data/cache.dets",
+  key: decode.string, value: decode.string)
+{
   Ok(table) -> use_table(table)
+  Error(shelf.TypeMismatch) -> io.println("DETS data doesn't match expected types!")
   Error(shelf.NameConflict) -> io.println("Table already open!")
   Error(shelf.FileError(msg)) -> io.println("File error: " <> msg)
   Error(err) -> io.println("Unexpected: " <> string.inspect(err))
@@ -222,7 +271,9 @@ case set.open(name: "cache", path: "data/cache.dets") {
 ## Atomic Counters
 
 ```gleam
-let assert Ok(t) = set.open(name: "stats", path: "stats.dets")
+let assert Ok(t) =
+  set.open(name: "stats", path: "stats.dets",
+    key: decode.string, value: decode.int)
 set.insert(t, "page_views", 0)
 set.update_counter(t, "page_views", 1)   // Ok(1)
 set.update_counter(t, "page_views", 10)  // Ok(11)

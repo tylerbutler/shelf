@@ -1,4 +1,5 @@
 import gleam/dynamic.{type Dynamic}
+import gleam/dynamic/decode
 import shelf
 import shelf/set
 import startest.{describe, it}
@@ -19,12 +20,24 @@ pub fn persistence_tests() {
       cleanup(path)
 
       // Open, insert, close (auto-saves)
-      let assert Ok(table) = set.open(name: "persist_survive_1", path: path)
+      let assert Ok(table) =
+        set.open(
+          name: "persist_survive_1",
+          path: path,
+          key: decode.string,
+          value: decode.string,
+        )
       let assert Ok(Nil) = set.insert(table, "key", "value")
       let assert Ok(Nil) = set.close(table)
 
       // Reopen — data should be there
-      let assert Ok(table) = set.open(name: "persist_survive_2", path: path)
+      let assert Ok(table) =
+        set.open(
+          name: "persist_survive_2",
+          path: path,
+          key: decode.string,
+          value: decode.string,
+        )
       let assert Ok("value") = set.lookup(table, "key")
       let assert Ok(Nil) = set.close(table)
       cleanup(path)
@@ -34,7 +47,13 @@ pub fn persistence_tests() {
       let path = "/tmp/shelf_persist_save.dets"
       cleanup(path)
 
-      let assert Ok(table) = set.open(name: "persist_save_1", path: path)
+      let assert Ok(table) =
+        set.open(
+          name: "persist_save_1",
+          path: path,
+          key: decode.string,
+          value: decode.int,
+        )
       let assert Ok(Nil) = set.insert(table, "a", 1)
       let assert Ok(Nil) = set.insert(table, "b", 2)
       let assert Ok(Nil) = set.save(table)
@@ -45,7 +64,13 @@ pub fn persistence_tests() {
       let assert Ok(Nil) = set.close(table)
 
       // All three should be present
-      let assert Ok(table) = set.open(name: "persist_save_2", path: path)
+      let assert Ok(table) =
+        set.open(
+          name: "persist_save_2",
+          path: path,
+          key: decode.string,
+          value: decode.int,
+        )
       let assert Ok(1) = set.lookup(table, "a")
       let assert Ok(2) = set.lookup(table, "b")
       let assert Ok(3) = set.lookup(table, "c")
@@ -57,7 +82,13 @@ pub fn persistence_tests() {
       let path = "/tmp/shelf_persist_reload.dets"
       cleanup(path)
 
-      let assert Ok(table) = set.open(name: "persist_reload", path: path)
+      let assert Ok(table) =
+        set.open(
+          name: "persist_reload",
+          path: path,
+          key: decode.string,
+          value: decode.string,
+        )
 
       // Insert and save
       let assert Ok(Nil) = set.insert(table, "saved", "yes")
@@ -80,7 +111,13 @@ pub fn persistence_tests() {
       let path = "/tmp/shelf_persist_cycles.dets"
       cleanup(path)
 
-      let assert Ok(table) = set.open(name: "persist_cycles", path: path)
+      let assert Ok(table) =
+        set.open(
+          name: "persist_cycles",
+          path: path,
+          key: decode.string,
+          value: decode.int,
+        )
 
       // Cycle 1
       let assert Ok(Nil) = set.insert(table, "round", 1)
@@ -104,8 +141,20 @@ pub fn persistence_tests() {
       cleanup(path1)
       cleanup(path2)
 
-      let assert Ok(table1) = set.open(name: "persist_conflict", path: path1)
-      let result = set.open(name: "persist_conflict", path: path2)
+      let assert Ok(table1) =
+        set.open(
+          name: "persist_conflict",
+          path: path1,
+          key: decode.string,
+          value: decode.string,
+        )
+      let result =
+        set.open(
+          name: "persist_conflict",
+          path: path2,
+          key: decode.string,
+          value: decode.string,
+        )
       expect.to_equal(result, Error(shelf.NameConflict))
 
       let assert Ok(Nil) = set.close(table1)

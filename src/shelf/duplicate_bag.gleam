@@ -7,24 +7,37 @@
 /// ## Example
 ///
 /// ```gleam
+/// import gleam/dynamic/decode
 /// import shelf/duplicate_bag
 ///
-/// let assert Ok(table) = duplicate_bag.open(name: "events", path: "data/events.dets")
+/// let assert Ok(table) =
+///   duplicate_bag.open(name: "events", path: "data/events.dets",
+///     key: decode.string, value: decode.string)
 /// let assert Ok(Nil) = duplicate_bag.insert(table, "click", "btn_1")
 /// let assert Ok(Nil) = duplicate_bag.insert(table, "click", "btn_1")
 /// let assert Ok(["btn_1", "btn_1"]) = duplicate_bag.lookup(table, "click")
 /// let assert Ok(Nil) = duplicate_bag.close(table)
 /// ```
 ///
+import gleam/dynamic.{type Dynamic}
+import gleam/dynamic/decode.{type Decoder}
+import gleam/list
 import gleam/result
 import shelf.{
-  type Config, type ShelfError, type WriteMode, Config, WriteBack, WriteThrough,
+  type Config, type ShelfError, type WriteMode, Config, Lenient, Strict,
+  WriteBack, WriteThrough,
 }
 import shelf/internal.{type DetsRef, type EtsRef}
 
 /// An open persistent duplicate bag table with typed keys and values.
 pub opaque type PDuplicateBag(k, v) {
-  PDuplicateBag(ets: EtsRef, dets: DetsRef, write_mode: WriteMode)
+  PDuplicateBag(
+    ets: EtsRef,
+    dets: DetsRef,
+    write_mode: WriteMode,
+    key_decoder: Decoder(k),
+    value_decoder: Decoder(v),
+  )
 }
 
 // ── Lifecycle ───────────────────────────────────────────────────────────
@@ -32,34 +45,62 @@ pub opaque type PDuplicateBag(k, v) {
 /// Open a persistent duplicate bag table with full configuration.
 ///
 /// If the DETS file exists, its contents are loaded into a fresh ETS
-/// table. If no file exists, both tables start empty.
+/// table after validating each entry through the provided decoders.
+/// If no file exists, both tables start empty.
 ///
 /// ```gleam
 /// let config =
 ///   shelf.config(name: "events", path: "data/events.dets")
 ///   |> shelf.write_mode(shelf.WriteThrough)
-/// let assert Ok(table) = duplicate_bag.open_config(config)
+/// let assert Ok(table) =
+///   duplicate_bag.open_config(config,
+///     key: decode.string, value: decode.string)
 /// ```
 ///
-pub fn open_config(config: Config) -> Result(PDuplicateBag(k, v), ShelfError) {
-  let Config(name:, path:, write_mode:) = config
-  ffi_open_duplicate_bag(name, path)
-  |> result.map(fn(refs) {
-    PDuplicateBag(ets: refs.0, dets: refs.1, write_mode:)
-  })
+pub fn open_config(
+  config config: Config,
+  key key_decoder: Decoder(k),
+  value value_decoder: Decoder(v),
+) -> Result(PDuplicateBag(k, v), ShelfError) {
+  let Config(name:, path:, write_mode:, decode_policy:) = config
+  use refs <- result.try(ffi_open_no_load(name, path, "duplicate_bag"))
+  let ets = refs.0
+  let dets = refs.1
+  use entries <- result.try(ffi_dets_to_list(dets))
+  let entry_decoder = {
+    use key <- decode.field(0, key_decoder)
+    use value <- decode.field(1, value_decoder)
+    decode.success(#(key, value))
+  }
+  case validate_and_insert(entries, ets, dets, entry_decoder, decode_policy) {
+    Ok(Nil) ->
+      Ok(PDuplicateBag(ets:, dets:, write_mode:, key_decoder:, value_decoder:))
+    Error(e) -> {
+      let _ = ffi_cleanup(ets, dets)
+      Error(e)
+    }
+  }
 }
 
-/// Open a persistent duplicate bag table with defaults (WriteBack mode).
+/// Open a persistent duplicate bag table with defaults (WriteBack mode, Strict decoding).
 ///
 /// ```gleam
-/// let assert Ok(table) = duplicate_bag.open(name: "events", path: "data/events.dets")
+/// let assert Ok(table) =
+///   duplicate_bag.open(name: "events", path: "data/events.dets",
+///     key: decode.string, value: decode.string)
 /// ```
 ///
 pub fn open(
   name name: String,
   path path: String,
+  key key_decoder: Decoder(k),
+  value value_decoder: Decoder(v),
 ) -> Result(PDuplicateBag(k, v), ShelfError) {
-  open_config(shelf.config(name:, path:))
+  open_config(
+    config: shelf.config(name:, path:),
+    key: key_decoder,
+    value: value_decoder,
+  )
 }
 
 /// Close the table, saving all data to disk.
@@ -71,16 +112,24 @@ pub fn close(table: PDuplicateBag(k, v)) -> Result(Nil, ShelfError) {
 /// Use a table within a callback, ensuring it is closed afterward.
 ///
 /// ```gleam
-/// use table <- duplicate_bag.with_table("events", "data/events.dets")
+/// use table <- duplicate_bag.with_table("events", "data/events.dets",
+///   key: decode.string, value: decode.string)
 /// duplicate_bag.insert(table, "click", "btn_1")
 /// ```
 ///
 pub fn with_table(
   name name: String,
   path path: String,
+  key key_decoder: Decoder(k),
+  value value_decoder: Decoder(v),
   fun fun: fn(PDuplicateBag(k, v)) -> Result(a, ShelfError),
 ) -> Result(a, ShelfError) {
-  use table <- result.try(open(name:, path:))
+  use table <- result.try(open(
+    name:,
+    path:,
+    key: key_decoder,
+    value: value_decoder,
+  ))
   let result = fun(table)
   let _ = close(table)
   result
@@ -208,12 +257,20 @@ pub fn save(table: PDuplicateBag(k, v)) -> Result(Nil, ShelfError) {
 
 /// Discard unsaved ETS changes and reload from DETS.
 ///
-/// Clears the ETS table and loads all DETS contents into it.
+/// Clears the ETS table, re-reads all DETS entries, validates them
+/// through the stored decoders, and loads valid entries into ETS.
 /// Only useful in WriteBack mode — in WriteThrough mode, ETS and
 /// DETS are always in sync.
 ///
 pub fn reload(table: PDuplicateBag(k, v)) -> Result(Nil, ShelfError) {
-  ffi_load(table.ets, table.dets)
+  use _ <- result.try(ffi_delete_all(table.ets))
+  use entries <- result.try(ffi_dets_to_list(table.dets))
+  let entry_decoder = {
+    use key <- decode.field(0, table.key_decoder)
+    use value <- decode.field(1, table.value_decoder)
+    decode.success(#(key, value))
+  }
+  validate_and_insert(entries, table.ets, table.dets, entry_decoder, Strict)
 }
 
 /// Flush the DETS write buffer to the OS.
@@ -235,13 +292,70 @@ fn maybe_write_through(table: PDuplicateBag(k, v)) -> Result(Nil, ShelfError) {
   }
 }
 
+fn validate_and_insert(
+  entries: List(Dynamic),
+  ets: EtsRef,
+  dets: DetsRef,
+  entry_decoder: Decoder(#(k, v)),
+  policy: shelf.DecodePolicy,
+) -> Result(Nil, ShelfError) {
+  case policy {
+    Strict -> validate_strict(entries, ets, dets, entry_decoder)
+    Lenient -> validate_lenient(entries, ets, dets, entry_decoder)
+  }
+}
+
+fn validate_strict(
+  entries: List(Dynamic),
+  ets: EtsRef,
+  dets: DetsRef,
+  entry_decoder: Decoder(#(k, v)),
+) -> Result(Nil, ShelfError) {
+  case entries {
+    [] -> Ok(Nil)
+    [entry, ..rest] ->
+      case decode.run(entry, entry_decoder) {
+        Ok(pair) -> {
+          use _ <- result.try(ffi_insert(ets, dets, pair))
+          validate_strict(rest, ets, dets, entry_decoder)
+        }
+        Error(_) -> Error(shelf.TypeMismatch)
+      }
+  }
+}
+
+fn validate_lenient(
+  entries: List(Dynamic),
+  ets: EtsRef,
+  dets: DetsRef,
+  entry_decoder: Decoder(#(k, v)),
+) -> Result(Nil, ShelfError) {
+  list.each(entries, fn(entry) {
+    case decode.run(entry, entry_decoder) {
+      Ok(pair) -> {
+        let _ = ffi_insert(ets, dets, pair)
+        Nil
+      }
+      Error(_) -> Nil
+    }
+  })
+  Ok(Nil)
+}
+
 // ── FFI bindings ────────────────────────────────────────────────────────
 
-@external(erlang, "shelf_ffi", "open_duplicate_bag")
-fn ffi_open_duplicate_bag(
+@external(erlang, "shelf_ffi", "open_no_load")
+fn ffi_open_no_load(
   name: String,
   path: String,
+  table_type: String,
 ) -> Result(#(EtsRef, DetsRef), ShelfError)
+
+@external(erlang, "shelf_ffi", "dets_to_list")
+fn ffi_dets_to_list(dets: DetsRef) -> Result(List(Dynamic), ShelfError)
+
+@external(erlang, "shelf_ffi", "cleanup")
+fn ffi_cleanup(ets: EtsRef, dets: DetsRef) -> Result(Nil, ShelfError)
 
 @external(erlang, "shelf_ffi", "close")
 fn ffi_close(ets: EtsRef, dets: DetsRef) -> Result(Nil, ShelfError)
@@ -290,9 +404,6 @@ fn ffi_delete_all(ets: EtsRef) -> Result(Nil, ShelfError)
 
 @external(erlang, "shelf_ffi", "save")
 fn ffi_save(ets: EtsRef, dets: DetsRef) -> Result(Nil, ShelfError)
-
-@external(erlang, "shelf_ffi", "load")
-fn ffi_load(ets: EtsRef, dets: DetsRef) -> Result(Nil, ShelfError)
 
 @external(erlang, "shelf_ffi", "sync_dets")
 fn ffi_sync_dets(dets: DetsRef) -> Result(Nil, ShelfError)

@@ -1,4 +1,5 @@
 import gleam/dynamic.{type Dynamic}
+import gleam/dynamic/decode
 import gleam/list
 import shelf
 import shelf/duplicate_bag
@@ -20,7 +21,12 @@ pub fn duplicate_bag_tests() {
         let path = "/tmp/shelf_dbag_lifecycle.dets"
         cleanup(path)
         let assert Ok(table) =
-          duplicate_bag.open(name: "dbag_lifecycle", path: path)
+          duplicate_bag.open(
+            name: "dbag_lifecycle",
+            path: path,
+            key: decode.string,
+            value: decode.string,
+          )
         let assert Ok(Nil) = duplicate_bag.close(table)
         cleanup(path)
         Nil
@@ -31,7 +37,12 @@ pub fn duplicate_bag_tests() {
         let path = "/tmp/shelf_dbag_dupes.dets"
         cleanup(path)
         let assert Ok(table) =
-          duplicate_bag.open(name: "dbag_dupes", path: path)
+          duplicate_bag.open(
+            name: "dbag_dupes",
+            path: path,
+            key: decode.string,
+            value: decode.string,
+          )
         let assert Ok(Nil) = duplicate_bag.insert(table, "event", "click")
         let assert Ok(Nil) = duplicate_bag.insert(table, "event", "click")
         let assert Ok(Nil) = duplicate_bag.insert(table, "event", "scroll")
@@ -51,7 +62,12 @@ pub fn duplicate_bag_tests() {
         let path = "/tmp/shelf_dbag_notfound.dets"
         cleanup(path)
         let assert Ok(table) =
-          duplicate_bag.open(name: "dbag_notfound", path: path)
+          duplicate_bag.open(
+            name: "dbag_notfound",
+            path: path,
+            key: decode.string,
+            value: decode.string,
+          )
         expect.to_equal(
           duplicate_bag.lookup(table, "missing"),
           Error(shelf.NotFound),

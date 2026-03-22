@@ -4,6 +4,7 @@
 /// inserting and looking up entries, batch operations, persistence,
 /// and cleanup. All reads come from ETS (microsecond latency) while
 /// data is automatically persisted to a DETS file on disk.
+import gleam/dynamic/decode
 import gleam/int
 import gleam/io
 import gleam/list
@@ -15,7 +16,12 @@ pub fn main() {
   // at the given path for disk persistence. If the file already exists,
   // its contents are loaded into ETS automatically.
   let assert Ok(table) =
-    set.open(name: "kv_cache", path: "/tmp/shelf_examples_kv_cache.dets")
+    set.open(
+      name: "kv_cache",
+      path: "/tmp/shelf_examples_kv_cache.dets",
+      key: decode.string,
+      value: decode.string,
+    )
   io.println("✓ Opened table 'kv_cache'")
 
   // --- Insert individual entries ---
