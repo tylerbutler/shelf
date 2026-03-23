@@ -6,10 +6,7 @@ import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode.{type Decoder}
 import gleam/list
 import gleam/result
-import shelf.{
-  type DecodePolicy, type ShelfError, type WriteMode, Lenient, Strict, WriteBack,
-  WriteThrough,
-}
+import shelf.{type DecodePolicy, type ShelfError, Lenient, Strict}
 
 /// Raw ETS table reference (Erlang tid).
 @internal
@@ -75,19 +72,6 @@ fn decode_all_strict(
         Ok(pair) -> decode_all_strict(rest, decoder, [pair, ..acc])
         Error(errors) -> Error(shelf.TypeMismatch(errors))
       }
-  }
-}
-
-/// If in WriteThrough mode, save ETS to DETS.
-@internal
-pub fn maybe_write_through(
-  ets: EtsRef,
-  dets: DetsRef,
-  write_mode: WriteMode,
-) -> Result(Nil, ShelfError) {
-  case write_mode {
-    WriteThrough -> save(ets, dets)
-    WriteBack -> Ok(Nil)
   }
 }
 
@@ -168,3 +152,32 @@ pub fn save(ets: EtsRef, dets: DetsRef) -> Result(Nil, ShelfError)
 @external(erlang, "shelf_ffi", "sync_dets")
 @internal
 pub fn sync_dets(dets: DetsRef) -> Result(Nil, ShelfError)
+
+// ── Targeted DETS operations (for WriteThrough mode) ────────────────────
+
+@external(erlang, "shelf_ffi", "dets_insert")
+@internal
+pub fn dets_insert(dets: DetsRef, object: #(k, v)) -> Result(Nil, ShelfError)
+
+@external(erlang, "shelf_ffi", "dets_insert_list")
+@internal
+pub fn dets_insert_list(
+  dets: DetsRef,
+  objects: List(#(k, v)),
+) -> Result(Nil, ShelfError)
+
+@external(erlang, "shelf_ffi", "dets_delete_key")
+@internal
+pub fn dets_delete_key(dets: DetsRef, key: k) -> Result(Nil, ShelfError)
+
+@external(erlang, "shelf_ffi", "dets_delete_object")
+@internal
+pub fn dets_delete_object(
+  dets: DetsRef,
+  key: k,
+  value: v,
+) -> Result(Nil, ShelfError)
+
+@external(erlang, "shelf_ffi", "dets_delete_all")
+@internal
+pub fn dets_delete_all(dets: DetsRef) -> Result(Nil, ShelfError)

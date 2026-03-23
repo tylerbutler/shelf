@@ -22,7 +22,7 @@
 ///
 import gleam/dynamic/decode.{type Decoder}
 import gleam/result
-import shelf.{type Config, type ShelfError, Config}
+import shelf.{type Config, type ShelfError}
 import shelf/internal.{type DetsRef, type EtsRef}
 
 /// An open persistent set table with typed keys and values.
@@ -63,7 +63,10 @@ pub fn open_config(
   key key_decoder: Decoder(k),
   value value_decoder: Decoder(v),
 ) -> Result(PSet(k, v), ShelfError) {
-  let Config(name:, path:, write_mode:, decode_policy:) = config
+  let name = shelf.get_name(config)
+  let path = shelf.get_path(config)
+  let write_mode = shelf.get_write_mode(config)
+  let decode_policy = shelf.get_decode_policy(config)
   use refs <- result.try(internal.open_no_load(name, path, "set"))
   let ets = refs.0
   let dets = refs.1
@@ -223,7 +226,10 @@ pub fn insert(
   value value: v,
 ) -> Result(Nil, ShelfError) {
   use _ <- result.try(internal.insert(table.ets, table.dets, #(key, value)))
-  internal.maybe_write_through(table.ets, table.dets, table.write_mode)
+  case table.write_mode {
+    shelf.WriteThrough -> internal.dets_insert(table.dets, #(key, value))
+    shelf.WriteBack -> Ok(Nil)
+  }
 }
 
 /// Insert multiple key-value pairs at once.
@@ -233,7 +239,10 @@ pub fn insert_list(
   entries entries: List(#(k, v)),
 ) -> Result(Nil, ShelfError) {
   use _ <- result.try(internal.insert_list(table.ets, table.dets, entries))
-  internal.maybe_write_through(table.ets, table.dets, table.write_mode)
+  case table.write_mode {
+    shelf.WriteThrough -> internal.dets_insert_list(table.dets, entries)
+    shelf.WriteBack -> Ok(Nil)
+  }
 }
 
 /// Insert a key-value pair only if the key does not already exist.
@@ -246,7 +255,10 @@ pub fn insert_new(
   value value: v,
 ) -> Result(Nil, ShelfError) {
   use _ <- result.try(ffi_insert_new(table.ets, table.dets, #(key, value)))
-  internal.maybe_write_through(table.ets, table.dets, table.write_mode)
+  case table.write_mode {
+    shelf.WriteThrough -> internal.dets_insert(table.dets, #(key, value))
+    shelf.WriteBack -> Ok(Nil)
+  }
 }
 
 // ── Delete ──────────────────────────────────────────────────────────────
@@ -255,13 +267,17 @@ pub fn insert_new(
 ///
 pub fn delete_key(from table: PSet(k, v), key key: k) -> Result(Nil, ShelfError) {
   use _ <- result.try(internal.delete_key(table.ets, key))
-  internal.maybe_write_through(table.ets, table.dets, table.write_mode)
+  case table.write_mode {
+    shelf.WriteThrough -> internal.dets_delete_key(table.dets, key)
+    shelf.WriteBack -> Ok(Nil)
+  }
 }
 
 /// Delete a specific key-value pair.
 ///
 /// For set tables, this is equivalent to `delete_key` since each key
-/// has at most one value.
+/// has at most one value. Prefer `delete_key` for clarity — the extra
+/// `value` parameter is ignored by ETS for set tables.
 ///
 pub fn delete_object(
   from table: PSet(k, v),
@@ -269,14 +285,20 @@ pub fn delete_object(
   value value: v,
 ) -> Result(Nil, ShelfError) {
   use _ <- result.try(internal.delete_object(table.ets, key, value))
-  internal.maybe_write_through(table.ets, table.dets, table.write_mode)
+  case table.write_mode {
+    shelf.WriteThrough -> internal.dets_delete_object(table.dets, key, value)
+    shelf.WriteBack -> Ok(Nil)
+  }
 }
 
 /// Delete all entries (keeps the table open).
 ///
 pub fn delete_all(from table: PSet(k, v)) -> Result(Nil, ShelfError) {
   use _ <- result.try(internal.delete_all(table.ets))
-  internal.maybe_write_through(table.ets, table.dets, table.write_mode)
+  case table.write_mode {
+    shelf.WriteThrough -> internal.dets_delete_all(table.dets)
+    shelf.WriteBack -> Ok(Nil)
+  }
 }
 
 // ── Persistence ─────────────────────────────────────────────────────────
@@ -352,12 +374,13 @@ pub fn update_counter(
   increment amount: Int,
 ) -> Result(Int, ShelfError) {
   use new_val <- result.try(ffi_update_counter(table.ets, key, amount))
-  use _ <- result.try(internal.maybe_write_through(
-    table.ets,
-    table.dets,
-    table.write_mode,
-  ))
-  Ok(new_val)
+  case table.write_mode {
+    shelf.WriteThrough -> {
+      use _ <- result.try(internal.dets_insert(table.dets, #(key, new_val)))
+      Ok(new_val)
+    }
+    shelf.WriteBack -> Ok(new_val)
+  }
 }
 
 // ── FFI bindings (set-specific) ─────────────────────────────────────────
