@@ -11,6 +11,7 @@ import gleam/dynamic/decode
 import gleam/int
 import gleam/io
 import gleam/string
+import shelf
 import shelf/bag
 
 pub fn main() {
@@ -63,10 +64,9 @@ pub fn main() {
   // --- 6. Remove all articles for a tag with delete_key ---
   // This removes every value associated with the key.
   let assert Ok(Nil) = bag.delete_key(from: tags, key: "erlang")
-  let assert Ok(erlang_articles) = bag.lookup(from: tags, key: "erlang")
-  io.println(
-    "After deleting all 'erlang' entries: " <> format_int_list(erlang_articles),
-  )
+  // After deletion, lookup returns Error(NotFound)
+  let assert Error(shelf.NotFound) = bag.lookup(from: tags, key: "erlang")
+  io.println("After deleting all 'erlang' entries: (not found)")
 
   // --- 7. Check membership after deletion ---
   let assert Ok(has_erlang) = bag.member(of: tags, key: "erlang")
