@@ -1,60 +1,15 @@
 -module(shelf_ffi).
 -export([
-    open_set/2, open_bag/2, open_duplicate_bag/2,
     open_no_load/3,
     close/2, cleanup/2,
     insert/3, insert_list/3, insert_new/3,
     lookup_set/2, lookup_bag/2, member/2,
     delete_key/2, delete_object/3, delete_all/1,
     to_list/1, fold/3, size/1,
-    save/2, load/2, sync_dets/1,
+    save/2, sync_dets/1,
     update_counter/3,
     dets_to_list/1
 ]).
-
-%% ── Open ────────────────────────────────────────────────────────────────
-%% Creates an ETS table + opens a DETS file + loads DETS contents into ETS.
-%% Returns {ok, {EtsRef, DetsRef}} or {error, Reason}.
-
-open_set(Name, Path) ->
-    do_open(Name, Path, set).
-
-open_bag(Name, Path) ->
-    do_open(Name, Path, bag).
-
-open_duplicate_bag(Name, Path) ->
-    do_open(Name, Path, duplicate_bag).
-
-do_open(Name, Path, Type) ->
-    EtsName = binary_to_atom(Name, utf8),
-    %% Use the path as the DETS table name (atom) to avoid collisions
-    DetsName = binary_to_atom(Path, utf8),
-    try
-        %% Open or create the DETS file
-        {ok, Dets} = dets:open_file(DetsName, [
-            {file, binary_to_list(Path)},
-            {type, Type},
-            {repair, true}
-        ]),
-        %% Create the ETS table
-        Ets = ets:new(EtsName, [Type, public, named_table, {keypos, 1}]),
-        %% Load existing DETS data into ETS
-        true = ets:from_dets(Ets, Dets),
-        {ok, {Ets, Dets}}
-    catch
-        _:badarg ->
-            %% ETS table with this name likely already exists
-            case ets:whereis(EtsName) of
-                undefined ->
-                    {error, {erlang_error, <<"Failed to create table">>}};
-                _ ->
-                    {error, name_conflict}
-            end;
-        _:{badmatch, {error, Reason}} ->
-            {error, translate_error(Reason)};
-        _:Reason ->
-            {error, translate_error(Reason)}
-    end.
 
 %% ── Open (no load) ──────────────────────────────────────────────────────
 %% Creates an ETS table + opens a DETS file but does NOT load DETS into ETS.
@@ -228,16 +183,6 @@ size(Ets) ->
 save(Ets, Dets) ->
     try ets:to_dets(Ets, Dets) of
         Dets -> {ok, nil}
-    catch
-        _:Reason -> {error, translate_error(Reason)}
-    end.
-
-%% Reload: clear ETS, then load from DETS.
-load(Ets, Dets) ->
-    try
-        true = ets:delete_all_objects(Ets),
-        true = ets:from_dets(Ets, Dets),
-        {ok, nil}
     catch
         _:Reason -> {error, translate_error(Reason)}
     end.
