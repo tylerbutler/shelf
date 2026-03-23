@@ -90,7 +90,7 @@ pub fn atomic_save_tests() {
 
       let count = 100
       // Insert many entries
-      list.range(1, count)
+      int.range(count, 0, [], list.prepend)
       |> list.each(fn(i) {
         let key = "entry_" <> int.to_string(i)
         let assert Ok(Nil) = set.insert(table, key, i)

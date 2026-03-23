@@ -18,14 +18,14 @@ import shelf
 import shelf/set
 
 pub fn main() {
-  let path = "/tmp/shelf_examples_user_sessions.dets"
+  let path = "shelf_examples_user_sessions.dets"
 
   // --- 1. Build configuration with WriteThrough mode ---
   // The builder pattern lets you start with defaults and override what you need.
   // WriteThrough means every write is immediately persisted to the DETS file,
   // so there's no need to call save() manually.
   let config =
-    shelf.config("user_sessions", path)
+    shelf.config("user_sessions", path, base_directory: "/tmp")
     |> shelf.write_mode(shelf.WriteThrough)
 
   // --- 2. Open the persistent set table ---
