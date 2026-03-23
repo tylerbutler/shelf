@@ -18,23 +18,27 @@
 open_no_load(Name, Path, TypeBin) ->
     EtsName = binary_to_atom(Name, utf8),
     DetsName = binary_to_atom(Path, utf8),
-    Type = binary_to_existing_atom(TypeBin, utf8),
+    Type = binary_to_atom(TypeBin, utf8),
     try
         {ok, Dets} = dets:open_file(DetsName, [
             {file, binary_to_list(Path)},
             {type, Type},
             {repair, true}
         ]),
-        Ets = ets:new(EtsName, [Type, public, named_table, {keypos, 1}]),
-        {ok, {Ets, Dets}}
+        try
+            Ets = ets:new(EtsName, [Type, public, named_table, {keypos, 1}]),
+            {ok, {Ets, Dets}}
+        catch
+            _:badarg ->
+                _ = dets:close(Dets),
+                case ets:whereis(EtsName) of
+                    undefined ->
+                        {error, {erlang_error, <<"Failed to create table">>}};
+                    _ ->
+                        {error, name_conflict}
+                end
+        end
     catch
-        _:badarg ->
-            case ets:whereis(EtsName) of
-                undefined ->
-                    {error, {erlang_error, <<"Failed to create table">>}};
-                _ ->
-                    {error, name_conflict}
-            end;
         _:{badmatch, {error, Reason}} ->
             {error, translate_error(Reason)};
         _:Reason ->

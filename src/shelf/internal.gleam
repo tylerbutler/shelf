@@ -32,8 +32,9 @@ pub fn build_entry_decoder(
 /// Validate raw DETS entries through the decoder and batch-insert into ETS.
 ///
 /// **Performance note**: this materializes all DETS entries into a Gleam list
-/// before decoding and inserting into ETS. Peak memory is ~2x the DETS
-/// contents (the raw list + the ETS table). This works well for tables under
+/// before decoding and inserting into ETS. Peak memory is ~3x the DETS
+/// contents (the raw list + the decoded pairs + the ETS table). This works
+/// well for tables under
 /// ~50K entries; for larger tables or large values, memory pressure may be
 /// significant. See https://github.com/tylerbutler/shelf/issues/13 for a
 /// planned streaming approach using `dets:foldl` directly in the FFI.
@@ -53,7 +54,7 @@ pub fn validate_and_load(
     Lenient -> {
       let pairs =
         list.filter_map(entries, fn(entry) { decode.run(entry, entry_decoder) })
-      insert_list(ets, dets, pairs)
+      insert_list(ets, dets, list.reverse(pairs))
     }
   }
 }
@@ -64,7 +65,7 @@ fn decode_all_strict(
   acc: List(#(k, v)),
 ) -> Result(List(#(k, v)), ShelfError) {
   case entries {
-    [] -> Ok(acc)
+    [] -> Ok(list.reverse(acc))
     [entry, ..rest] ->
       case decode.run(entry, decoder) {
         Ok(pair) -> decode_all_strict(rest, decoder, [pair, ..acc])
