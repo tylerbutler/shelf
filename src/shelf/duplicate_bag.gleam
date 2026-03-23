@@ -223,7 +223,10 @@ pub fn insert(
   value value: v,
 ) -> Result(Nil, ShelfError) {
   use _ <- result.try(internal.insert(table.ets, table.dets, #(key, value)))
-  internal.maybe_write_through(table.ets, table.dets, table.write_mode)
+  case table.write_mode {
+    shelf.WriteThrough -> internal.dets_insert(table.dets, #(key, value))
+    shelf.WriteBack -> Ok(Nil)
+  }
 }
 
 /// Insert multiple key-value pairs.
@@ -233,7 +236,10 @@ pub fn insert_list(
   entries entries: List(#(k, v)),
 ) -> Result(Nil, ShelfError) {
   use _ <- result.try(internal.insert_list(table.ets, table.dets, entries))
-  internal.maybe_write_through(table.ets, table.dets, table.write_mode)
+  case table.write_mode {
+    shelf.WriteThrough -> internal.dets_insert_list(table.dets, entries)
+    shelf.WriteBack -> Ok(Nil)
+  }
 }
 
 // ── Delete ──────────────────────────────────────────────────────────────
@@ -245,7 +251,10 @@ pub fn delete_key(
   key key: k,
 ) -> Result(Nil, ShelfError) {
   use _ <- result.try(internal.delete_key(table.ets, key))
-  internal.maybe_write_through(table.ets, table.dets, table.write_mode)
+  case table.write_mode {
+    shelf.WriteThrough -> internal.dets_delete_key(table.dets, key)
+    shelf.WriteBack -> Ok(Nil)
+  }
 }
 
 /// Delete a specific key-value pair.
@@ -259,14 +268,20 @@ pub fn delete_object(
   value value: v,
 ) -> Result(Nil, ShelfError) {
   use _ <- result.try(internal.delete_object(table.ets, key, value))
-  internal.maybe_write_through(table.ets, table.dets, table.write_mode)
+  case table.write_mode {
+    shelf.WriteThrough -> internal.dets_delete_object(table.dets, key, value)
+    shelf.WriteBack -> Ok(Nil)
+  }
 }
 
 /// Delete all entries (keeps the table open).
 ///
 pub fn delete_all(from table: PDuplicateBag(k, v)) -> Result(Nil, ShelfError) {
   use _ <- result.try(internal.delete_all(table.ets))
-  internal.maybe_write_through(table.ets, table.dets, table.write_mode)
+  case table.write_mode {
+    shelf.WriteThrough -> internal.dets_delete_all(table.dets)
+    shelf.WriteBack -> Ok(Nil)
+  }
 }
 
 // ── Persistence ─────────────────────────────────────────────────────────

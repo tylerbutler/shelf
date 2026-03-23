@@ -8,7 +8,9 @@
     to_list/1, fold/3, size/1,
     save/2, sync_dets/1,
     update_counter/3,
-    dets_to_list/1
+    dets_to_list/1,
+    dets_insert/2, dets_insert_list/2,
+    dets_delete_key/2, dets_delete_object/3, dets_delete_all/1
 ]).
 
 %% ── Open (no load) ──────────────────────────────────────────────────────
@@ -214,6 +216,43 @@ update_counter(Ets, Key, Increment) ->
                 [] -> {error, not_found};
                 _ -> {error, {erlang_error, <<"update_counter failed: value is not an integer">>}}
             end;
+        _:Reason -> {error, translate_error(Reason)}
+    end.
+
+%% ── Targeted DETS operations (for WriteThrough mode) ────────────────────
+
+dets_insert(Dets, Object) ->
+    try dets:insert(Dets, Object) of
+        ok -> {ok, nil}
+    catch
+        _:Reason -> {error, translate_error(Reason)}
+    end.
+
+dets_insert_list(Dets, Objects) ->
+    try dets:insert(Dets, Objects) of
+        ok -> {ok, nil}
+    catch
+        _:Reason -> {error, translate_error(Reason)}
+    end.
+
+dets_delete_key(Dets, Key) ->
+    try dets:delete(Dets, Key) of
+        ok -> {ok, nil}
+    catch
+        _:Reason -> {error, translate_error(Reason)}
+    end.
+
+dets_delete_object(Dets, Key, Value) ->
+    try dets:delete_object(Dets, {Key, Value}) of
+        ok -> {ok, nil}
+    catch
+        _:Reason -> {error, translate_error(Reason)}
+    end.
+
+dets_delete_all(Dets) ->
+    try dets:delete_all_objects(Dets) of
+        ok -> {ok, nil}
+    catch
         _:Reason -> {error, translate_error(Reason)}
     end.
 
