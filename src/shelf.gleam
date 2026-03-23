@@ -53,6 +53,8 @@ import gleam/dynamic/decode
 /// ## Errors
 ///
 /// Operations return `Result` with `ShelfError` for failures.
+import gleam/dynamic/decode
+
 pub type ShelfError {
   /// No value found for the given key
   NotFound

@@ -6,6 +6,7 @@ import shelf/bag
 import shelf/duplicate_bag
 import shelf/set
 import startest.{describe, it}
+import startest/expect
 
 fn cleanup(path: String) {
   let _ = delete_file(path)
@@ -51,7 +52,10 @@ pub fn type_safety_tests() {
             key: decode.string,
             value: decode.int,
           )
-        let assert Error(shelf.TypeMismatch(_)) = result
+        case result {
+          Error(shelf.TypeMismatch(_)) -> Nil
+          _ -> expect.to_equal(result, Error(shelf.TypeMismatch([])))
+        }
         cleanup(path)
         Nil
       }),
@@ -78,7 +82,10 @@ pub fn type_safety_tests() {
             key: decode.string,
             value: decode.string,
           )
-        let assert Error(shelf.TypeMismatch(_)) = result
+        case result {
+          Error(shelf.TypeMismatch(_)) -> Nil
+          _ -> expect.to_equal(result, Error(shelf.TypeMismatch([])))
+        }
         cleanup(path)
         Nil
       }),
@@ -183,7 +190,10 @@ pub fn type_safety_tests() {
             key: decode.string,
             value: decode.int,
           )
-        let assert Error(shelf.TypeMismatch(_)) = result
+        case result {
+          Error(shelf.TypeMismatch(_)) -> Nil
+          _ -> expect.to_equal(result, Error(shelf.TypeMismatch([])))
+        }
         cleanup(path)
         Nil
       }),
@@ -211,7 +221,10 @@ pub fn type_safety_tests() {
             key: decode.string,
             value: decode.int,
           )
-        let assert Error(shelf.TypeMismatch(_)) = result
+        case result {
+          Error(shelf.TypeMismatch(_)) -> Nil
+          _ -> expect.to_equal(result, Error(shelf.TypeMismatch([])))
+        }
         cleanup(path)
         Nil
       }),
@@ -239,7 +252,10 @@ pub fn type_safety_tests() {
             key: decode.string,
             value: decode.int,
           )
-        let assert Error(shelf.TypeMismatch(_)) = result
+        case result {
+          Error(shelf.TypeMismatch(_)) -> Nil
+          _ -> expect.to_equal(result, Error(shelf.TypeMismatch([])))
+        }
         cleanup(path)
         Nil
       }),
@@ -338,7 +354,11 @@ pub fn type_safety_tests() {
           shelf.config(name: "ts_order_lenient", path: path)
           |> shelf.decode_policy(shelf.Lenient)
         let assert Ok(t2) =
-          bag.open_config(config: config, key: decode.string, value: decode.string)
+          bag.open_config(
+            config: config,
+            key: decode.string,
+            value: decode.string,
+          )
         let assert Ok(lenient_values) = bag.lookup(t2, "seq")
         let assert Ok(Nil) = bag.close(t2)
 
@@ -396,14 +416,15 @@ pub fn type_safety_tests() {
     ]),
     describe("decode policy config", [
       it("config defaults to Strict", fn() {
-        // Just verify the builder works — Config is now opaque
-        let _config = shelf.config(name: "test", path: "test.dets")
+        let config = shelf.config(name: "test", path: "test.dets")
+        expect.to_equal(config.decode_policy, shelf.Strict)
         Nil
       }),
       it("config decode_policy can be set to Lenient", fn() {
-        let _config =
+        let config =
           shelf.config(name: "test", path: "test.dets")
           |> shelf.decode_policy(shelf.Lenient)
+        expect.to_equal(config.decode_policy, shelf.Lenient)
         Nil
       }),
     ]),

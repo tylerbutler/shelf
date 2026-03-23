@@ -12,14 +12,17 @@ import shelf.{
 }
 
 /// Raw ETS table reference (Erlang tid).
+@internal
 pub type EtsRef
 
 /// Raw DETS table reference (Erlang atom).
+@internal
 pub type DetsRef
 
 // ── Shared helpers ──────────────────────────────────────────────────────
 
 /// Compose key and value decoders into a tuple entry decoder.
+@internal
 pub fn build_entry_decoder(
   key_decoder: Decoder(k),
   value_decoder: Decoder(v),
@@ -39,6 +42,7 @@ pub fn build_entry_decoder(
 /// significant. See https://github.com/tylerbutler/shelf/issues/13 for a
 /// planned streaming approach using `dets:foldl` directly in the FFI.
 ///
+@internal
 pub fn validate_and_load(
   entries: List(Dynamic),
   ets: EtsRef,
@@ -75,6 +79,7 @@ fn decode_all_strict(
 }
 
 /// If in WriteThrough mode, save ETS to DETS.
+@internal
 pub fn maybe_write_through(
   ets: EtsRef,
   dets: DetsRef,
@@ -89,6 +94,7 @@ pub fn maybe_write_through(
 // ── Shared FFI bindings ─────────────────────────────────────────────────
 
 @external(erlang, "shelf_ffi", "open_no_load")
+@internal
 pub fn open_no_load(
   name: String,
   path: String,
@@ -96,15 +102,19 @@ pub fn open_no_load(
 ) -> Result(#(EtsRef, DetsRef), ShelfError)
 
 @external(erlang, "shelf_ffi", "dets_to_list")
+@internal
 pub fn dets_to_list(dets: DetsRef) -> Result(List(Dynamic), ShelfError)
 
 @external(erlang, "shelf_ffi", "cleanup")
+@internal
 pub fn cleanup(ets: EtsRef, dets: DetsRef) -> Result(Nil, ShelfError)
 
 @external(erlang, "shelf_ffi", "close")
+@internal
 pub fn close(ets: EtsRef, dets: DetsRef) -> Result(Nil, ShelfError)
 
 @external(erlang, "shelf_ffi", "insert")
+@internal
 pub fn insert(
   ets: EtsRef,
   dets: DetsRef,
@@ -112,6 +122,7 @@ pub fn insert(
 ) -> Result(Nil, ShelfError)
 
 @external(erlang, "shelf_ffi", "insert_list")
+@internal
 pub fn insert_list(
   ets: EtsRef,
   dets: DetsRef,
@@ -119,12 +130,15 @@ pub fn insert_list(
 ) -> Result(Nil, ShelfError)
 
 @external(erlang, "shelf_ffi", "member")
+@internal
 pub fn member(ets: EtsRef, key: k) -> Result(Bool, ShelfError)
 
 @external(erlang, "shelf_ffi", "to_list")
+@internal
 pub fn to_list(ets: EtsRef) -> Result(List(#(k, v)), ShelfError)
 
 @external(erlang, "shelf_ffi", "fold")
+@internal
 pub fn fold(
   ets: EtsRef,
   fun: fn(#(k, v), acc) -> acc,
@@ -132,19 +146,25 @@ pub fn fold(
 ) -> Result(acc, ShelfError)
 
 @external(erlang, "shelf_ffi", "size")
+@internal
 pub fn size(ets: EtsRef) -> Result(Int, ShelfError)
 
 @external(erlang, "shelf_ffi", "delete_key")
+@internal
 pub fn delete_key(ets: EtsRef, key: k) -> Result(Nil, ShelfError)
 
 @external(erlang, "shelf_ffi", "delete_object")
+@internal
 pub fn delete_object(ets: EtsRef, key: k, value: v) -> Result(Nil, ShelfError)
 
 @external(erlang, "shelf_ffi", "delete_all")
+@internal
 pub fn delete_all(ets: EtsRef) -> Result(Nil, ShelfError)
 
 @external(erlang, "shelf_ffi", "save")
+@internal
 pub fn save(ets: EtsRef, dets: DetsRef) -> Result(Nil, ShelfError)
 
 @external(erlang, "shelf_ffi", "sync_dets")
+@internal
 pub fn sync_dets(dets: DetsRef) -> Result(Nil, ShelfError)
