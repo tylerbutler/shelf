@@ -17,6 +17,8 @@ body:
     block: true
     minLength: 1
 kinds:
+    - label: Breaking
+      auto: minor  # TODO: change to major after 1.0
     - label: Added
       auto: minor
     - label: Changed

@@ -1,5 +1,0 @@
-kind: Changed
-body: |-
-    BREAKING: open(), with_table(), and config() now require a base_directory parameter
-    All table-opening functions now take a base_directory argument that restricts where DETS files can be created. This is a breaking API change. Update calls from e.g. set.open(name: "t", path: "data/t.dets", ...) to set.open(name: "t", path: "t.dets", base_directory: "data", ...).
-time: 2026-03-22T21:32:37.771183137-07:00
