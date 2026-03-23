@@ -40,10 +40,13 @@ shelf is not yet 1.0. The API is unstable, features may be removed in minor rele
 	<Card title="ETS Speed + DETS Persistence" icon="rocket">
 		Microsecond reads from ETS with durable storage on disk via DETS. The classic Erlang persistence pattern, wrapped in a type-safe Gleam API.
 	</Card>
+	<Card title="Runtime Type Safety" icon="approve-check-circle">
+		Decoder-gated loading validates every entry from disk against your Gleam types. Catch corrupted or mistyped data at the storage boundary.
+	</Card>
 	<Card title="Write Modes" icon="document">
 		Choose WriteBack for high-throughput batched persistence, or WriteThrough for immediate durability on every write.
 	</Card>
-	<Card title="Table Types" icon="approve-check-circle">
+	<Card title="Table Types" icon="list-format">
 		Set, bag, and duplicate bag tables — all with persistent backing. Pick the right data model for your use case.
 	</Card>
 	<Card title="Safe Resource Management" icon="setting">

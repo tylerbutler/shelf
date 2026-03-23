@@ -10,9 +10,11 @@ shelf supports two write modes that control when data is persisted to disk. Choo
 In WriteBack mode, writes go to ETS (memory) only. Data is persisted to DETS (disk) when you explicitly call `save()`, or automatically when the table is closed.
 
 ```gleam
+import gleam/dynamic/decode
 import shelf/set
 
-let assert Ok(table) = set.open(name: "sessions", path: "data/sessions.dets")
+let assert Ok(table) =
+  set.open(name: "sessions", path: "data/sessions.dets", key: decode.string, value: decode.string)
 
 // Fast writes — ETS only
 let assert Ok(Nil) = set.insert(table, "user:1", session_1)
@@ -44,6 +46,7 @@ let assert Ok(Nil) = set.reload(table)
 In WriteThrough mode, every write persists to both ETS and DETS immediately. Reads are still served from ETS (fast).
 
 ```gleam
+import gleam/dynamic/decode
 import shelf
 import shelf/set
 
@@ -51,7 +54,7 @@ let config =
   shelf.config(name: "accounts", path: "data/accounts.dets")
   |> shelf.write_mode(shelf.WriteThrough)
 
-let assert Ok(table) = set.open_config(config)
+let assert Ok(table) = set.open_config(config: config, key: decode.string, value: decode.string)
 
 // This writes to both ETS and DETS
 let assert Ok(Nil) = set.insert(table, "acct:1", account)
@@ -84,16 +87,19 @@ let assert Ok(Nil) = set.sync(table)
 Write mode is set at table creation via `Config`:
 
 ```gleam
+import gleam/dynamic/decode
 import shelf
 
 // WriteBack (the default — no config needed)
-let assert Ok(table) = set.open(name: "cache", path: "data/cache.dets")
+let assert Ok(table) =
+  set.open(name: "cache", path: "data/cache.dets", key: decode.string, value: decode.string)
 
 // WriteThrough (use config)
 let config =
   shelf.config(name: "accounts", path: "data/accounts.dets")
   |> shelf.write_mode(shelf.WriteThrough)
-let assert Ok(table) = set.open_config(config)
+let assert Ok(table) =
+  set.open_config(config: config, key: decode.string, value: decode.string)
 ```
 
 Write mode applies to all table types — `set`, `bag`, and `duplicate_bag` all support both modes.

@@ -8,14 +8,22 @@ Duplicate bag tables are like bag tables, but they preserve duplicate key-value 
 ## Opening a Duplicate Bag Table
 
 ```gleam
+import gleam/dynamic/decode
 import shelf/duplicate_bag
 
-let assert Ok(table) = duplicate_bag.open(name: "events", path: "data/events.dets")
+let assert Ok(table) =
+  duplicate_bag.open(
+    name: "events",
+    path: "data/events.dets",
+    key: decode.string,
+    value: decode.string,
+  )
 ```
 
 For custom configuration, use `open_config`:
 
 ```gleam
+import gleam/dynamic/decode
 import shelf
 import shelf/duplicate_bag
 
@@ -23,7 +31,8 @@ let config =
   shelf.config(name: "events", path: "data/events.dets")
   |> shelf.write_mode(shelf.WriteThrough)
 
-let assert Ok(table) = duplicate_bag.open_config(config)
+let assert Ok(table) =
+  duplicate_bag.open_config(config: config, key: decode.string, value: decode.string)
 ```
 
 ## Reading Data
