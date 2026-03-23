@@ -1,0 +1,5 @@
+kind: Changed
+body: |-
+    ETS tables no longer use named_table
+    Multiple tables with the same name can now coexist since ETS tables use anonymous references. The NameConflict error now only applies to DETS file path conflicts.
+time: 2026-03-22T21:32:55.8944876-07:00

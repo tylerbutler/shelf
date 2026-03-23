@@ -1,0 +1,5 @@
+kind: Performance
+body: |-
+    Streaming DETS loader reduces peak memory from ~3x to ~1x
+    Opening tables with existing DETS data now uses dets:foldl to validate and insert entries one at a time, instead of materializing the entire DETS contents into a Gleam list first. This significantly reduces memory pressure for large tables.
+time: 2026-03-22T21:32:25.324900221-07:00
