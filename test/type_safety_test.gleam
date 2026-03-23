@@ -52,7 +52,10 @@ pub fn type_safety_tests() {
             key: decode.string,
             value: decode.int,
           )
-        expect.to_equal(result, Error(shelf.TypeMismatch))
+        case result {
+          Error(shelf.TypeMismatch(_)) -> Nil
+          _ -> expect.to_equal(result, Error(shelf.TypeMismatch([])))
+        }
         cleanup(path)
         Nil
       }),
@@ -79,7 +82,10 @@ pub fn type_safety_tests() {
             key: decode.string,
             value: decode.string,
           )
-        expect.to_equal(result, Error(shelf.TypeMismatch))
+        case result {
+          Error(shelf.TypeMismatch(_)) -> Nil
+          _ -> expect.to_equal(result, Error(shelf.TypeMismatch([])))
+        }
         cleanup(path)
         Nil
       }),
@@ -184,7 +190,10 @@ pub fn type_safety_tests() {
             key: decode.string,
             value: decode.int,
           )
-        expect.to_equal(result, Error(shelf.TypeMismatch))
+        case result {
+          Error(shelf.TypeMismatch(_)) -> Nil
+          _ -> expect.to_equal(result, Error(shelf.TypeMismatch([])))
+        }
         cleanup(path)
         Nil
       }),
@@ -212,7 +221,10 @@ pub fn type_safety_tests() {
             key: decode.string,
             value: decode.int,
           )
-        expect.to_equal(result, Error(shelf.TypeMismatch))
+        case result {
+          Error(shelf.TypeMismatch(_)) -> Nil
+          _ -> expect.to_equal(result, Error(shelf.TypeMismatch([])))
+        }
         cleanup(path)
         Nil
       }),
@@ -240,7 +252,10 @@ pub fn type_safety_tests() {
             key: decode.string,
             value: decode.int,
           )
-        expect.to_equal(result, Error(shelf.TypeMismatch))
+        case result {
+          Error(shelf.TypeMismatch(_)) -> Nil
+          _ -> expect.to_equal(result, Error(shelf.TypeMismatch([])))
+        }
         cleanup(path)
         Nil
       }),
@@ -339,7 +354,11 @@ pub fn type_safety_tests() {
           shelf.config(name: "ts_order_lenient", path: path)
           |> shelf.decode_policy(shelf.Lenient)
         let assert Ok(t2) =
-          bag.open_config(config: config, key: decode.string, value: decode.string)
+          bag.open_config(
+            config: config,
+            key: decode.string,
+            value: decode.string,
+          )
         let assert Ok(lenient_values) = bag.lookup(t2, "seq")
         let assert Ok(Nil) = bag.close(t2)
 

@@ -51,6 +51,8 @@
 /// ## Errors
 ///
 /// Operations return `Result` with `ShelfError` for failures.
+import gleam/dynamic/decode
+
 pub type ShelfError {
   /// No value found for the given key
   NotFound
@@ -67,8 +69,9 @@ pub type ShelfError {
   /// Data loaded from DETS did not match the expected types.
   ///
   /// Returned when opening a table whose DETS file contains entries that
-  /// fail to decode with the provided key/value decoders.
-  TypeMismatch
+  /// fail to decode with the provided key/value decoders. The list of
+  /// `DecodeError`s describes which fields failed and why.
+  TypeMismatch(List(decode.DecodeError))
   /// Erlang-level error (catch-all)
   ErlangError(String)
 }
