@@ -31,6 +31,7 @@ pub fn type_safety_tests() {
           set.open(
             name: "ts_wrong_value_1",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )
@@ -42,6 +43,7 @@ pub fn type_safety_tests() {
           set.open(
             name: "ts_wrong_value_2",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )
@@ -61,6 +63,7 @@ pub fn type_safety_tests() {
           set.open(
             name: "ts_wrong_key_1",
             path: path,
+            base_directory: "/tmp",
             key: decode.int,
             value: decode.string,
           )
@@ -72,6 +75,7 @@ pub fn type_safety_tests() {
           set.open(
             name: "ts_wrong_key_2",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )
@@ -90,6 +94,7 @@ pub fn type_safety_tests() {
           set.open(
             name: "ts_correct_1",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )
@@ -101,6 +106,7 @@ pub fn type_safety_tests() {
           set.open(
             name: "ts_correct_2",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )
@@ -118,6 +124,7 @@ pub fn type_safety_tests() {
           set.open(
             name: "ts_empty_1",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )
@@ -128,6 +135,7 @@ pub fn type_safety_tests() {
           set.open(
             name: "ts_empty_2",
             path: path,
+            base_directory: "/tmp",
             key: decode.int,
             value: decode.float,
           )
@@ -152,7 +160,7 @@ pub fn type_safety_tests() {
 
         // Open in lenient mode — should skip the bad entry
         let config =
-          shelf.config(name: "ts_lenient", path: path)
+          shelf.config(name: "ts_lenient", path: path, base_directory: "/tmp")
           |> shelf.decode_policy(shelf.Lenient)
         let assert Ok(t) =
           set.open_config(config: config, key: decode.string, value: decode.int)
@@ -180,6 +188,7 @@ pub fn type_safety_tests() {
           set.open(
             name: "ts_strict_reject",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )
@@ -200,6 +209,7 @@ pub fn type_safety_tests() {
           bag.open(
             name: "ts_bag_wrong_1",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )
@@ -211,6 +221,7 @@ pub fn type_safety_tests() {
           bag.open(
             name: "ts_bag_wrong_2",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )
@@ -231,6 +242,7 @@ pub fn type_safety_tests() {
           duplicate_bag.open(
             name: "ts_dbag_wrong_1",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )
@@ -242,6 +254,7 @@ pub fn type_safety_tests() {
           duplicate_bag.open(
             name: "ts_dbag_wrong_2",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )
@@ -271,6 +284,7 @@ pub fn type_safety_tests() {
           bag.open(
             name: "ts_bag_order",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )
@@ -306,6 +320,7 @@ pub fn type_safety_tests() {
             duplicate_bag.open(
               name: "ts_dbag_order",
               path: path,
+              base_directory: "/tmp",
               key: decode.string,
               value: decode.string,
             )
@@ -336,6 +351,7 @@ pub fn type_safety_tests() {
           bag.open(
             name: "ts_order_strict",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )
@@ -344,7 +360,11 @@ pub fn type_safety_tests() {
 
         // Open lenient with same data
         let config =
-          shelf.config(name: "ts_order_lenient", path: path)
+          shelf.config(
+            name: "ts_order_lenient",
+            path: path,
+            base_directory: "/tmp",
+          )
           |> shelf.decode_policy(shelf.Lenient)
         let assert Ok(t2) =
           bag.open_config(
@@ -362,45 +382,39 @@ pub fn type_safety_tests() {
       }),
     ]),
     describe("resource cleanup on failed open", [
-      it("DETS is cleaned up when ETS name conflicts", fn() {
+      it("multiple tables with same name can coexist", fn() {
         let path1 = "/tmp/shelf_ts_dets_leak1.dets"
         let path2 = "/tmp/shelf_ts_dets_leak2.dets"
         test_helpers.cleanup(path1)
         test_helpers.cleanup(path2)
 
-        // Open a table to claim the ETS name
+        // Open two tables with the same ETS name but different DETS paths
+        // This should work because ETS tables are unnamed (no named_table)
         let assert Ok(t1) =
           set.open(
-            name: "ts_dets_leak",
+            name: "ts_same_name",
             path: path1,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )
 
-        // Try to open another table with the same name but different path
-        // This should fail with NameConflict
-        let assert Error(shelf.NameConflict) =
-          set.open(
-            name: "ts_dets_leak",
-            path: path2,
-            key: decode.string,
-            value: decode.string,
-          )
-
-        // Close the first table
-        let assert Ok(Nil) = set.close(t1)
-
-        // Now open a table with path2 — this should succeed because
-        // the DETS file was properly closed during the failed open above.
-        // Without the fix, the DETS handle would still be open and this
-        // would fail or behave unexpectedly.
         let assert Ok(t2) =
           set.open(
-            name: "ts_dets_leak_retry",
+            name: "ts_same_name",
             path: path2,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )
+
+        // Both tables are independent
+        let assert Ok(Nil) = set.insert(t1, "key", "val1")
+        let assert Ok(Nil) = set.insert(t2, "key", "val2")
+        let assert Ok("val1") = set.lookup(t1, "key")
+        let assert Ok("val2") = set.lookup(t2, "key")
+
+        let assert Ok(Nil) = set.close(t1)
         let assert Ok(Nil) = set.close(t2)
         test_helpers.cleanup(path1)
         test_helpers.cleanup(path2)
@@ -409,13 +423,14 @@ pub fn type_safety_tests() {
     ]),
     describe("decode policy config", [
       it("config defaults to Strict", fn() {
-        let _config = shelf.config(name: "test", path: "test.dets")
+        let _config =
+          shelf.config(name: "test", path: "test.dets", base_directory: "/tmp")
         // Config is opaque — default behavior verified by type safety tests
         Nil
       }),
       it("config decode_policy can be set to Lenient", fn() {
         let _config =
-          shelf.config(name: "test", path: "test.dets")
+          shelf.config(name: "test", path: "test.dets", base_directory: "/tmp")
           |> shelf.decode_policy(shelf.Lenient)
         // Config is opaque — lenient behavior verified by lenient mode tests
         Nil

@@ -18,6 +18,7 @@ pub fn bag_tests() {
           bag.open(
             name: "bag_lifecycle",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )
@@ -32,6 +33,7 @@ pub fn bag_tests() {
           use table <- bag.with_table(
             "bag_with_table",
             path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )
@@ -50,6 +52,7 @@ pub fn bag_tests() {
           bag.open(
             name: "bag_multi",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )
@@ -69,6 +72,7 @@ pub fn bag_tests() {
           bag.open(
             name: "bag_dedup",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )
@@ -87,6 +91,7 @@ pub fn bag_tests() {
           bag.open(
             name: "bag_notfound",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )
@@ -104,6 +109,7 @@ pub fn bag_tests() {
           bag.open(
             name: "bag_member",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )
@@ -121,6 +127,7 @@ pub fn bag_tests() {
           bag.open(
             name: "bag_to_list",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )
@@ -148,6 +155,7 @@ pub fn bag_tests() {
           bag.open(
             name: "bag_fold",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )
@@ -168,6 +176,7 @@ pub fn bag_tests() {
           bag.open(
             name: "bag_size",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )
@@ -189,6 +198,7 @@ pub fn bag_tests() {
           bag.open(
             name: "bag_insert_list",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )
@@ -212,6 +222,7 @@ pub fn bag_tests() {
           bag.open(
             name: "bag_del_obj",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )
@@ -231,6 +242,7 @@ pub fn bag_tests() {
           bag.open(
             name: "bag_del_key",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )
@@ -249,6 +261,7 @@ pub fn bag_tests() {
           bag.open(
             name: "bag_del_all",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )
@@ -269,6 +282,7 @@ pub fn bag_tests() {
           bag.open(
             name: "bag_save_1",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )
@@ -281,6 +295,7 @@ pub fn bag_tests() {
           bag.open(
             name: "bag_save_2",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )
@@ -298,6 +313,7 @@ pub fn bag_tests() {
           bag.open(
             name: "bag_reload",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )

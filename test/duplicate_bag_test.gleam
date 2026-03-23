@@ -18,6 +18,7 @@ pub fn duplicate_bag_tests() {
           duplicate_bag.open(
             name: "dbag_lifecycle",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )
@@ -32,6 +33,7 @@ pub fn duplicate_bag_tests() {
           use table <- duplicate_bag.with_table(
             "dbag_with_table",
             path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )
@@ -52,6 +54,7 @@ pub fn duplicate_bag_tests() {
           duplicate_bag.open(
             name: "dbag_dupes",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )
@@ -77,6 +80,7 @@ pub fn duplicate_bag_tests() {
           duplicate_bag.open(
             name: "dbag_notfound",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )
@@ -97,6 +101,7 @@ pub fn duplicate_bag_tests() {
           duplicate_bag.open(
             name: "dbag_member",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )
@@ -114,6 +119,7 @@ pub fn duplicate_bag_tests() {
           duplicate_bag.open(
             name: "dbag_to_list",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )
@@ -141,6 +147,7 @@ pub fn duplicate_bag_tests() {
           duplicate_bag.open(
             name: "dbag_fold",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )
@@ -163,6 +170,7 @@ pub fn duplicate_bag_tests() {
           duplicate_bag.open(
             name: "dbag_size",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )
@@ -184,6 +192,7 @@ pub fn duplicate_bag_tests() {
           duplicate_bag.open(
             name: "dbag_insert_list",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )
@@ -210,6 +219,7 @@ pub fn duplicate_bag_tests() {
           duplicate_bag.open(
             name: "dbag_del_key",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )
@@ -232,6 +242,7 @@ pub fn duplicate_bag_tests() {
           duplicate_bag.open(
             name: "dbag_del_obj",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )
@@ -252,6 +263,7 @@ pub fn duplicate_bag_tests() {
           duplicate_bag.open(
             name: "dbag_del_all",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )
@@ -272,6 +284,7 @@ pub fn duplicate_bag_tests() {
           duplicate_bag.open(
             name: "dbag_save_1",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )
@@ -284,6 +297,7 @@ pub fn duplicate_bag_tests() {
           duplicate_bag.open(
             name: "dbag_save_2",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )
@@ -300,6 +314,7 @@ pub fn duplicate_bag_tests() {
           duplicate_bag.open(
             name: "dbag_reload",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )

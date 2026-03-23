@@ -13,6 +13,7 @@
 ///
 /// let assert Ok(table) =
 ///   set.open(name: "cache", path: "data/cache.dets",
+///     base_directory: "/app/storage",
 ///     key: decode.string, value: decode.string)
 /// let assert Ok(Nil) = set.insert(table, "key", "value")
 /// let assert Ok("value") = set.lookup(table, "key")
@@ -30,6 +31,12 @@
 /// - `shelf/set` — unique keys, one value per key
 /// - `shelf/bag` — multiple distinct values per key
 /// - `shelf/duplicate_bag` — multiple values per key (duplicates allowed)
+///
+/// ## Security
+///
+/// All DETS file paths are validated against a required base directory.
+/// Paths that escape the base directory (e.g., via `..` traversal) or
+/// contain null bytes are rejected with `InvalidPath`.
 ///
 /// ## Limitations
 ///
@@ -52,6 +59,7 @@
 ///
 /// Operations return `Result` with `ShelfError` for failures.
 import gleam/dynamic/decode
+import gleam/string
 
 pub type ShelfError {
   /// No value found for the given key
@@ -62,8 +70,12 @@ pub type ShelfError {
   TableClosed
   /// DETS file could not be found or created
   FileError(String)
-  /// An ETS table with this name already exists
+  /// An ETS table with this name already exists, or the DETS file is
+  /// already open by another table
   NameConflict
+  /// The DETS file path is invalid (escapes base directory, contains
+  /// null bytes, or is otherwise unsafe)
+  InvalidPath(String)
   /// DETS file exceeds the 2 GB limit
   FileSizeLimitExceeded
   /// Data loaded from DETS did not match the expected types.
@@ -107,8 +119,10 @@ pub opaque type Config {
   Config(
     /// Unique name for the ETS table (must not conflict with other ETS tables)
     name: String,
-    /// File path for the DETS backing store
+    /// File path for the DETS backing store (relative to base_directory)
     path: String,
+    /// Base directory that all DETS paths are resolved against
+    base_directory: String,
     /// When to persist writes to disk
     write_mode: WriteMode,
     /// How to handle entries that fail to decode when loading from DETS
@@ -118,19 +132,34 @@ pub opaque type Config {
 
 /// Create a config with defaults (WriteBack mode, Strict decode policy).
 ///
+/// The `base_directory` restricts DETS file paths to prevent directory
+/// traversal attacks. The `path` is resolved relative to `base_directory`.
+///
 /// ```gleam
-/// let conf = shelf.config(name: "users", path: "data/users.dets")
+/// let conf = shelf.config(name: "users", path: "users.dets",
+///   base_directory: "/app/data")
 /// ```
 ///
-pub fn config(name name: String, path path: String) -> Config {
-  Config(name:, path:, write_mode: WriteBack, decode_policy: Strict)
+pub fn config(
+  name name: String,
+  path path: String,
+  base_directory base_directory: String,
+) -> Config {
+  Config(
+    name:,
+    path:,
+    base_directory:,
+    write_mode: WriteBack,
+    decode_policy: Strict,
+  )
 }
 
 /// Set the write mode on a config.
 ///
 /// ```gleam
 /// let conf =
-///   shelf.config(name: "users", path: "data/users.dets")
+///   shelf.config(name: "users", path: "users.dets",
+///     base_directory: "/app/data")
 ///   |> shelf.write_mode(shelf.WriteThrough)
 /// ```
 ///
@@ -142,7 +171,8 @@ pub fn write_mode(config config: Config, mode mode: WriteMode) -> Config {
 ///
 /// ```gleam
 /// let conf =
-///   shelf.config(name: "users", path: "data/users.dets")
+///   shelf.config(name: "users", path: "users.dets",
+///     base_directory: "/app/data")
 ///   |> shelf.decode_policy(shelf.Lenient)
 /// ```
 ///
@@ -167,6 +197,11 @@ pub fn get_path(config: Config) -> String {
 }
 
 @internal
+pub fn get_base_directory(config: Config) -> String {
+  config.base_directory
+}
+
+@internal
 pub fn get_write_mode(config: Config) -> WriteMode {
   config.write_mode
 }
@@ -175,3 +210,28 @@ pub fn get_write_mode(config: Config) -> WriteMode {
 pub fn get_decode_policy(config: Config) -> DecodePolicy {
   config.decode_policy
 }
+
+/// Validate that a path is safe and resolve it against the base directory.
+///
+/// Rejects paths containing null bytes or that escape the base directory
+/// via `..` traversal. Returns the resolved absolute path on success.
+@internal
+pub fn validate_path(
+  path: String,
+  base_directory: String,
+) -> Result(String, ShelfError) {
+  case string.contains(path, "\u{0}") {
+    True -> Error(InvalidPath("Path contains null bytes"))
+    False ->
+      case string.contains(base_directory, "\u{0}") {
+        True -> Error(InvalidPath("Base directory contains null bytes"))
+        False -> ffi_validate_path(path, base_directory)
+      }
+  }
+}
+
+@external(erlang, "shelf_ffi", "validate_path")
+fn ffi_validate_path(
+  path: String,
+  base_directory: String,
+) -> Result(String, ShelfError)

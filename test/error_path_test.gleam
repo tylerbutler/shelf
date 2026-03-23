@@ -17,6 +17,7 @@ pub fn error_path_tests() {
           set.open(
             name: "ep_counter_missing",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )
@@ -35,6 +36,7 @@ pub fn error_path_tests() {
           set.open(
             name: "ep_counter_closed",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )
@@ -54,6 +56,7 @@ pub fn error_path_tests() {
           set.open(
             name: "ep_sync_set",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )
@@ -72,6 +75,7 @@ pub fn error_path_tests() {
           bag.open(
             name: "ep_sync_bag",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )
@@ -90,6 +94,7 @@ pub fn error_path_tests() {
           duplicate_bag.open(
             name: "ep_sync_dbag",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )
@@ -108,6 +113,7 @@ pub fn error_path_tests() {
           bag.with_table(
             "ep_bag_wt_err",
             path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
             fun: fn(_table) { Error(shelf.NotFound) },
@@ -123,6 +129,7 @@ pub fn error_path_tests() {
           duplicate_bag.with_table(
             "ep_dbag_wt_err",
             path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
             fun: fn(_table) { Error(shelf.NotFound) },
