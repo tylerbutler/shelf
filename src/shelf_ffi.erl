@@ -26,7 +26,7 @@ open_no_load(Name, Path, TypeBin) ->
             {repair, true}
         ]),
         try
-            Ets = ets:new(EtsName, [Type, public, named_table, {keypos, 1}]),
+            Ets = ets:new(EtsName, [Type, protected, named_table, {keypos, 1}]),
             {ok, {Ets, Dets}}
         catch
             _:badarg ->
@@ -51,9 +51,12 @@ open_no_load(Name, Path, TypeBin) ->
 dets_to_list(Dets) ->
     try
         Result = dets:foldl(fun(Entry, Acc) -> [Entry | Acc] end, [], Dets),
-        {ok, Result}
+        case Result of
+            {error, Reason} -> {error, translate_error(Reason)};
+            _ when is_list(Result) -> {ok, Result}
+        end
     catch
-        _:Reason -> {error, translate_error(Reason)}
+        _:CatchReason -> {error, translate_error(CatchReason)}
     end.
 
 %% ── Cleanup ─────────────────────────────────────────────────────────────
@@ -72,16 +75,13 @@ cleanup(Ets, Dets) ->
 %% Save ETS→DETS, close DETS, delete ETS.
 
 close(Ets, Dets) ->
-    try
-        %% Final save
-        _ = ets:to_dets(Ets, Dets),
-        %% Close DETS file
-        ok = dets:close(Dets),
-        %% Delete ETS table
-        true = ets:delete(Ets),
-        {ok, nil}
-    catch
-        _:Reason -> {error, translate_error(Reason)}
+    SaveResult = (catch ets:to_dets(Ets, Dets)),
+    _ = (catch dets:close(Dets)),
+    _ = (catch ets:delete(Ets)),
+    case SaveResult of
+        Dets -> {ok, nil};
+        {'EXIT', Reason} -> {error, translate_error(Reason)};
+        _ -> {ok, nil}
     end.
 
 %% ── Insert ──────────────────────────────────────────────────────────────
@@ -176,7 +176,11 @@ fold(Ets, Fun, Acc0) ->
     end.
 
 size(Ets) ->
-    try {ok, ets:info(Ets, size)}
+    try
+        case ets:info(Ets, size) of
+            undefined -> {error, table_closed};
+            Size -> {ok, Size}
+        end
     catch
         _:Reason -> {error, translate_error(Reason)}
     end.
@@ -219,9 +223,13 @@ translate_error(not_found) -> not_found;
 translate_error(key_already_present) -> key_already_present;
 translate_error(name_conflict) -> name_conflict;
 translate_error(type_mismatch) -> type_mismatch;
+%% NOTE: `badarg` from ETS can mean many things (bad table ref, bad arguments, etc.)
+%% but the most common case in shelf's context is a deleted/closed table.
+%% This mapping may be imprecise for other `badarg` causes.
 translate_error(badarg) -> table_closed;
 translate_error({file_error, _, enoent}) -> {file_error, <<"File not found">>};
 translate_error({file_error, _, eacces}) -> {file_error, <<"Permission denied">>};
+translate_error({file_error, _, enospc}) -> file_size_limit_exceeded;
 translate_error({file_error, _, Reason}) ->
     {file_error, list_to_binary(io_lib:format("~p", [Reason]))};
 translate_error({error, Reason}) -> translate_error(Reason);
