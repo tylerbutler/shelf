@@ -29,7 +29,7 @@ pub fn concurrency_tests() {
 
         // Spawn 10 processes that all read concurrently
         let subject = process.new_subject()
-        list.range(1, 10)
+        int.range(10, 0, [], list.prepend)
         |> list.each(fn(_i) {
           process.spawn(fn() {
             let r1 = set.lookup(table, "a")
@@ -40,7 +40,7 @@ pub fn concurrency_tests() {
         })
 
         // Collect all results
-        list.range(1, 10)
+        int.range(10, 0, [], list.prepend)
         |> list.each(fn(_i) {
           let assert Ok(#(r1, r2, r3)) = process.receive(subject, 5000)
           expect.to_equal(r1, Ok(1))
@@ -68,7 +68,7 @@ pub fn concurrency_tests() {
 
         // Rapidly write many different keys
         let count = 100
-        list.range(1, count)
+        int.range(count, 0, [], list.prepend)
         |> list.each(fn(i) {
           let key = "key_" <> int.to_string(i)
           let assert Ok(Nil) = set.insert(table, key, i)
@@ -76,7 +76,7 @@ pub fn concurrency_tests() {
         })
 
         // Verify all keys were written correctly
-        list.range(1, count)
+        int.range(count, 0, [], list.prepend)
         |> list.each(fn(i) {
           let key = "key_" <> int.to_string(i)
           expect.to_equal(set.lookup(table, key), Ok(i))
@@ -88,7 +88,7 @@ pub fn concurrency_tests() {
 
         // Spawn readers to verify data concurrently
         let subject = process.new_subject()
-        list.range(1, 10)
+        int.range(10, 0, [], list.prepend)
         |> list.each(fn(i) {
           process.spawn(fn() {
             let key = "key_" <> int.to_string(i * 10)
@@ -97,7 +97,7 @@ pub fn concurrency_tests() {
           })
         })
 
-        list.range(1, 10)
+        int.range(10, 0, [], list.prepend)
         |> list.each(fn(i) {
           let assert Ok(#(_key, Ok(val))) = process.receive(subject, 5000)
           expect.to_be_true(val >= 1 && val <= count)
@@ -126,7 +126,7 @@ pub fn concurrency_tests() {
 
         // Rapidly overwrite the same key many times
         let count = 100
-        list.range(1, count)
+        int.range(count, 0, [], list.prepend)
         |> list.each(fn(i) {
           let assert Ok(Nil) = set.insert(table, "shared", i)
           Nil
@@ -142,7 +142,7 @@ pub fn concurrency_tests() {
 
         // Concurrent reads should see consistent state
         let subject = process.new_subject()
-        list.range(1, 5)
+        int.range(5, 0, [], list.prepend)
         |> list.each(fn(_i) {
           process.spawn(fn() {
             let result = set.lookup(table, "shared")
@@ -150,7 +150,7 @@ pub fn concurrency_tests() {
           })
         })
 
-        list.range(1, 5)
+        int.range(5, 0, [], list.prepend)
         |> list.each(fn(_i) {
           let assert Ok(Ok(val)) = process.receive(subject, 5000)
           expect.to_equal(val, count)

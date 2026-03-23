@@ -19,10 +19,11 @@ pub fn main() {
   // The table is backed by an ETS bag in memory and a DETS file on disk.
   let assert Ok(tags) =
     bag.open(
-      "tag_index",
-      "/tmp/shelf_examples_tag_index.dets",
-      decode.string,
-      decode.int,
+      name: "tag_index",
+      path: "shelf_examples_tag_index.dets",
+      base_directory: "/tmp",
+      key: decode.string,
+      value: decode.int,
     )
 
   // --- 2. Insert tag → article mappings ---
