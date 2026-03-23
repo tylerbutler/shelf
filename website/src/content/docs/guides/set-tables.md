@@ -8,9 +8,11 @@ Set tables store one value per key — inserting with an existing key overwrites
 ## Opening a Set Table
 
 ```gleam
+import gleam/dynamic/decode
 import shelf/set
 
-let assert Ok(table) = set.open(name: "users", path: "data/users.dets")
+let assert Ok(table) =
+  set.open(name: "users", path: "data/users.dets", key: decode.string, value: decode.int)
 ```
 
 If the DETS file exists, its contents are loaded into ETS automatically. If the file doesn't exist, both tables start empty.
@@ -18,6 +20,7 @@ If the DETS file exists, its contents are loaded into ETS automatically. If the 
 For custom configuration (e.g., WriteThrough mode), use `open_config`:
 
 ```gleam
+import gleam/dynamic/decode
 import shelf
 import shelf/set
 
@@ -25,7 +28,7 @@ let config =
   shelf.config(name: "users", path: "data/users.dets")
   |> shelf.write_mode(shelf.WriteThrough)
 
-let assert Ok(table) = set.open_config(config)
+let assert Ok(table) = set.open_config(config: config, key: decode.string, value: decode.int)
 ```
 
 ## Reading Data
@@ -109,7 +112,7 @@ Use `with_table` to ensure a table is always closed, even if an error occurs:
 
 ```gleam
 let assert Ok(Nil) = {
-  use table <- set.with_table("cache", "data/cache.dets")
+  use table <- set.with_table("cache", "data/cache.dets", decode.string, decode.string)
   set.insert(into: table, key: "key", value: "value")
 }
 ```

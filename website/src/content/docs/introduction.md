@@ -31,11 +31,12 @@ If you only need ETS or DETS individually, check out these standalone wrappers:
 - **[bravo](https://hex.pm/packages/bravo)** — Type-safe ETS wrapper for Gleam
 - **[slate](https://hex.pm/packages/slate)** — Type-safe DETS wrapper for Gleam
 
-shelf coordinates both together, using Erlang's native `ets:to_dets/2` and `ets:from_dets/2` for efficient bulk transfers.
+shelf coordinates both together, using Erlang's native `ets:to_dets/2` for efficient bulk saves. When loading from disk, entries are validated individually through user-provided decoders, ensuring type safety at the boundary between untyped DETS storage and your Gleam code.
 
 ## Key features
 
 - **Microsecond reads**: All reads go through ETS for consistent performance
+- **Runtime type safety**: Decoder-gated loading ensures data from disk matches your Gleam types
 - **Write modes**: Choose between WriteBack (batched) or WriteThrough (immediate persistence)
 - **Three table types**: `set`, `bag`, `duplicate_bag`
 - **Atomic counters**: Increment integer values atomically in ETS

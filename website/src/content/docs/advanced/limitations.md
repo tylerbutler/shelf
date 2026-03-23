@@ -40,10 +40,10 @@ Use descriptive, namespaced names to avoid collisions:
 
 ```gleam
 // Good — namespaced
-set.open(name: "myapp_user_sessions", path: "data/sessions.dets")
+set.open(name: "myapp_user_sessions", path: "data/sessions.dets", key: decode.string, value: decode.string)
 
 // Risky — generic name might collide
-set.open(name: "cache", path: "data/cache.dets")
+set.open(name: "cache", path: "data/cache.dets", key: decode.string, value: decode.string)
 ```
 
 ## Process Ownership
@@ -65,6 +65,7 @@ All shelf operations return `Result(value, ShelfError)`. The error variants are:
 |-------|-------|
 | `NotFound` | Key doesn't exist (from `lookup`) |
 | `KeyAlreadyPresent` | Key exists (from `insert_new`, set tables only) |
+| `TypeMismatch` | Data loaded from disk didn't match the expected decoder types |
 | `TableClosed` | Table has been closed or doesn't exist |
 | `NameConflict` | An ETS table with this name is already open |
 | `FileError(String)` | DETS file couldn't be found, created, or opened |
