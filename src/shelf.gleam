@@ -81,8 +81,10 @@ pub type DecodePolicy {
   /// Any entry that fails to decode causes the open to fail with
   /// `TypeMismatch`. This is the default and recommended policy.
   Strict
-  /// Entries that fail to decode are silently skipped. Only successfully
-  /// decoded entries are loaded into the ETS table.
+  /// Entries that fail to decode are silently dropped — the count of
+  /// skipped entries is not reported. Only successfully decoded entries
+  /// are loaded into the ETS table. Use with caution: you may unknowingly
+  /// lose data if your decoders don't match all stored entries.
   Lenient
 }
 
@@ -101,7 +103,7 @@ pub type WriteMode {
 }
 
 /// Configuration for opening a persistent table.
-pub type Config {
+pub opaque type Config {
   Config(
     /// Unique name for the ETS table (must not conflict with other ETS tables)
     name: String,
@@ -149,4 +151,27 @@ pub fn decode_policy(
   policy policy: DecodePolicy,
 ) -> Config {
   Config(..config, decode_policy: policy)
+}
+
+// ── Internal accessors ──────────────────────────────────────────────────
+// These allow sibling modules to read opaque Config fields.
+
+@internal
+pub fn get_name(config: Config) -> String {
+  config.name
+}
+
+@internal
+pub fn get_path(config: Config) -> String {
+  config.path
+}
+
+@internal
+pub fn get_write_mode(config: Config) -> WriteMode {
+  config.write_mode
+}
+
+@internal
+pub fn get_decode_policy(config: Config) -> DecodePolicy {
+  config.decode_policy
 }
