@@ -1,4 +1,3 @@
-import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode
 import gleam/list
 import gleam/order
@@ -8,20 +7,13 @@ import shelf/duplicate_bag
 import shelf/set
 import startest.{describe, it}
 import startest/expect
-
-fn cleanup(path: String) {
-  let _ = delete_file(path)
-  Nil
-}
-
-@external(erlang, "file", "delete")
-fn delete_file(path: String) -> Result(Nil, Dynamic)
+import test_helpers
 
 pub fn write_through_tests() {
   describe("write_through", [
     it("writes persist immediately without explicit save", fn() {
       let path = "/tmp/shelf_wt_persist.dets"
-      cleanup(path)
+      test_helpers.cleanup(path)
 
       // Open in WriteThrough mode
       let config =
@@ -48,12 +40,12 @@ pub fn write_through_tests() {
         )
       let assert Ok("value") = set.lookup(table, "key")
       let assert Ok(Nil) = set.close(table)
-      cleanup(path)
+      test_helpers.cleanup(path)
       Nil
     }),
     it("deletes persist immediately in write-through mode", fn() {
       let path = "/tmp/shelf_wt_delete.dets"
-      cleanup(path)
+      test_helpers.cleanup(path)
 
       let config =
         shelf.config(name: "wt_delete_1", path: path)
@@ -76,12 +68,12 @@ pub fn write_through_tests() {
       expect.to_equal(set.lookup(table, "a"), Error(shelf.NotFound))
       let assert Ok(2) = set.lookup(table, "b")
       let assert Ok(Nil) = set.close(table)
-      cleanup(path)
+      test_helpers.cleanup(path)
       Nil
     }),
     it("counter updates persist in write-through mode", fn() {
       let path = "/tmp/shelf_wt_counter.dets"
-      cleanup(path)
+      test_helpers.cleanup(path)
 
       let config =
         shelf.config(name: "wt_counter_1", path: path)
@@ -102,12 +94,12 @@ pub fn write_through_tests() {
         )
       let assert Ok(5) = set.lookup(table, "count")
       let assert Ok(Nil) = set.close(table)
-      cleanup(path)
+      test_helpers.cleanup(path)
       Nil
     }),
     it("delete_object persists in write-through mode", fn() {
       let path = "/tmp/shelf_wt_delobj.dets"
-      cleanup(path)
+      test_helpers.cleanup(path)
 
       let config =
         shelf.config(name: "wt_delobj_1", path: path)
@@ -129,12 +121,12 @@ pub fn write_through_tests() {
       expect.to_equal(set.lookup(table, "x"), Error(shelf.NotFound))
       let assert Ok(20) = set.lookup(table, "y")
       let assert Ok(Nil) = set.close(table)
-      cleanup(path)
+      test_helpers.cleanup(path)
       Nil
     }),
     it("delete_all persists in write-through mode", fn() {
       let path = "/tmp/shelf_wt_delall.dets"
-      cleanup(path)
+      test_helpers.cleanup(path)
 
       let config =
         shelf.config(name: "wt_delall_1", path: path)
@@ -155,12 +147,12 @@ pub fn write_through_tests() {
         )
       let assert Ok(0) = set.size(table)
       let assert Ok(Nil) = set.close(table)
-      cleanup(path)
+      test_helpers.cleanup(path)
       Nil
     }),
     it("insert_list persists in write-through mode", fn() {
       let path = "/tmp/shelf_wt_inslist.dets"
-      cleanup(path)
+      test_helpers.cleanup(path)
 
       let config =
         shelf.config(name: "wt_inslist_1", path: path)
@@ -182,12 +174,12 @@ pub fn write_through_tests() {
       let assert Ok(2) = set.lookup(table, "b")
       let assert Ok(3) = set.lookup(table, "c")
       let assert Ok(Nil) = set.close(table)
-      cleanup(path)
+      test_helpers.cleanup(path)
       Nil
     }),
     it("bag WriteThrough persists inserts immediately", fn() {
       let path = "/tmp/shelf_wt_bag.dets"
-      cleanup(path)
+      test_helpers.cleanup(path)
 
       let config =
         shelf.config(name: "wt_bag_1", path: path)
@@ -214,12 +206,12 @@ pub fn write_through_tests() {
       let sorted = list.sort(values, fn(a, b) { string_compare(a, b) })
       expect.to_equal(sorted, ["blue", "red"])
       let assert Ok(Nil) = bag.close(table)
-      cleanup(path)
+      test_helpers.cleanup(path)
       Nil
     }),
     it("bag WriteThrough delete_key persists immediately", fn() {
       let path = "/tmp/shelf_wt_bag_del.dets"
-      cleanup(path)
+      test_helpers.cleanup(path)
 
       let config =
         shelf.config(name: "wt_bag_del_1", path: path)
@@ -240,12 +232,12 @@ pub fn write_through_tests() {
         )
       expect.to_equal(bag.lookup(table, "k"), Error(shelf.NotFound))
       let assert Ok(Nil) = bag.close(table)
-      cleanup(path)
+      test_helpers.cleanup(path)
       Nil
     }),
     it("duplicate_bag WriteThrough persists inserts immediately", fn() {
       let path = "/tmp/shelf_wt_dbag.dets"
-      cleanup(path)
+      test_helpers.cleanup(path)
 
       let config =
         shelf.config(name: "wt_dbag_1", path: path)
@@ -271,12 +263,12 @@ pub fn write_through_tests() {
       let assert Ok(values) = duplicate_bag.lookup(table, "event")
       expect.to_equal(values, ["click", "click"])
       let assert Ok(Nil) = duplicate_bag.close(table)
-      cleanup(path)
+      test_helpers.cleanup(path)
       Nil
     }),
     it("duplicate_bag WriteThrough delete_object persists immediately", fn() {
       let path = "/tmp/shelf_wt_dbag_delobj.dets"
-      cleanup(path)
+      test_helpers.cleanup(path)
 
       let config =
         shelf.config(name: "wt_dbag_delobj_1", path: path)
@@ -302,7 +294,7 @@ pub fn write_through_tests() {
       let assert Ok(values) = duplicate_bag.lookup(table, "x")
       expect.to_equal(values, ["b"])
       let assert Ok(Nil) = duplicate_bag.close(table)
-      cleanup(path)
+      test_helpers.cleanup(path)
       Nil
     }),
   ])

@@ -7,14 +7,7 @@ import shelf/duplicate_bag
 import shelf/set
 import startest.{describe, it}
 import startest/expect
-
-fn cleanup(path: String) {
-  let _ = delete_file(path)
-  Nil
-}
-
-@external(erlang, "file", "delete")
-fn delete_file(path: String) -> Result(Nil, Dynamic)
+import test_helpers
 
 /// Write raw Erlang terms directly to a DETS file, bypassing Gleam's
 /// type system. Used to simulate data written by a previous session
@@ -31,7 +24,7 @@ pub fn type_safety_tests() {
     describe("set", [
       it("rejects DETS data with wrong value type (strict)", fn() {
         let path = "/tmp/shelf_ts_wrong_value.dets"
-        cleanup(path)
+        test_helpers.cleanup(path)
 
         // Write String values using the correct API
         let assert Ok(t) =
@@ -56,12 +49,12 @@ pub fn type_safety_tests() {
           Error(shelf.TypeMismatch(_)) -> Nil
           _ -> expect.to_equal(result, Error(shelf.TypeMismatch([])))
         }
-        cleanup(path)
+        test_helpers.cleanup(path)
         Nil
       }),
       it("rejects DETS data with wrong key type (strict)", fn() {
         let path = "/tmp/shelf_ts_wrong_key.dets"
-        cleanup(path)
+        test_helpers.cleanup(path)
 
         // Write Int keys
         let assert Ok(t) =
@@ -86,12 +79,12 @@ pub fn type_safety_tests() {
           Error(shelf.TypeMismatch(_)) -> Nil
           _ -> expect.to_equal(result, Error(shelf.TypeMismatch([])))
         }
-        cleanup(path)
+        test_helpers.cleanup(path)
         Nil
       }),
       it("accepts DETS data with correct types", fn() {
         let path = "/tmp/shelf_ts_correct.dets"
-        cleanup(path)
+        test_helpers.cleanup(path)
 
         let assert Ok(t) =
           set.open(
@@ -113,12 +106,12 @@ pub fn type_safety_tests() {
           )
         let assert Ok(42) = set.lookup(t, "count")
         let assert Ok(Nil) = set.close(t)
-        cleanup(path)
+        test_helpers.cleanup(path)
         Nil
       }),
       it("opens empty DETS file with any decoder", fn() {
         let path = "/tmp/shelf_ts_empty.dets"
-        cleanup(path)
+        test_helpers.cleanup(path)
 
         // Open with one type, close (creates empty DETS)
         let assert Ok(t) =
@@ -140,14 +133,14 @@ pub fn type_safety_tests() {
           )
         let assert Ok(0) = set.size(t)
         let assert Ok(Nil) = set.close(t)
-        cleanup(path)
+        test_helpers.cleanup(path)
         Nil
       }),
     ]),
     describe("lenient mode", [
       it("skips invalid entries in lenient mode", fn() {
         let path = "/tmp/shelf_ts_lenient.dets"
-        cleanup(path)
+        test_helpers.cleanup(path)
 
         // Write data with raw Erlang FFI — mix of valid and invalid entries
         let assert Ok(Nil) =
@@ -168,12 +161,12 @@ pub fn type_safety_tests() {
         let assert Ok(1) = set.lookup(t, "good")
         let assert Ok(2) = set.lookup(t, "also_good")
         let assert Ok(Nil) = set.close(t)
-        cleanup(path)
+        test_helpers.cleanup(path)
         Nil
       }),
       it("strict mode rejects if any entry is invalid", fn() {
         let path = "/tmp/shelf_ts_strict_reject.dets"
-        cleanup(path)
+        test_helpers.cleanup(path)
 
         // Write mixed data
         let assert Ok(Nil) =
@@ -194,14 +187,14 @@ pub fn type_safety_tests() {
           Error(shelf.TypeMismatch(_)) -> Nil
           _ -> expect.to_equal(result, Error(shelf.TypeMismatch([])))
         }
-        cleanup(path)
+        test_helpers.cleanup(path)
         Nil
       }),
     ]),
     describe("bag type safety", [
       it("rejects bag DETS data with wrong types", fn() {
         let path = "/tmp/shelf_ts_bag_wrong.dets"
-        cleanup(path)
+        test_helpers.cleanup(path)
 
         let assert Ok(t) =
           bag.open(
@@ -225,14 +218,14 @@ pub fn type_safety_tests() {
           Error(shelf.TypeMismatch(_)) -> Nil
           _ -> expect.to_equal(result, Error(shelf.TypeMismatch([])))
         }
-        cleanup(path)
+        test_helpers.cleanup(path)
         Nil
       }),
     ]),
     describe("duplicate_bag type safety", [
       it("rejects duplicate_bag DETS data with wrong types", fn() {
         let path = "/tmp/shelf_ts_dbag_wrong.dets"
-        cleanup(path)
+        test_helpers.cleanup(path)
 
         let assert Ok(t) =
           duplicate_bag.open(
@@ -256,14 +249,14 @@ pub fn type_safety_tests() {
           Error(shelf.TypeMismatch(_)) -> Nil
           _ -> expect.to_equal(result, Error(shelf.TypeMismatch([])))
         }
-        cleanup(path)
+        test_helpers.cleanup(path)
         Nil
       }),
     ]),
     describe("entry order preservation", [
       it("bag preserves value order after save and reload (strict)", fn() {
         let path = "/tmp/shelf_ts_bag_order.dets"
-        cleanup(path)
+        test_helpers.cleanup(path)
 
         // Write entries with distinct values in a known order
         let assert Ok(Nil) =
@@ -291,14 +284,14 @@ pub fn type_safety_tests() {
         let assert Ok(last) = list.last(values)
         expect.to_not_equal(first, last)
         let assert Ok(Nil) = bag.close(t)
-        cleanup(path)
+        test_helpers.cleanup(path)
         Nil
       }),
       it(
         "duplicate_bag preserves value order after save and reload (strict)",
         fn() {
           let path = "/tmp/shelf_ts_dbag_order.dets"
-          cleanup(path)
+          test_helpers.cleanup(path)
 
           // Write ordered entries with duplicates
           let assert Ok(Nil) =
@@ -322,13 +315,13 @@ pub fn type_safety_tests() {
           let assert Ok(last) = list.last(values)
           expect.to_not_equal(first, last)
           let assert Ok(Nil) = duplicate_bag.close(t)
-          cleanup(path)
+          test_helpers.cleanup(path)
           Nil
         },
       ),
       it("lenient and strict modes produce same order", fn() {
         let path = "/tmp/shelf_ts_order_modes.dets"
-        cleanup(path)
+        test_helpers.cleanup(path)
 
         // Write ordered entries
         let assert Ok(Nil) =
@@ -364,7 +357,7 @@ pub fn type_safety_tests() {
 
         // Both modes should produce the same order
         expect.to_equal(strict_values, lenient_values)
-        cleanup(path)
+        test_helpers.cleanup(path)
         Nil
       }),
     ]),
@@ -372,8 +365,8 @@ pub fn type_safety_tests() {
       it("DETS is cleaned up when ETS name conflicts", fn() {
         let path1 = "/tmp/shelf_ts_dets_leak1.dets"
         let path2 = "/tmp/shelf_ts_dets_leak2.dets"
-        cleanup(path1)
-        cleanup(path2)
+        test_helpers.cleanup(path1)
+        test_helpers.cleanup(path2)
 
         // Open a table to claim the ETS name
         let assert Ok(t1) =
@@ -409,8 +402,8 @@ pub fn type_safety_tests() {
             value: decode.string,
           )
         let assert Ok(Nil) = set.close(t2)
-        cleanup(path1)
-        cleanup(path2)
+        test_helpers.cleanup(path1)
+        test_helpers.cleanup(path2)
         Nil
       }),
     ]),

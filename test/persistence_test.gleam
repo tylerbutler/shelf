@@ -1,23 +1,15 @@
-import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode
 import shelf
 import shelf/set
 import startest.{describe, it}
 import startest/expect
-
-fn cleanup(path: String) {
-  let _ = delete_file(path)
-  Nil
-}
-
-@external(erlang, "file", "delete")
-fn delete_file(path: String) -> Result(Nil, Dynamic)
+import test_helpers
 
 pub fn persistence_tests() {
   describe("persistence", [
     it("data survives close and reopen", fn() {
       let path = "/tmp/shelf_persist_survive.dets"
-      cleanup(path)
+      test_helpers.cleanup(path)
 
       // Open, insert, close (auto-saves)
       let assert Ok(table) =
@@ -40,12 +32,12 @@ pub fn persistence_tests() {
         )
       let assert Ok("value") = set.lookup(table, "key")
       let assert Ok(Nil) = set.close(table)
-      cleanup(path)
+      test_helpers.cleanup(path)
       Nil
     }),
     it("save persists current state", fn() {
       let path = "/tmp/shelf_persist_save.dets"
-      cleanup(path)
+      test_helpers.cleanup(path)
 
       let assert Ok(table) =
         set.open(
@@ -75,12 +67,12 @@ pub fn persistence_tests() {
       let assert Ok(2) = set.lookup(table, "b")
       let assert Ok(3) = set.lookup(table, "c")
       let assert Ok(Nil) = set.close(table)
-      cleanup(path)
+      test_helpers.cleanup(path)
       Nil
     }),
     it("reload discards unsaved changes", fn() {
       let path = "/tmp/shelf_persist_reload.dets"
-      cleanup(path)
+      test_helpers.cleanup(path)
 
       let assert Ok(table) =
         set.open(
@@ -104,12 +96,12 @@ pub fn persistence_tests() {
       let assert Ok(False) = set.member(table, "unsaved")
 
       let assert Ok(Nil) = set.close(table)
-      cleanup(path)
+      test_helpers.cleanup(path)
       Nil
     }),
     it("multiple save-reload cycles work", fn() {
       let path = "/tmp/shelf_persist_cycles.dets"
-      cleanup(path)
+      test_helpers.cleanup(path)
 
       let assert Ok(table) =
         set.open(
@@ -132,14 +124,14 @@ pub fn persistence_tests() {
       let assert Ok(2) = set.lookup(table, "round")
 
       let assert Ok(Nil) = set.close(table)
-      cleanup(path)
+      test_helpers.cleanup(path)
       Nil
     }),
     it("name conflict returns error", fn() {
       let path1 = "/tmp/shelf_persist_conflict1.dets"
       let path2 = "/tmp/shelf_persist_conflict2.dets"
-      cleanup(path1)
-      cleanup(path2)
+      test_helpers.cleanup(path1)
+      test_helpers.cleanup(path2)
 
       let assert Ok(table1) =
         set.open(
@@ -158,8 +150,8 @@ pub fn persistence_tests() {
       expect.to_equal(result, Error(shelf.NameConflict))
 
       let assert Ok(Nil) = set.close(table1)
-      cleanup(path1)
-      cleanup(path2)
+      test_helpers.cleanup(path1)
+      test_helpers.cleanup(path2)
       Nil
     }),
   ])
