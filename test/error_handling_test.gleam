@@ -24,6 +24,7 @@ pub fn error_handling_tests() {
           set.with_table(
             "eh_panic",
             path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
             fun: fn(_table) {
@@ -38,6 +39,7 @@ pub fn error_handling_tests() {
           set.open(
             name: "eh_panic",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )
@@ -53,6 +55,7 @@ pub fn error_handling_tests() {
           set.with_table(
             "eh_normal",
             path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
             fun: fn(table) {
@@ -70,6 +73,7 @@ pub fn error_handling_tests() {
           set.with_table(
             "eh_cb_err",
             path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
             fun: fn(_table) { Error(shelf.NotFound) },
@@ -88,6 +92,7 @@ pub fn error_handling_tests() {
           set.open(
             name: "eh_tm_detail_1",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )
@@ -98,6 +103,7 @@ pub fn error_handling_tests() {
           set.open(
             name: "eh_tm_detail_2",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )
