@@ -132,13 +132,14 @@ let assert Ok(Nil) = set.insert(table, "acct:789", account)
 Each table type uses an opaque handle — `PSet(k, v)`, `PBag(k, v)`, or `PDuplicateBag(k, v)` — where "P" stands for "Persistent".
 
 ```gleam
+import shelf
 import shelf/set
 
 let assert Ok(t) =
   set.open(name: "cache", path: "cache.dets",
     key: decode.string, value: decode.string)
 let assert Ok(Nil) = set.insert(t, "key", "value")       // overwrites if exists
-let assert Ok(Nil) = set.insert_new(t, "key", "value2")  // Error(KeyAlreadyPresent)
+let assert Error(shelf.KeyAlreadyPresent) = set.insert_new(t, "key", "value2")
 let assert Ok("value") = set.lookup(t, "key")
 let assert Ok(True) = set.member(of: t, key: "key")      // check existence
 ```
@@ -243,6 +244,15 @@ let assert Ok(table) =
 // Entries that don't match the decoders are silently dropped
 ```
 
+### Schema Migration
+
+If you change the key or value types between application versions, `open()` returns `Error(TypeMismatch(...))` because existing DETS data fails the new decoders.
+
+Strategies for handling schema changes:
+1. **Delete and rebuild**: Delete the DETS file and repopulate from your source of truth
+2. **Lenient mode**: Open with `shelf.Lenient` decode policy to load only entries that match the new schema (non-matching entries are dropped)
+3. **Manual migration**: Write a one-time script that reads the old DETS file directly (via Erlang's `dets` module), transforms the data, and writes it back in the new format
+
 ## Error Handling
 
 All operations return `Result(value, ShelfError)`. The error type covers all failure modes:
@@ -330,6 +340,26 @@ let assert Ok(entries) = set.to_list(from: t)
 - **Single node**: DETS is local to one node (use Mnesia for distribution)
 - **Table names**: Must be unique across all ETS tables in the VM
 - **Process ownership**: ETS tables are owned by the process that created them. If that process exits, the ETS table is deleted and unsaved data is lost. The DETS file on disk is preserved and reloaded on the next `open()`. In long-running applications, ensure the process that opens tables is supervised.
+- **Atom exhaustion**: Table names and file paths are converted to Erlang atoms (which are never garbage-collected). Creating tables with many unique names (approaching the ~1M atom limit) can crash the VM. Use a fixed set of table names in production.
+- **Opening large tables**: When opening a table, all DETS entries are decoded and validated individually. This works well for tables under ~50K entries. For larger tables, consider the memory and startup time implications (see [#13](https://github.com/tylerbutler/shelf/issues/13)).
+
+## Concurrency
+
+ETS tables support concurrent reads from any process. Write safety depends on the table type:
+
+- **Set tables**: Concurrent writes to *different* keys are safe. Concurrent writes to the *same* key result in last-writer-wins (no corruption, but potential data loss).
+- **Bag / Duplicate Bag**: Same concurrency model as set — concurrent writes to different keys are safe.
+
+All shelf operations are individual ETS/DETS calls — there is no built-in transaction support. If you need atomic multi-key updates, coordinate through a single process (e.g., a GenServer).
+
+### Process Supervision
+
+ETS tables are owned by the process that creates them. If the owning process crashes, the ETS table is deleted and unsaved data is lost. The DETS file is preserved.
+
+For long-running applications:
+- Open tables in a supervised process (e.g., an OTP GenServer or Gleam actor)
+- Consider periodic `save()` calls for WriteBack mode
+- Use WriteThrough mode for data that cannot tolerate loss
 
 ## See Also
 
