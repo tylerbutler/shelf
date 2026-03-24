@@ -75,8 +75,6 @@ fn decode_all_strict(
   }
 }
 
-
-
 // ── Shared FFI bindings ─────────────────────────────────────────────────
 
 @external(erlang, "shelf_ffi", "open_no_load")
