@@ -18,7 +18,7 @@ body:
     minLength: 1
 kinds:
     - label: Breaking
-      auto: major
+      auto: minor
     - label: Added
       auto: minor
     - label: Changed
