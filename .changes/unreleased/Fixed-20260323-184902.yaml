@@ -1,0 +1,5 @@
+kind: Fixed
+body: |-
+    Fix close leak and size returning undefined for empty tables
+    `close` previously ignored its own save error, silently leaking the DETS handle. `size` returned `undefined` instead of `0` for empty tables. ETS tables are now created as `protected` instead of `public` to prevent external mutation.
+time: 2026-03-23T18:49:02.000000000-07:00
