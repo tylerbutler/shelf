@@ -22,7 +22,7 @@ If you only need ETS or DETS individually, check out these excellent standalone 
 - **[bravo](https://hex.pm/packages/bravo)** — Type-safe ETS wrapper for Gleam
 - **[slate](https://hex.pm/packages/slate)** — Type-safe DETS wrapper for Gleam
 
-Shelf coordinates both together, using Erlang's native `ets:to_dets/2` and `ets:from_dets/2` for efficient bulk transfers between the two.
+Shelf coordinates both together, using Erlang's native `ets:to_dets/2` for efficient bulk saves from memory to disk.
 
 ## Quick Start
 
@@ -40,6 +40,7 @@ pub fn main() {
   // Decoders validate data loaded from the DETS file
   let assert Ok(table) =
     set.open(name: "users", path: "data/users.dets",
+      base_directory: "/app/data",
       key: decode.string, value: decode.int)
 
   // Fast writes (to ETS)
@@ -92,6 +93,7 @@ Writes go to ETS only. You control when to persist:
 ```gleam
 let assert Ok(table) =
   set.open(name: "sessions", path: "data/sessions.dets",
+    base_directory: "/app/data",
     key: decode.string, value: session_decoder)
 
 // These are ETS-only (fast)
@@ -114,7 +116,8 @@ Every write persists immediately:
 
 ```gleam
 let config =
-  shelf.config(name: "accounts", path: "data/accounts.dets")
+  shelf.config(name: "accounts", path: "data/accounts.dets",
+    base_directory: "/app/data")
   |> shelf.write_mode(shelf.WriteThrough)
 
 let assert Ok(table) =
@@ -132,13 +135,15 @@ let assert Ok(Nil) = set.insert(table, "acct:789", account)
 Each table type uses an opaque handle — `PSet(k, v)`, `PBag(k, v)`, or `PDuplicateBag(k, v)` — where "P" stands for "Persistent".
 
 ```gleam
+import shelf
 import shelf/set
 
 let assert Ok(t) =
   set.open(name: "cache", path: "cache.dets",
+    base_directory: "/app/data",
     key: decode.string, value: decode.string)
 let assert Ok(Nil) = set.insert(t, "key", "value")       // overwrites if exists
-let assert Ok(Nil) = set.insert_new(t, "key", "value2")  // Error(KeyAlreadyPresent)
+let assert Error(shelf.KeyAlreadyPresent) = set.insert_new(t, "key", "value2")
 let assert Ok("value") = set.lookup(t, "key")
 let assert Ok(True) = set.member(of: t, key: "key")      // check existence
 ```
@@ -150,6 +155,7 @@ import shelf/bag
 
 let assert Ok(t) =
   bag.open(name: "tags", path: "tags.dets",
+    base_directory: "/app/data",
     key: decode.string, value: decode.string)
 let assert Ok(Nil) = bag.insert(t, "color", "red")
 let assert Ok(Nil) = bag.insert(t, "color", "blue")
@@ -164,6 +170,7 @@ import shelf/duplicate_bag
 
 let assert Ok(t) =
   duplicate_bag.open(name: "events", path: "events.dets",
+    base_directory: "/app/data",
     key: decode.string, value: decode.string)
 let assert Ok(Nil) = duplicate_bag.insert(t, "click", "btn")
 let assert Ok(Nil) = duplicate_bag.insert(t, "click", "btn")  // kept!
@@ -195,6 +202,7 @@ Use `with_table` to ensure tables are always closed:
 
 ```gleam
 use table <- set.with_table("cache", "data/cache.dets",
+  base_directory: "/app/data",
   key: decode.string, value: decode.string)
 set.insert(table, "key", "value")
 // table is auto-closed when the callback returns
@@ -204,12 +212,12 @@ set.insert(table, "key", "value")
 
 | Function | Behavior |
 |----------|----------|
-| `save(table)` | Snapshot ETS → DETS (replaces DETS contents) |
+| `save(table)` | Atomic snapshot ETS → DETS (writes to temp file, then renames for crash safety) |
 | `reload(table)` | Discard ETS, reload from DETS |
 | `sync(table)` | Flush DETS write buffer to OS |
 | `close(table)` | Save + close DETS + delete ETS |
 
-**`save` vs `sync`**: `save()` copies ETS contents into DETS — use this in WriteBack mode to persist your changes. `sync()` flushes DETS's internal write buffer to the OS filesystem — use this in WriteThrough mode when you need to guarantee durability after a write (DETS buffers writes for performance).
+**`save` vs `sync`**: `save()` atomically copies ETS contents into DETS using a temp-file-plus-rename strategy for crash safety — use this in WriteBack mode to persist your changes. `sync()` flushes DETS's internal write buffer to the OS filesystem — use this in WriteThrough mode when you need to guarantee durability after a write (DETS buffers writes for performance).
 
 ## Type Safety
 
@@ -221,10 +229,13 @@ import gleam/dynamic/decode
 // Decoders are required when opening any table
 let assert Ok(t) =
   set.open(name: "users", path: "users.dets",
+    base_directory: "/app/data",
     key: decode.string, value: decode.int)
 ```
 
-Within a running session, Gleam's type system guarantees correctness — decoders only validate the DETS→ETS boundary at open time.
+Within a running session, Gleam's type system guarantees correctness — decoders only validate the DETS→ETS boundary at open time. The `save()` path is unaffected and still uses Erlang's efficient `ets:to_dets/2` bulk transfer.
+
+> **Performance note**: Loading from DETS (on `open` and `reload`) decodes and inserts entries one at a time via streaming (`dets:foldl`), keeping peak memory at ~1× table size. This is a one-time startup cost — all subsequent reads and writes remain at raw ETS speed.
 
 ### Decode Policy
 
@@ -232,7 +243,8 @@ By default, shelf uses `Strict` mode: if any entry in the DETS file fails decodi
 
 ```gleam
 let config =
-  shelf.config(name: "cache", path: "data/cache.dets")
+  shelf.config(name: "cache", path: "data/cache.dets",
+    base_directory: "/app/data")
   |> shelf.decode_policy(shelf.Lenient)
 
 let assert Ok(table) =
@@ -240,6 +252,15 @@ let assert Ok(table) =
     key: decode.string, value: decode.int)
 // Entries that don't match the decoders are silently dropped
 ```
+
+### Schema Migration
+
+If you change the key or value types between application versions, `open()` returns `Error(TypeMismatch(...))` because existing DETS data fails the new decoders.
+
+Strategies for handling schema changes:
+1. **Delete and rebuild**: Delete the DETS file and repopulate from your source of truth
+2. **Lenient mode**: Open with `shelf.Lenient` decode policy to load only entries that match the new schema (non-matching entries are dropped)
+3. **Manual migration**: Write a one-time script that reads the old DETS file directly (via Erlang's `dets` module), transforms the data, and writes it back in the new format
 
 ## Error Handling
 
@@ -250,7 +271,8 @@ All operations return `Result(value, ShelfError)`. The error type covers all fai
 | `NotFound` | Key doesn't exist (from `lookup`) |
 | `KeyAlreadyPresent` | Key exists (from `insert_new`) |
 | `TableClosed` | Table has been closed or doesn't exist |
-| `NameConflict` | An ETS table with this name is already open |
+| `NameConflict` | An ETS table or DETS file is already open with conflicting parameters |
+| `InvalidPath(String)` | File path escapes the base directory or contains unsafe characters |
 | `FileError(String)` | DETS file couldn't be found, created, or opened |
 | `FileSizeLimitExceeded` | DETS file exceeds the 2 GB limit |
 | `TypeMismatch` | Data loaded from DETS failed decoder validation |
@@ -258,11 +280,13 @@ All operations return `Result(value, ShelfError)`. The error type covers all fai
 
 ```gleam
 case set.open(name: "cache", path: "data/cache.dets",
+  base_directory: "/app/data",
   key: decode.string, value: decode.string)
 {
   Ok(table) -> use_table(table)
   Error(shelf.TypeMismatch) -> io.println("DETS data doesn't match expected types!")
   Error(shelf.NameConflict) -> io.println("Table already open!")
+  Error(shelf.InvalidPath(msg)) -> io.println("Invalid path: " <> msg)
   Error(shelf.FileError(msg)) -> io.println("File error: " <> msg)
   Error(err) -> io.println("Unexpected: " <> string.inspect(err))
 }
@@ -273,6 +297,7 @@ case set.open(name: "cache", path: "data/cache.dets",
 ```gleam
 let assert Ok(t) =
   set.open(name: "stats", path: "stats.dets",
+    base_directory: "/app/data",
     key: decode.string, value: decode.int)
 set.insert(t, "page_views", 0)
 set.update_counter(t, "page_views", 1)   // Ok(1)
@@ -298,11 +323,17 @@ let assert Ok(Nil) = set.delete_key(from: t, key: "alice")
 let assert Ok(Nil) = set.delete_all(from: t)
 ```
 
-For bag tables, `delete_object` removes a specific value while keeping others:
+`delete_object` behaves differently depending on the table type:
+
+- **Bag / Duplicate Bag**: Removes a specific value while keeping other values for the same key.
+- **Set**: Acts as a compare-and-delete — only deletes if both the key and value match the stored entry.
 
 ```gleam
+// Bag: removes only "red", keeps other values for "color"
 let assert Ok(Nil) = bag.delete_object(from: t, key: "color", value: "red")
-// Other values for "color" are preserved
+
+// Set: only deletes if the stored value for "key" matches "value"
+let assert Ok(Nil) = set.delete_object(from: t, key: "key", value: "value")
 ```
 
 ### Fold, Size, and Export
@@ -326,8 +357,32 @@ let assert Ok(entries) = set.to_list(from: t)
 - **No ordered set**: DETS doesn't support `ordered_set`
 - **Erlang only**: Requires the BEAM runtime (no JavaScript target)
 - **Single node**: DETS is local to one node (use Mnesia for distribution)
-- **Table names**: Must be unique across all ETS tables in the VM
+- **Table names**: Names do not need to be globally unique — shelf uses unnamed ETS tables internally. However, DETS file paths must not conflict with other open tables.
 - **Process ownership**: ETS tables are owned by the process that created them. If that process exits, the ETS table is deleted and unsaved data is lost. The DETS file on disk is preserved and reloaded on the next `open()`. In long-running applications, ensure the process that opens tables is supervised.
+- **DETS atoms**: DETS requires atom-based table names. Shelf uses a hash-based pool to bound the number of atoms created, so atom exhaustion is not a concern in normal usage.
+- **Opening large tables**: When opening a table, DETS entries are decoded and inserted one at a time via streaming (`dets:foldl`), reducing peak memory usage from ~3× table size to ~1×. This makes large table support practical, though startup time still scales linearly with table size.
+
+## Security
+
+All DETS file paths are validated against the provided `base_directory` to prevent path traversal attacks. Paths containing `..` segments or other unsafe patterns that would escape the base directory are rejected with an `InvalidPath` error.
+
+## Concurrency
+
+ETS tables support concurrent reads from any process. Write safety depends on the table type:
+
+- **Set tables**: Concurrent writes to *different* keys are safe. Concurrent writes to the *same* key result in last-writer-wins (no corruption, but potential data loss).
+- **Bag / Duplicate Bag**: Same concurrency model as set — concurrent writes to different keys are safe.
+
+All shelf operations are individual ETS/DETS calls — there is no built-in transaction support. If you need atomic multi-key updates, coordinate through a single process (e.g., a GenServer).
+
+### Process Supervision
+
+ETS tables are owned by the process that creates them. If the owning process crashes, the ETS table is deleted and unsaved data is lost. The DETS file is preserved.
+
+For long-running applications:
+- Open tables in a supervised process (e.g., an OTP GenServer or Gleam actor)
+- Consider periodic `save()` calls for WriteBack mode
+- Use WriteThrough mode for data that cannot tolerate loss
 
 ## See Also
 

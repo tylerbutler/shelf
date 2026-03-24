@@ -18,7 +18,8 @@ pub fn main() {
   let assert Ok(table) =
     set.open(
       name: "kv_cache",
-      path: "/tmp/shelf_examples_kv_cache.dets",
+      path: "shelf_examples_kv_cache.dets",
+      base_directory: "/tmp",
       key: decode.string,
       value: decode.string,
     )

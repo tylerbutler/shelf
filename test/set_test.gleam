@@ -25,6 +25,7 @@ pub fn set_tests() {
           set.open(
             name: "set_lifecycle",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )
@@ -39,6 +40,7 @@ pub fn set_tests() {
           use table <- set.with_table(
             "set_with_table",
             path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )
@@ -57,6 +59,7 @@ pub fn set_tests() {
           set.open(
             name: "set_insert",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )
@@ -73,6 +76,7 @@ pub fn set_tests() {
           set.open(
             name: "set_overwrite",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )
@@ -90,6 +94,7 @@ pub fn set_tests() {
           set.open(
             name: "set_notfound",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )
@@ -106,6 +111,7 @@ pub fn set_tests() {
           set.open(
             name: "set_member",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )
@@ -123,6 +129,7 @@ pub fn set_tests() {
           set.open(
             name: "set_insert_new",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )
@@ -141,6 +148,7 @@ pub fn set_tests() {
           set.open(
             name: "set_insert_list",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )
@@ -162,6 +170,7 @@ pub fn set_tests() {
           set.open(
             name: "set_delete_key",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )
@@ -179,6 +188,7 @@ pub fn set_tests() {
           set.open(
             name: "set_delete_all",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )
@@ -198,6 +208,7 @@ pub fn set_tests() {
           set.open(
             name: "set_to_list",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )
@@ -216,6 +227,7 @@ pub fn set_tests() {
           set.open(
             name: "set_size",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )
@@ -234,6 +246,7 @@ pub fn set_tests() {
           set.open(
             name: "set_fold",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )
@@ -255,6 +268,7 @@ pub fn set_tests() {
           set.open(
             name: "set_counter",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )

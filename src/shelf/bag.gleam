@@ -45,9 +45,12 @@ pub opaque type PBag(k, v) {
 /// table after validating each entry through the provided decoders.
 /// If no file exists, both tables start empty.
 ///
+/// The DETS file path is validated against the configured base directory.
+///
 /// ```gleam
 /// let config =
-///   shelf.config(name: "tags", path: "data/tags.dets")
+///   shelf.config(name: "tags", path: "tags.dets",
+///     base_directory: "/app/data")
 ///   |> shelf.write_mode(shelf.WriteThrough)
 /// let assert Ok(table) =
 ///   bag.open_config(config, key: decode.string, value: decode.string)
@@ -58,55 +61,39 @@ pub fn open_config(
   key key_decoder: Decoder(k),
   value value_decoder: Decoder(v),
 ) -> Result(PBag(k, v), ShelfError) {
-  let name = shelf.get_name(config)
-  let path = shelf.get_path(config)
-  let write_mode = shelf.get_write_mode(config)
-  let decode_policy = shelf.get_decode_policy(config)
-  use refs <- result.try(internal.open_no_load(name, path, "bag"))
-  let ets = refs.0
-  let dets = refs.1
-  let entry_decoder = internal.build_entry_decoder(key_decoder, value_decoder)
-  case internal.dets_to_list(dets) {
-    Error(e) -> {
-      let _ = internal.cleanup(ets, dets)
-      Error(e)
-    }
-    Ok(entries) ->
-      case
-        internal.validate_and_load(
-          entries,
-          ets,
-          dets,
-          entry_decoder,
-          decode_policy,
-        )
-      {
-        Ok(Nil) ->
-          Ok(PBag(ets:, dets:, write_mode:, entry_decoder:, decode_policy:))
-        Error(e) -> {
-          let _ = internal.cleanup(ets, dets)
-          Error(e)
-        }
-      }
-  }
+  use result <- result.try(internal.generic_open(
+    config,
+    "bag",
+    key_decoder,
+    value_decoder,
+  ))
+  Ok(PBag(
+    ets: result.0,
+    dets: result.1,
+    write_mode: result.2,
+    entry_decoder: result.3,
+    decode_policy: result.4,
+  ))
 }
 
 /// Open a persistent bag table with defaults (WriteBack mode, Strict decoding).
 ///
 /// ```gleam
 /// let assert Ok(table) =
-///   bag.open(name: "tags", path: "data/tags.dets",
+///   bag.open(name: "tags", path: "tags.dets",
+///     base_directory: "/app/data",
 ///     key: decode.string, value: decode.string)
 /// ```
 ///
 pub fn open(
   name name: String,
   path path: String,
+  base_directory base_directory: String,
   key key_decoder: Decoder(k),
   value value_decoder: Decoder(v),
 ) -> Result(PBag(k, v), ShelfError) {
   open_config(
-    config: shelf.config(name:, path:),
+    config: shelf.config(name:, path:, base_directory:),
     key: key_decoder,
     value: value_decoder,
   )
@@ -121,7 +108,8 @@ pub fn close(table: PBag(k, v)) -> Result(Nil, ShelfError) {
 /// Use a table within a callback, ensuring it is closed afterward.
 ///
 /// ```gleam
-/// use table <- bag.with_table("tags", "data/tags.dets",
+/// use table <- bag.with_table("tags", "tags.dets",
+///   base_directory: "/app/data",
 ///   key: decode.string, value: decode.string)
 /// bag.insert(table, "color", "red")
 /// ```
@@ -129,6 +117,7 @@ pub fn close(table: PBag(k, v)) -> Result(Nil, ShelfError) {
 pub fn with_table(
   name name: String,
   path path: String,
+  base_directory base_directory: String,
   key key_decoder: Decoder(k),
   value value_decoder: Decoder(v),
   fun fun: fn(PBag(k, v)) -> Result(a, ShelfError),
@@ -136,6 +125,7 @@ pub fn with_table(
   use table <- result.try(open(
     name:,
     path:,
+    base_directory:,
     key: key_decoder,
     value: value_decoder,
   ))
@@ -187,10 +177,7 @@ pub fn fold(
   from initial: acc,
   with fun: fn(acc, k, v) -> acc,
 ) -> Result(acc, ShelfError) {
-  let wrapper = fn(entry: #(k, v), acc: acc) -> acc {
-    fun(acc, entry.0, entry.1)
-  }
-  internal.fold(table.ets, wrapper, initial)
+  internal.generic_fold(table.ets, initial, fun)
 }
 
 /// Return the number of entries in the table.
@@ -208,11 +195,7 @@ pub fn insert(
   key key: k,
   value value: v,
 ) -> Result(Nil, ShelfError) {
-  use _ <- result.try(internal.insert(table.ets, table.dets, #(key, value)))
-  case table.write_mode {
-    shelf.WriteThrough -> internal.dets_insert(table.dets, #(key, value))
-    shelf.WriteBack -> Ok(Nil)
-  }
+  internal.generic_insert(table.ets, table.dets, table.write_mode, key, value)
 }
 
 /// Insert multiple key-value pairs.
@@ -221,11 +204,7 @@ pub fn insert_list(
   into table: PBag(k, v),
   entries entries: List(#(k, v)),
 ) -> Result(Nil, ShelfError) {
-  use _ <- result.try(internal.insert_list(table.ets, table.dets, entries))
-  case table.write_mode {
-    shelf.WriteThrough -> internal.dets_insert_list(table.dets, entries)
-    shelf.WriteBack -> Ok(Nil)
-  }
+  internal.generic_insert_list(table.ets, table.dets, table.write_mode, entries)
 }
 
 // ── Delete ──────────────────────────────────────────────────────────────
@@ -233,11 +212,7 @@ pub fn insert_list(
 /// Delete all values for the given key.
 ///
 pub fn delete_key(from table: PBag(k, v), key key: k) -> Result(Nil, ShelfError) {
-  use _ <- result.try(internal.delete_key(table.ets, key))
-  case table.write_mode {
-    shelf.WriteThrough -> internal.dets_delete_key(table.dets, key)
-    shelf.WriteBack -> Ok(Nil)
-  }
+  internal.generic_delete_key(table.ets, table.dets, table.write_mode, key)
 }
 
 /// Delete a specific key-value pair.
@@ -250,37 +225,31 @@ pub fn delete_object(
   key key: k,
   value value: v,
 ) -> Result(Nil, ShelfError) {
-  use _ <- result.try(internal.delete_object(table.ets, key, value))
-  case table.write_mode {
-    shelf.WriteThrough -> internal.dets_delete_object(table.dets, key, value)
-    shelf.WriteBack -> Ok(Nil)
-  }
+  internal.generic_delete_object(
+    table.ets,
+    table.dets,
+    table.write_mode,
+    key,
+    value,
+  )
 }
 
-/// Delete all entries (keeps the table open).
+/// Delete all entries from the table.
+///
+/// The table remains open and usable after this call — only the data
+/// is removed. To release the table entirely, use `close`.
 ///
 pub fn delete_all(from table: PBag(k, v)) -> Result(Nil, ShelfError) {
-  use _ <- result.try(internal.delete_all(table.ets))
-  case table.write_mode {
-    shelf.WriteThrough -> internal.dets_delete_all(table.dets)
-    shelf.WriteBack -> Ok(Nil)
-  }
+  internal.generic_delete_all(table.ets, table.dets, table.write_mode)
 }
 
 // ── Persistence ─────────────────────────────────────────────────────────
 
 /// Snapshot the current ETS contents to DETS.
 ///
-/// Uses `ets:to_dets/2` internally — atomically replaces all DETS
-/// contents with the current ETS state. This is efficient: the
-/// transfer happens in the Erlang VM without materializing the
-/// entire table as a list.
-///
-/// **Crash safety**: `ets:to_dets/2` replaces DETS contents non-atomically —
-/// it deletes existing DETS data then inserts from ETS. A process kill
-/// (SIGKILL) between delete and insert can leave DETS empty. Normal
-/// shutdowns and Erlang exceptions are safe. Consider periodic backups
-/// for critical data.
+/// Uses an atomic save strategy: data is written to a temporary file
+/// first, then atomically renamed over the original DETS file. This
+/// prevents data loss if the process is killed mid-save.
 ///
 pub fn save(table: PBag(k, v)) -> Result(Nil, ShelfError) {
   internal.save(table.ets, table.dets)
@@ -295,10 +264,7 @@ pub fn save(table: PBag(k, v)) -> Result(Nil, ShelfError) {
 /// DETS are always in sync.
 ///
 pub fn reload(table: PBag(k, v)) -> Result(Nil, ShelfError) {
-  use _ <- result.try(internal.delete_all(table.ets))
-  use entries <- result.try(internal.dets_to_list(table.dets))
-  internal.validate_and_load(
-    entries,
+  internal.generic_reload(
     table.ets,
     table.dets,
     table.entry_decoder,

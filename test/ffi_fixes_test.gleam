@@ -23,6 +23,7 @@ pub fn ffi_fixes_tests() {
           set.open(
             name: "ffi_size_closed",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )
@@ -39,6 +40,7 @@ pub fn ffi_fixes_tests() {
           set.open(
             name: "ffi_member_closed",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )
@@ -55,6 +57,7 @@ pub fn ffi_fixes_tests() {
           set.open(
             name: "ffi_lookup_closed",
             path: path,
+            base_directory: "/tmp",
             key: decode.string,
             value: decode.int,
           )

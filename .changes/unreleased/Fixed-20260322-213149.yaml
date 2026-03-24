@@ -1,0 +1,5 @@
+kind: Fixed
+body: |-
+    Fix atom exhaustion vulnerability
+    ETS tables now use anonymous references instead of named tables, and DETS atoms are bounded via a hash-based pool (65K max). Dynamic table creation no longer risks crashing the VM.
+time: 2026-03-22T21:31:49.398351441-07:00
