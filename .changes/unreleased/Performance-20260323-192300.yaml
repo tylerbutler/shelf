@@ -1,5 +1,0 @@
-kind: Performance
-body: |-
-    WriteThrough mode uses O(1) targeted DETS operations instead of full snapshot
-    WriteThrough writes previously called `ets:to_dets/2` on every mutation, copying the entire ETS table to DETS. Now each write operation (`insert`, `delete`, `delete_object`, `delete_all`) mirrors only the affected entries to DETS via targeted `dets:insert/2` and `dets:delete/2` calls. The full `ets:to_dets/2` snapshot is reserved for explicit `save()` and `close()`.
-time: 2026-03-23T19:23:00.000000000-07:00
