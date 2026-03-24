@@ -1,5 +1,3 @@
-import gleam/dynamic/decode
-
 /// Persistent ETS tables backed by DETS.
 ///
 /// Shelf combines ETS (fast, in-memory) with DETS (persistent, on-disk)
@@ -53,6 +51,8 @@ import gleam/dynamic/decode
 /// ## Errors
 ///
 /// Operations return `Result` with `ShelfError` for failures.
+import gleam/dynamic/decode
+
 pub type ShelfError {
   /// No value found for the given key
   NotFound

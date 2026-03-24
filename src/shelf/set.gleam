@@ -71,16 +71,28 @@ pub fn open_config(
   let ets = refs.0
   let dets = refs.1
   let entry_decoder = internal.build_entry_decoder(key_decoder, value_decoder)
-  use entries <- result.try(internal.dets_to_list(dets))
-  case
-    internal.validate_and_load(entries, ets, dets, entry_decoder, decode_policy)
-  {
-    Ok(Nil) ->
-      Ok(PSet(ets:, dets:, write_mode:, entry_decoder:, decode_policy:))
+  case internal.dets_to_list(dets) {
     Error(e) -> {
       let _ = internal.cleanup(ets, dets)
       Error(e)
     }
+    Ok(entries) ->
+      case
+        internal.validate_and_load(
+          entries,
+          ets,
+          dets,
+          entry_decoder,
+          decode_policy,
+        )
+      {
+        Ok(Nil) ->
+          Ok(PSet(ets:, dets:, write_mode:, entry_decoder:, decode_policy:))
+        Error(e) -> {
+          let _ = internal.cleanup(ets, dets)
+          Error(e)
+        }
+      }
   }
 }
 
@@ -138,10 +150,22 @@ pub fn with_table(
     key: key_decoder,
     value: value_decoder,
   ))
-  let result = fun(table)
-  let _ = close(table)
-  result
+  let result = case rescue(fn() { fun(table) }) {
+    Ok(result) -> result
+    Error(_crash) -> Error(shelf.ErlangError("Callback panicked"))
+  }
+  case close(table) {
+    Ok(Nil) -> result
+    Error(close_err) ->
+      case result {
+        Ok(_) -> Error(close_err)
+        Error(_) -> result
+      }
+  }
 }
+
+@external(erlang, "shelf_rescue_ffi", "rescue")
+fn rescue(fun: fn() -> a) -> Result(a, String)
 
 // ── Read (always from ETS — fast) ───────────────────────────────────────
 
@@ -266,6 +290,12 @@ pub fn delete_all(from table: PSet(k, v)) -> Result(Nil, ShelfError) {
 /// contents with the current ETS state. This is efficient: the
 /// transfer happens in the Erlang VM without materializing the
 /// entire table as a list.
+///
+/// **Crash safety**: `ets:to_dets/2` replaces DETS contents non-atomically —
+/// it deletes existing DETS data then inserts from ETS. A process kill
+/// (SIGKILL) between delete and insert can leave DETS empty. Normal
+/// shutdowns and Erlang exceptions are safe. Consider periodic backups
+/// for critical data.
 ///
 /// ```gleam
 /// // After a batch of writes...

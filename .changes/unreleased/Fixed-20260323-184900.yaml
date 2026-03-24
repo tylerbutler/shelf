@@ -1,0 +1,5 @@
+kind: Fixed
+body: |-
+    Fix resource leak when opening tables with invalid DETS data
+    If decoder validation failed during `open` or `open_config`, the DETS file handle was left open. Both ETS and DETS resources are now properly cleaned up on any open failure.
+time: 2026-03-23T18:49:00.000000000-07:00
