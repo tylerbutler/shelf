@@ -5,7 +5,7 @@ import shelf/bag
 import shelf/duplicate_bag
 import shelf/set
 import startest.{describe, it}
-import startest/expect
+
 
 fn cleanup(path: String) {
   let _ = delete_file(path)
@@ -52,7 +52,6 @@ pub fn type_safety_tests() {
             value: decode.int,
           )
         let assert Error(shelf.TypeMismatch(_)) = result
-        Nil
         cleanup(path)
         Nil
       }),
@@ -80,7 +79,6 @@ pub fn type_safety_tests() {
             value: decode.string,
           )
         let assert Error(shelf.TypeMismatch(_)) = result
-        Nil
         cleanup(path)
         Nil
       }),
@@ -186,7 +184,6 @@ pub fn type_safety_tests() {
             value: decode.int,
           )
         let assert Error(shelf.TypeMismatch(_)) = result
-        Nil
         cleanup(path)
         Nil
       }),
@@ -215,7 +212,6 @@ pub fn type_safety_tests() {
             value: decode.int,
           )
         let assert Error(shelf.TypeMismatch(_)) = result
-        Nil
         cleanup(path)
         Nil
       }),
@@ -244,7 +240,6 @@ pub fn type_safety_tests() {
             value: decode.int,
           )
         let assert Error(shelf.TypeMismatch(_)) = result
-        Nil
         cleanup(path)
         Nil
       }),
