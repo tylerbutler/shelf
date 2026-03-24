@@ -25,7 +25,7 @@ pub fn write_through_tests() {
 
       // Open in WriteThrough mode
       let config =
-        shelf.config(name: "wt_persist_1", path: path)
+        shelf.config(name: "wt_persist_1", path: path, base_directory: "/tmp")
         |> shelf.write_mode(shelf.WriteThrough)
       let assert Ok(table) =
         set.open_config(
@@ -43,6 +43,7 @@ pub fn write_through_tests() {
         set.open(
           name: "wt_persist_2",
           path: path,
+          base_directory: "/tmp",
           key: decode.string,
           value: decode.string,
         )
@@ -56,7 +57,7 @@ pub fn write_through_tests() {
       cleanup(path)
 
       let config =
-        shelf.config(name: "wt_delete_1", path: path)
+        shelf.config(name: "wt_delete_1", path: path, base_directory: "/tmp")
         |> shelf.write_mode(shelf.WriteThrough)
       let assert Ok(table) =
         set.open_config(config: config, key: decode.string, value: decode.int)
@@ -70,6 +71,7 @@ pub fn write_through_tests() {
         set.open(
           name: "wt_delete_2",
           path: path,
+          base_directory: "/tmp",
           key: decode.string,
           value: decode.int,
         )
@@ -84,7 +86,7 @@ pub fn write_through_tests() {
       cleanup(path)
 
       let config =
-        shelf.config(name: "wt_counter_1", path: path)
+        shelf.config(name: "wt_counter_1", path: path, base_directory: "/tmp")
         |> shelf.write_mode(shelf.WriteThrough)
       let assert Ok(table) =
         set.open_config(config: config, key: decode.string, value: decode.int)
@@ -97,6 +99,7 @@ pub fn write_through_tests() {
         set.open(
           name: "wt_counter_2",
           path: path,
+          base_directory: "/tmp",
           key: decode.string,
           value: decode.int,
         )
@@ -110,7 +113,7 @@ pub fn write_through_tests() {
       cleanup(path)
 
       let config =
-        shelf.config(name: "wt_delobj_1", path: path)
+        shelf.config(name: "wt_delobj_1", path: path, base_directory: "/tmp")
         |> shelf.write_mode(shelf.WriteThrough)
       let assert Ok(table) =
         set.open_config(config: config, key: decode.string, value: decode.int)
@@ -123,6 +126,7 @@ pub fn write_through_tests() {
         set.open(
           name: "wt_delobj_2",
           path: path,
+          base_directory: "/tmp",
           key: decode.string,
           value: decode.int,
         )
@@ -137,7 +141,7 @@ pub fn write_through_tests() {
       cleanup(path)
 
       let config =
-        shelf.config(name: "wt_delall_1", path: path)
+        shelf.config(name: "wt_delall_1", path: path, base_directory: "/tmp")
         |> shelf.write_mode(shelf.WriteThrough)
       let assert Ok(table) =
         set.open_config(config: config, key: decode.string, value: decode.int)
@@ -150,6 +154,7 @@ pub fn write_through_tests() {
         set.open(
           name: "wt_delall_2",
           path: path,
+          base_directory: "/tmp",
           key: decode.string,
           value: decode.int,
         )
@@ -163,7 +168,7 @@ pub fn write_through_tests() {
       cleanup(path)
 
       let config =
-        shelf.config(name: "wt_inslist_1", path: path)
+        shelf.config(name: "wt_inslist_1", path: path, base_directory: "/tmp")
         |> shelf.write_mode(shelf.WriteThrough)
       let assert Ok(table) =
         set.open_config(config: config, key: decode.string, value: decode.int)
@@ -175,6 +180,7 @@ pub fn write_through_tests() {
         set.open(
           name: "wt_inslist_2",
           path: path,
+          base_directory: "/tmp",
           key: decode.string,
           value: decode.int,
         )
@@ -190,7 +196,7 @@ pub fn write_through_tests() {
       cleanup(path)
 
       let config =
-        shelf.config(name: "wt_bag_1", path: path)
+        shelf.config(name: "wt_bag_1", path: path, base_directory: "/tmp")
         |> shelf.write_mode(shelf.WriteThrough)
       let assert Ok(table) =
         bag.open_config(
@@ -207,6 +213,7 @@ pub fn write_through_tests() {
         bag.open(
           name: "wt_bag_2",
           path: path,
+          base_directory: "/tmp",
           key: decode.string,
           value: decode.string,
         )
@@ -222,7 +229,7 @@ pub fn write_through_tests() {
       cleanup(path)
 
       let config =
-        shelf.config(name: "wt_bag_del_1", path: path)
+        shelf.config(name: "wt_bag_del_1", path: path, base_directory: "/tmp")
         |> shelf.write_mode(shelf.WriteThrough)
       let assert Ok(table) =
         bag.open_config(config: config, key: decode.string, value: decode.int)
@@ -235,6 +242,7 @@ pub fn write_through_tests() {
         bag.open(
           name: "wt_bag_del_2",
           path: path,
+          base_directory: "/tmp",
           key: decode.string,
           value: decode.int,
         )
@@ -248,7 +256,7 @@ pub fn write_through_tests() {
       cleanup(path)
 
       let config =
-        shelf.config(name: "wt_dbag_1", path: path)
+        shelf.config(name: "wt_dbag_1", path: path, base_directory: "/tmp")
         |> shelf.write_mode(shelf.WriteThrough)
       let assert Ok(table) =
         duplicate_bag.open_config(
@@ -265,6 +273,7 @@ pub fn write_through_tests() {
         duplicate_bag.open(
           name: "wt_dbag_2",
           path: path,
+          base_directory: "/tmp",
           key: decode.string,
           value: decode.string,
         )
@@ -279,7 +288,11 @@ pub fn write_through_tests() {
       cleanup(path)
 
       let config =
-        shelf.config(name: "wt_dbag_delobj_1", path: path)
+        shelf.config(
+          name: "wt_dbag_delobj_1",
+          path: path,
+          base_directory: "/tmp",
+        )
         |> shelf.write_mode(shelf.WriteThrough)
       let assert Ok(table) =
         duplicate_bag.open_config(
@@ -296,6 +309,7 @@ pub fn write_through_tests() {
         duplicate_bag.open(
           name: "wt_dbag_delobj_2",
           path: path,
+          base_directory: "/tmp",
           key: decode.string,
           value: decode.string,
         )

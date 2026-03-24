@@ -1,0 +1,5 @@
+kind: Added
+body: |-
+    Add InvalidPath error variant
+    New ShelfError variant returned when a DETS file path escapes the base directory, contains null bytes, or is otherwise unsafe.
+time: 2026-03-22T21:32:46.808155106-07:00
