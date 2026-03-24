@@ -8,6 +8,7 @@
 /// the value is a Unix timestamp. Two views of "/home" at time 1000 are
 /// two distinct rows — unlike a regular bag which would deduplicate them.
 ///
+import gleam/dynamic/decode
 import gleam/int
 import gleam/io
 import gleam/list
@@ -21,6 +22,8 @@ pub fn main() {
     duplicate_bag.open(
       name: "event_log",
       path: "/tmp/shelf_examples_event_log.dets",
+      key: decode.string,
+      value: decode.int,
     )
 
   // ── 2. Insert page view events ────────────────────────────────────────

@@ -2,32 +2,44 @@
 ///
 /// A set table backed by ETS (for fast reads and writes) and DETS
 /// (for persistence). On open, existing data is loaded from disk
-/// into memory. On close, data is saved back to disk.
+/// into memory and validated against the provided decoders. On close,
+/// data is saved back to disk.
 ///
 /// ## Example
 ///
 /// ```gleam
+/// import gleam/dynamic/decode
 /// import shelf/set
 ///
-/// let assert Ok(table) = set.open(name: "users", path: "data/users.dets")
+/// let assert Ok(table) =
+///   set.open(name: "users", path: "data/users.dets",
+///     key: decode.string, value: decode.int)
 /// let assert Ok(Nil) = set.insert(table, "alice", 42)
 /// let assert Ok(42) = set.lookup(table, "alice")
 /// let assert Ok(Nil) = set.save(table)    // persist to disk
 /// let assert Ok(Nil) = set.close(table)   // auto-saves on close
 /// ```
 ///
+import gleam/dynamic/decode.{type Decoder}
 import gleam/result
-import shelf.{
-  type Config, type ShelfError, type WriteMode, Config, WriteBack, WriteThrough,
-}
+import shelf.{type Config, type ShelfError}
 import shelf/internal.{type DetsRef, type EtsRef}
 
 /// An open persistent set table with typed keys and values.
 ///
 /// Reads always go to ETS (fast). Writes go to ETS immediately
 /// and to DETS according to the configured write mode.
+///
+/// The table stores decoders used to validate data loaded from DETS,
+/// ensuring type safety at the persistence boundary.
 pub opaque type PSet(k, v) {
-  PSet(ets: EtsRef, dets: DetsRef, write_mode: WriteMode)
+  PSet(
+    ets: EtsRef,
+    dets: DetsRef,
+    write_mode: shelf.WriteMode,
+    entry_decoder: Decoder(#(k, v)),
+    decode_policy: shelf.DecodePolicy,
+  )
 }
 
 // ── Lifecycle ───────────────────────────────────────────────────────────
@@ -35,32 +47,62 @@ pub opaque type PSet(k, v) {
 /// Open a persistent set table with full configuration.
 ///
 /// If the DETS file exists, its contents are loaded into a fresh ETS
-/// table. If no file exists, both tables start empty.
+/// table after validating each entry through the provided decoders.
+/// If no file exists, both tables start empty.
 ///
 /// ```gleam
 /// let config =
 ///   shelf.config(name: "cache", path: "data/cache.dets")
 ///   |> shelf.write_mode(shelf.WriteThrough)
-/// let assert Ok(table) = set.open_config(config)
+/// let assert Ok(table) =
+///   set.open_config(config, key: decode.string, value: decode.int)
 /// ```
 ///
-pub fn open_config(config: Config) -> Result(PSet(k, v), ShelfError) {
-  let Config(name:, path:, write_mode:) = config
-  ffi_open_set(name, path)
-  |> result.map(fn(refs) { PSet(ets: refs.0, dets: refs.1, write_mode:) })
+pub fn open_config(
+  config config: Config,
+  key key_decoder: Decoder(k),
+  value value_decoder: Decoder(v),
+) -> Result(PSet(k, v), ShelfError) {
+  let name = shelf.get_name(config)
+  let path = shelf.get_path(config)
+  let write_mode = shelf.get_write_mode(config)
+  let decode_policy = shelf.get_decode_policy(config)
+  use refs <- result.try(internal.open_no_load(name, path, "set"))
+  let ets = refs.0
+  let dets = refs.1
+  let entry_decoder = internal.build_entry_decoder(key_decoder, value_decoder)
+  use entries <- result.try(internal.dets_to_list(dets))
+  case
+    internal.validate_and_load(entries, ets, dets, entry_decoder, decode_policy)
+  {
+    Ok(Nil) ->
+      Ok(PSet(ets:, dets:, write_mode:, entry_decoder:, decode_policy:))
+    Error(e) -> {
+      let _ = internal.cleanup(ets, dets)
+      Error(e)
+    }
+  }
 }
 
-/// Open a persistent set table with defaults (WriteBack mode).
+/// Open a persistent set table with defaults (WriteBack mode, Strict decoding).
 ///
 /// ```gleam
-/// let assert Ok(table) = set.open(name: "users", path: "data/users.dets")
+/// let assert Ok(table) =
+///   set.open(name: "users", path: "data/users.dets",
+///     key: decode.string, value: decode.int)
 /// ```
 ///
 pub fn open(
   name name: String,
   path path: String,
+  key key_decoder: Decoder(k),
+  value value_decoder: Decoder(v),
 ) -> Result(PSet(k, v), ShelfError) {
-  open_config(shelf.config(name:, path:))
+  open_config(
+    config: shelf.config(name:, path:),
+    key: key_decoder,
+    value: value_decoder,
+  )
 }
 
 /// Close the table, saving all data to disk.
@@ -69,7 +111,7 @@ pub fn open(
 /// and deletes the ETS table. The handle must not be used after closing.
 ///
 pub fn close(table: PSet(k, v)) -> Result(Nil, ShelfError) {
-  ffi_close(table.ets, table.dets)
+  internal.close(table.ets, table.dets)
 }
 
 /// Use a table within a callback, ensuring it is closed afterward.
@@ -78,16 +120,24 @@ pub fn close(table: PSet(k, v)) -> Result(Nil, ShelfError) {
 /// (even if it returns an error). Data is auto-saved on close.
 ///
 /// ```gleam
-/// use table <- set.with_table("cache", "data/cache.dets")
+/// use table <- set.with_table("cache", "data/cache.dets",
+///   key: decode.string, value: decode.string)
 /// set.insert(table, "key", "value")
 /// ```
 ///
 pub fn with_table(
   name name: String,
   path path: String,
+  key key_decoder: Decoder(k),
+  value value_decoder: Decoder(v),
   fun fun: fn(PSet(k, v)) -> Result(a, ShelfError),
 ) -> Result(a, ShelfError) {
-  use table <- result.try(open(name:, path:))
+  use table <- result.try(open(
+    name:,
+    path:,
+    key: key_decoder,
+    value: value_decoder,
+  ))
   let result = fun(table)
   let _ = close(table)
   result
@@ -109,7 +159,7 @@ pub fn lookup(from table: PSet(k, v), key key: k) -> Result(v, ShelfError) {
 /// Check if a key exists without returning the value.
 ///
 pub fn member(of table: PSet(k, v), key key: k) -> Result(Bool, ShelfError) {
-  ffi_member(table.ets, key)
+  internal.member(table.ets, key)
 }
 
 /// Return all key-value pairs as a list.
@@ -117,7 +167,7 @@ pub fn member(of table: PSet(k, v), key key: k) -> Result(Bool, ShelfError) {
 /// **Warning**: loads entire table into memory.
 ///
 pub fn to_list(from table: PSet(k, v)) -> Result(List(#(k, v)), ShelfError) {
-  ffi_to_list(table.ets)
+  internal.to_list(table.ets)
 }
 
 /// Fold over all entries. Order is unspecified.
@@ -130,13 +180,13 @@ pub fn fold(
   let wrapper = fn(entry: #(k, v), acc: acc) -> acc {
     fun(acc, entry.0, entry.1)
   }
-  ffi_fold(table.ets, wrapper, initial)
+  internal.fold(table.ets, wrapper, initial)
 }
 
 /// Return the number of entries in the table.
 ///
 pub fn size(of table: PSet(k, v)) -> Result(Int, ShelfError) {
-  ffi_size(table.ets)
+  internal.size(table.ets)
 }
 
 // ── Write ───────────────────────────────────────────────────────────────
@@ -151,8 +201,8 @@ pub fn insert(
   key key: k,
   value value: v,
 ) -> Result(Nil, ShelfError) {
-  use _ <- result.try(ffi_insert(table.ets, table.dets, #(key, value)))
-  maybe_write_through(table)
+  use _ <- result.try(internal.insert(table.ets, table.dets, #(key, value)))
+  internal.maybe_write_through(table.ets, table.dets, table.write_mode)
 }
 
 /// Insert multiple key-value pairs at once.
@@ -161,8 +211,8 @@ pub fn insert_list(
   into table: PSet(k, v),
   entries entries: List(#(k, v)),
 ) -> Result(Nil, ShelfError) {
-  use _ <- result.try(ffi_insert_list(table.ets, table.dets, entries))
-  maybe_write_through(table)
+  use _ <- result.try(internal.insert_list(table.ets, table.dets, entries))
+  internal.maybe_write_through(table.ets, table.dets, table.write_mode)
 }
 
 /// Insert a key-value pair only if the key does not already exist.
@@ -175,7 +225,7 @@ pub fn insert_new(
   value value: v,
 ) -> Result(Nil, ShelfError) {
   use _ <- result.try(ffi_insert_new(table.ets, table.dets, #(key, value)))
-  maybe_write_through(table)
+  internal.maybe_write_through(table.ets, table.dets, table.write_mode)
 }
 
 // ── Delete ──────────────────────────────────────────────────────────────
@@ -183,8 +233,8 @@ pub fn insert_new(
 /// Delete the entry with the given key.
 ///
 pub fn delete_key(from table: PSet(k, v), key key: k) -> Result(Nil, ShelfError) {
-  use _ <- result.try(ffi_delete_key(table.ets, key))
-  maybe_write_through(table)
+  use _ <- result.try(internal.delete_key(table.ets, key))
+  internal.maybe_write_through(table.ets, table.dets, table.write_mode)
 }
 
 /// Delete a specific key-value pair.
@@ -197,15 +247,15 @@ pub fn delete_object(
   key key: k,
   value value: v,
 ) -> Result(Nil, ShelfError) {
-  use _ <- result.try(ffi_delete_object(table.ets, key, value))
-  maybe_write_through(table)
+  use _ <- result.try(internal.delete_object(table.ets, key, value))
+  internal.maybe_write_through(table.ets, table.dets, table.write_mode)
 }
 
 /// Delete all entries (keeps the table open).
 ///
 pub fn delete_all(from table: PSet(k, v)) -> Result(Nil, ShelfError) {
-  use _ <- result.try(ffi_delete_all(table.ets))
-  maybe_write_through(table)
+  use _ <- result.try(internal.delete_all(table.ets))
+  internal.maybe_write_through(table.ets, table.dets, table.write_mode)
 }
 
 // ── Persistence ─────────────────────────────────────────────────────────
@@ -223,17 +273,27 @@ pub fn delete_all(from table: PSet(k, v)) -> Result(Nil, ShelfError) {
 /// ```
 ///
 pub fn save(table: PSet(k, v)) -> Result(Nil, ShelfError) {
-  ffi_save(table.ets, table.dets)
+  internal.save(table.ets, table.dets)
 }
 
 /// Discard unsaved ETS changes and reload from DETS.
 ///
-/// Clears the ETS table and loads all DETS contents into it.
+/// Clears the ETS table, re-reads all DETS entries, validates them
+/// through the stored decoders, and loads valid entries into ETS.
+/// The configured decode policy is respected on reload.
 /// Only useful in WriteBack mode — in WriteThrough mode, ETS and
 /// DETS are always in sync.
 ///
 pub fn reload(table: PSet(k, v)) -> Result(Nil, ShelfError) {
-  ffi_load(table.ets, table.dets)
+  use _ <- result.try(internal.delete_all(table.ets))
+  use entries <- result.try(internal.dets_to_list(table.dets))
+  internal.validate_and_load(
+    entries,
+    table.ets,
+    table.dets,
+    table.entry_decoder,
+    table.decode_policy,
+  )
 }
 
 /// Flush the DETS write buffer to the OS.
@@ -243,7 +303,7 @@ pub fn reload(table: PSet(k, v)) -> Result(Nil, ShelfError) {
 /// when you want to guarantee durability.
 ///
 pub fn sync(table: PSet(k, v)) -> Result(Nil, ShelfError) {
-  ffi_sync_dets(table.dets)
+  internal.sync_dets(table.dets)
 }
 
 // ── Counters ────────────────────────────────────────────────────────────
@@ -265,49 +325,18 @@ pub fn update_counter(
   increment amount: Int,
 ) -> Result(Int, ShelfError) {
   use new_val <- result.try(ffi_update_counter(table.ets, key, amount))
-  case table.write_mode {
-    WriteThrough -> {
-      let _ = ffi_save(table.ets, table.dets)
-      Ok(new_val)
-    }
-    WriteBack -> Ok(new_val)
-  }
+  use _ <- result.try(internal.maybe_write_through(
+    table.ets,
+    table.dets,
+    table.write_mode,
+  ))
+  Ok(new_val)
 }
 
-// ── Internal ────────────────────────────────────────────────────────────
+// ── FFI bindings (set-specific) ─────────────────────────────────────────
 
-/// If in WriteThrough mode, save ETS→DETS after every write.
-fn maybe_write_through(table: PSet(k, v)) -> Result(Nil, ShelfError) {
-  case table.write_mode {
-    WriteThrough -> ffi_save(table.ets, table.dets)
-    WriteBack -> Ok(Nil)
-  }
-}
-
-// ── FFI bindings ────────────────────────────────────────────────────────
-
-@external(erlang, "shelf_ffi", "open_set")
-fn ffi_open_set(
-  name: String,
-  path: String,
-) -> Result(#(EtsRef, DetsRef), ShelfError)
-
-@external(erlang, "shelf_ffi", "close")
-fn ffi_close(ets: EtsRef, dets: DetsRef) -> Result(Nil, ShelfError)
-
-@external(erlang, "shelf_ffi", "insert")
-fn ffi_insert(
-  ets: EtsRef,
-  dets: DetsRef,
-  object: #(k, v),
-) -> Result(Nil, ShelfError)
-
-@external(erlang, "shelf_ffi", "insert_list")
-fn ffi_insert_list(
-  ets: EtsRef,
-  dets: DetsRef,
-  objects: List(#(k, v)),
-) -> Result(Nil, ShelfError)
+@external(erlang, "shelf_ffi", "lookup_set")
+fn ffi_lookup_set(ets: EtsRef, key: k) -> Result(v, ShelfError)
 
 @external(erlang, "shelf_ffi", "insert_new")
 fn ffi_insert_new(
@@ -315,43 +344,6 @@ fn ffi_insert_new(
   dets: DetsRef,
   object: #(k, v),
 ) -> Result(Nil, ShelfError)
-
-@external(erlang, "shelf_ffi", "lookup_set")
-fn ffi_lookup_set(ets: EtsRef, key: k) -> Result(v, ShelfError)
-
-@external(erlang, "shelf_ffi", "member")
-fn ffi_member(ets: EtsRef, key: k) -> Result(Bool, ShelfError)
-
-@external(erlang, "shelf_ffi", "to_list")
-fn ffi_to_list(ets: EtsRef) -> Result(List(#(k, v)), ShelfError)
-
-@external(erlang, "shelf_ffi", "fold")
-fn ffi_fold(
-  ets: EtsRef,
-  fun: fn(#(k, v), acc) -> acc,
-  acc: acc,
-) -> Result(acc, ShelfError)
-
-@external(erlang, "shelf_ffi", "size")
-fn ffi_size(ets: EtsRef) -> Result(Int, ShelfError)
-
-@external(erlang, "shelf_ffi", "delete_key")
-fn ffi_delete_key(ets: EtsRef, key: k) -> Result(Nil, ShelfError)
-
-@external(erlang, "shelf_ffi", "delete_object")
-fn ffi_delete_object(ets: EtsRef, key: k, value: v) -> Result(Nil, ShelfError)
-
-@external(erlang, "shelf_ffi", "delete_all")
-fn ffi_delete_all(ets: EtsRef) -> Result(Nil, ShelfError)
-
-@external(erlang, "shelf_ffi", "save")
-fn ffi_save(ets: EtsRef, dets: DetsRef) -> Result(Nil, ShelfError)
-
-@external(erlang, "shelf_ffi", "load")
-fn ffi_load(ets: EtsRef, dets: DetsRef) -> Result(Nil, ShelfError)
-
-@external(erlang, "shelf_ffi", "sync_dets")
-fn ffi_sync_dets(dets: DetsRef) -> Result(Nil, ShelfError)
 
 @external(erlang, "shelf_ffi", "update_counter")
 fn ffi_update_counter(

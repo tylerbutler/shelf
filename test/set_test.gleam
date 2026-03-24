@@ -1,4 +1,5 @@
 import gleam/dynamic.{type Dynamic}
+import gleam/dynamic/decode
 import gleam/list
 import gleam/string
 import shelf
@@ -20,7 +21,13 @@ pub fn set_tests() {
       it("opens and closes a table", fn() {
         let path = "/tmp/shelf_set_lifecycle.dets"
         cleanup(path)
-        let assert Ok(table) = set.open(name: "set_lifecycle", path: path)
+        let assert Ok(table) =
+          set.open(
+            name: "set_lifecycle",
+            path: path,
+            key: decode.string,
+            value: decode.string,
+          )
         let assert Ok(Nil) = set.close(table)
         cleanup(path)
         Nil
@@ -29,7 +36,12 @@ pub fn set_tests() {
         let path = "/tmp/shelf_set_with_table.dets"
         cleanup(path)
         let assert Ok(42) = {
-          use table <- set.with_table("set_with_table", path)
+          use table <- set.with_table(
+            "set_with_table",
+            path,
+            key: decode.string,
+            value: decode.int,
+          )
           let assert Ok(Nil) = set.insert(table, "key", 42)
           set.lookup(table, "key")
         }
@@ -41,7 +53,13 @@ pub fn set_tests() {
       it("inserts and looks up a value", fn() {
         let path = "/tmp/shelf_set_insert.dets"
         cleanup(path)
-        let assert Ok(table) = set.open(name: "set_insert", path: path)
+        let assert Ok(table) =
+          set.open(
+            name: "set_insert",
+            path: path,
+            key: decode.string,
+            value: decode.int,
+          )
         let assert Ok(Nil) = set.insert(table, "alice", 42)
         let assert Ok(42) = set.lookup(table, "alice")
         let assert Ok(Nil) = set.close(table)
@@ -51,7 +69,13 @@ pub fn set_tests() {
       it("overwrites existing key", fn() {
         let path = "/tmp/shelf_set_overwrite.dets"
         cleanup(path)
-        let assert Ok(table) = set.open(name: "set_overwrite", path: path)
+        let assert Ok(table) =
+          set.open(
+            name: "set_overwrite",
+            path: path,
+            key: decode.string,
+            value: decode.string,
+          )
         let assert Ok(Nil) = set.insert(table, "key", "first")
         let assert Ok(Nil) = set.insert(table, "key", "second")
         let assert Ok("second") = set.lookup(table, "key")
@@ -62,7 +86,13 @@ pub fn set_tests() {
       it("returns NotFound for missing key", fn() {
         let path = "/tmp/shelf_set_notfound.dets"
         cleanup(path)
-        let assert Ok(table) = set.open(name: "set_notfound", path: path)
+        let assert Ok(table) =
+          set.open(
+            name: "set_notfound",
+            path: path,
+            key: decode.string,
+            value: decode.string,
+          )
         let result = set.lookup(table, "missing")
         expect.to_equal(result, Error(shelf.NotFound))
         let assert Ok(Nil) = set.close(table)
@@ -72,7 +102,13 @@ pub fn set_tests() {
       it("member checks key existence", fn() {
         let path = "/tmp/shelf_set_member.dets"
         cleanup(path)
-        let assert Ok(table) = set.open(name: "set_member", path: path)
+        let assert Ok(table) =
+          set.open(
+            name: "set_member",
+            path: path,
+            key: decode.string,
+            value: decode.int,
+          )
         let assert Ok(Nil) = set.insert(table, "exists", 1)
         let assert Ok(True) = set.member(table, "exists")
         let assert Ok(False) = set.member(table, "nope")
@@ -83,7 +119,13 @@ pub fn set_tests() {
       it("insert_new fails on existing key", fn() {
         let path = "/tmp/shelf_set_insert_new.dets"
         cleanup(path)
-        let assert Ok(table) = set.open(name: "set_insert_new", path: path)
+        let assert Ok(table) =
+          set.open(
+            name: "set_insert_new",
+            path: path,
+            key: decode.string,
+            value: decode.string,
+          )
         let assert Ok(Nil) = set.insert_new(table, "key", "first")
         let result = set.insert_new(table, "key", "second")
         expect.to_equal(result, Error(shelf.KeyAlreadyPresent))
@@ -95,7 +137,13 @@ pub fn set_tests() {
       it("insert_list inserts multiple entries", fn() {
         let path = "/tmp/shelf_set_insert_list.dets"
         cleanup(path)
-        let assert Ok(table) = set.open(name: "set_insert_list", path: path)
+        let assert Ok(table) =
+          set.open(
+            name: "set_insert_list",
+            path: path,
+            key: decode.string,
+            value: decode.int,
+          )
         let assert Ok(Nil) =
           set.insert_list(table, [#("a", 1), #("b", 2), #("c", 3)])
         let assert Ok(1) = set.lookup(table, "a")
@@ -110,7 +158,13 @@ pub fn set_tests() {
       it("delete_key removes an entry", fn() {
         let path = "/tmp/shelf_set_delete_key.dets"
         cleanup(path)
-        let assert Ok(table) = set.open(name: "set_delete_key", path: path)
+        let assert Ok(table) =
+          set.open(
+            name: "set_delete_key",
+            path: path,
+            key: decode.string,
+            value: decode.string,
+          )
         let assert Ok(Nil) = set.insert(table, "key", "val")
         let assert Ok(Nil) = set.delete_key(table, "key")
         expect.to_equal(set.lookup(table, "key"), Error(shelf.NotFound))
@@ -121,7 +175,13 @@ pub fn set_tests() {
       it("delete_all removes everything", fn() {
         let path = "/tmp/shelf_set_delete_all.dets"
         cleanup(path)
-        let assert Ok(table) = set.open(name: "set_delete_all", path: path)
+        let assert Ok(table) =
+          set.open(
+            name: "set_delete_all",
+            path: path,
+            key: decode.string,
+            value: decode.int,
+          )
         let assert Ok(Nil) = set.insert_list(table, [#("a", 1), #("b", 2)])
         let assert Ok(Nil) = set.delete_all(table)
         let assert Ok(0) = set.size(table)
@@ -134,7 +194,13 @@ pub fn set_tests() {
       it("to_list returns all entries", fn() {
         let path = "/tmp/shelf_set_to_list.dets"
         cleanup(path)
-        let assert Ok(table) = set.open(name: "set_to_list", path: path)
+        let assert Ok(table) =
+          set.open(
+            name: "set_to_list",
+            path: path,
+            key: decode.string,
+            value: decode.int,
+          )
         let assert Ok(Nil) = set.insert_list(table, [#("a", 1), #("b", 2)])
         let assert Ok(entries) = set.to_list(table)
         let sorted = list.sort(entries, fn(a, b) { string.compare(a.0, b.0) })
@@ -146,7 +212,13 @@ pub fn set_tests() {
       it("size returns entry count", fn() {
         let path = "/tmp/shelf_set_size.dets"
         cleanup(path)
-        let assert Ok(table) = set.open(name: "set_size", path: path)
+        let assert Ok(table) =
+          set.open(
+            name: "set_size",
+            path: path,
+            key: decode.string,
+            value: decode.int,
+          )
         let assert Ok(0) = set.size(table)
         let assert Ok(Nil) =
           set.insert_list(table, [#("a", 1), #("b", 2), #("c", 3)])
@@ -158,7 +230,13 @@ pub fn set_tests() {
       it("fold accumulates over entries", fn() {
         let path = "/tmp/shelf_set_fold.dets"
         cleanup(path)
-        let assert Ok(table) = set.open(name: "set_fold", path: path)
+        let assert Ok(table) =
+          set.open(
+            name: "set_fold",
+            path: path,
+            key: decode.string,
+            value: decode.int,
+          )
         let assert Ok(Nil) =
           set.insert_list(table, [#("a", 1), #("b", 2), #("c", 3)])
         let assert Ok(sum) =
@@ -173,7 +251,13 @@ pub fn set_tests() {
       it("update_counter increments", fn() {
         let path = "/tmp/shelf_set_counter.dets"
         cleanup(path)
-        let assert Ok(table) = set.open(name: "set_counter", path: path)
+        let assert Ok(table) =
+          set.open(
+            name: "set_counter",
+            path: path,
+            key: decode.string,
+            value: decode.int,
+          )
         let assert Ok(Nil) = set.insert(table, "hits", 0)
         let assert Ok(1) = set.update_counter(table, "hits", 1)
         let assert Ok(3) = set.update_counter(table, "hits", 2)

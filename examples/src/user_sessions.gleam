@@ -11,6 +11,7 @@
 ////   - Error handling with case expressions
 ////   - Graceful handling of KeyAlreadyPresent and NotFound errors
 
+import gleam/dynamic/decode
 import gleam/io
 import gleam/string
 import shelf
@@ -28,7 +29,8 @@ pub fn main() {
     |> shelf.write_mode(shelf.WriteThrough)
 
   // --- 2. Open the persistent set table ---
-  let assert Ok(sessions) = set.open_config(config)
+  let assert Ok(sessions) =
+    set.open_config(config: config, key: decode.string, value: decode.string)
   io.println("✓ Opened user_sessions table with WriteThrough mode")
 
   // --- 3. Insert a new session (succeeds because the key is fresh) ---
