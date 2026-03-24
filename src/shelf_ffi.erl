@@ -9,6 +9,7 @@
     save/2, sync_dets/1,
     update_counter/3,
     dets_to_list/1,
+    dets_fold_into_ets_strict/3, dets_fold_into_ets_lenient/3,
     dets_insert/2, dets_insert_list/2,
     dets_delete_key/2, dets_delete_object/3, dets_delete_all/1
 ]).
@@ -56,6 +57,64 @@ dets_to_list(Dets) ->
         case Result of
             {error, Reason} -> {error, translate_error(Reason)};
             _ when is_list(Result) -> {ok, Result}
+        end
+    catch
+        _:CatchReason -> {error, translate_error(CatchReason)}
+    end.
+
+%% ── Streaming DETS → ETS loaders ────────────────────────────────────────
+%% Validate and insert entries one at a time using dets:foldl, avoiding
+%% materializing the entire DETS contents into a Gleam list.
+%% Peak memory drops from ~3x to ~1x the DETS contents.
+
+%% Strict mode: abort on first decode failure.
+dets_fold_into_ets_strict(Dets, Ets, DecoderFun) ->
+    try
+        Result = dets:foldl(
+            fun(Entry, Acc) ->
+                case Acc of
+                    {error, _} -> Acc;
+                    ok ->
+                        case DecoderFun(Entry) of
+                            {ok, Pair} ->
+                                ets:insert(Ets, Pair),
+                                ok;
+                            {error, Errors} ->
+                                {error, {type_mismatch, Errors}}
+                        end
+                end
+            end,
+            ok,
+            Dets
+        ),
+        case Result of
+            ok -> {ok, nil};
+            {error, {type_mismatch, Errors}} -> {error, {type_mismatch, Errors}};
+            {error, Reason} -> {error, translate_error(Reason)}
+        end
+    catch
+        _:CatchReason -> {error, translate_error(CatchReason)}
+    end.
+
+%% Lenient mode: skip entries that fail to decode.
+dets_fold_into_ets_lenient(Dets, Ets, DecoderFun) ->
+    try
+        Result = dets:foldl(
+            fun(Entry, ok) ->
+                case DecoderFun(Entry) of
+                    {ok, Pair} ->
+                        ets:insert(Ets, Pair),
+                        ok;
+                    {error, _} ->
+                        ok
+                end
+            end,
+            ok,
+            Dets
+        ),
+        case Result of
+            ok -> {ok, nil};
+            {error, Reason} -> {error, translate_error(Reason)}
         end
     catch
         _:CatchReason -> {error, translate_error(CatchReason)}
@@ -262,6 +321,7 @@ translate_error(not_found) -> not_found;
 translate_error(key_already_present) -> key_already_present;
 translate_error(name_conflict) -> name_conflict;
 translate_error(type_mismatch) -> type_mismatch;
+translate_error({type_mismatch, Errors}) -> {type_mismatch, Errors};
 %% NOTE: `badarg` from ETS can mean many things (bad table ref, bad arguments, etc.)
 %% but the most common case in shelf's context is a deleted/closed table.
 %% This mapping may be imprecise for other `badarg` causes.

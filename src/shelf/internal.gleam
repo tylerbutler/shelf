@@ -4,8 +4,6 @@
 /// shelf table types.
 import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode.{type Decoder}
-import gleam/list
-import gleam/result
 import shelf.{type DecodePolicy, type ShelfError, Lenient, Strict}
 
 /// Raw ETS table reference (Erlang tid).
@@ -29,51 +27,45 @@ pub fn build_entry_decoder(
   decode.success(#(key, value))
 }
 
-/// Validate raw DETS entries through the decoder and batch-insert into ETS.
+/// Stream DETS entries through the decoder and insert into ETS one at a time.
 ///
-/// **Performance note**: this materializes all DETS entries into a Gleam list
-/// before decoding and inserting into ETS. Peak memory is ~3x the DETS
-/// contents (the raw list + the decoded pairs + the ETS table). This works
-/// well for tables under
-/// ~50K entries; for larger tables or large values, memory pressure may be
-/// significant. See https://github.com/tylerbutler/shelf/issues/13 for a
-/// planned streaming approach using `dets:foldl` directly in the FFI.
+/// Uses `dets:foldl` in the FFI to avoid materializing all entries into memory.
+/// Peak memory is ~1x (just the ETS table) instead of ~3x with the bulk approach
+/// that first calls `dets_to_list` then decodes the full list.
 ///
+/// Closes https://github.com/tylerbutler/shelf/issues/13
 @internal
-pub fn validate_and_load(
-  entries: List(Dynamic),
+pub fn stream_validate_and_load(
   ets: EtsRef,
   dets: DetsRef,
   entry_decoder: Decoder(#(k, v)),
   policy: DecodePolicy,
 ) -> Result(Nil, ShelfError) {
+  let decoder_fn = fn(entry: Dynamic) -> Result(
+    #(k, v),
+    List(decode.DecodeError),
+  ) {
+    decode.run(entry, entry_decoder)
+  }
   case policy {
-    Strict -> {
-      use pairs <- result.try(decode_all_strict(entries, entry_decoder, []))
-      insert_list(ets, dets, pairs)
-    }
-    Lenient -> {
-      let pairs =
-        list.filter_map(entries, fn(entry) { decode.run(entry, entry_decoder) })
-      insert_list(ets, dets, list.reverse(pairs))
-    }
+    Strict -> ffi_dets_fold_into_ets_strict(dets, ets, decoder_fn)
+    Lenient -> ffi_dets_fold_into_ets_lenient(dets, ets, decoder_fn)
   }
 }
 
-fn decode_all_strict(
-  entries: List(Dynamic),
-  decoder: Decoder(#(k, v)),
-  acc: List(#(k, v)),
-) -> Result(List(#(k, v)), ShelfError) {
-  case entries {
-    [] -> Ok(list.reverse(acc))
-    [entry, ..rest] ->
-      case decode.run(entry, decoder) {
-        Ok(pair) -> decode_all_strict(rest, decoder, [pair, ..acc])
-        Error(errors) -> Error(shelf.TypeMismatch(errors))
-      }
-  }
-}
+@external(erlang, "shelf_ffi", "dets_fold_into_ets_strict")
+fn ffi_dets_fold_into_ets_strict(
+  dets: DetsRef,
+  ets: EtsRef,
+  decoder_fn: fn(Dynamic) -> Result(#(k, v), List(decode.DecodeError)),
+) -> Result(Nil, ShelfError)
+
+@external(erlang, "shelf_ffi", "dets_fold_into_ets_lenient")
+fn ffi_dets_fold_into_ets_lenient(
+  dets: DetsRef,
+  ets: EtsRef,
+  decoder_fn: fn(Dynamic) -> Result(#(k, v), List(decode.DecodeError)),
+) -> Result(Nil, ShelfError)
 
 // ── Shared FFI bindings ─────────────────────────────────────────────────
 

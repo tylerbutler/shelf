@@ -66,28 +66,13 @@ pub fn open_config(
   let ets = refs.0
   let dets = refs.1
   let entry_decoder = internal.build_entry_decoder(key_decoder, value_decoder)
-  case internal.dets_to_list(dets) {
+  case internal.stream_validate_and_load(ets, dets, entry_decoder, decode_policy) {
+    Ok(Nil) ->
+      Ok(PBag(ets:, dets:, write_mode:, entry_decoder:, decode_policy:))
     Error(e) -> {
       let _ = internal.cleanup(ets, dets)
       Error(e)
     }
-    Ok(entries) ->
-      case
-        internal.validate_and_load(
-          entries,
-          ets,
-          dets,
-          entry_decoder,
-          decode_policy,
-        )
-      {
-        Ok(Nil) ->
-          Ok(PBag(ets:, dets:, write_mode:, entry_decoder:, decode_policy:))
-        Error(e) -> {
-          let _ = internal.cleanup(ets, dets)
-          Error(e)
-        }
-      }
   }
 }
 
@@ -296,9 +281,7 @@ pub fn save(table: PBag(k, v)) -> Result(Nil, ShelfError) {
 ///
 pub fn reload(table: PBag(k, v)) -> Result(Nil, ShelfError) {
   use _ <- result.try(internal.delete_all(table.ets))
-  use entries <- result.try(internal.dets_to_list(table.dets))
-  internal.validate_and_load(
-    entries,
+  internal.stream_validate_and_load(
     table.ets,
     table.dets,
     table.entry_decoder,
