@@ -39,5 +39,17 @@ pub fn path_validation_tests() {
         shelf.validate_path("sub/dir/shelf_pv_nested.dets", "/tmp")
       Nil
     }),
+    it("sibling directory with shared prefix is rejected", fn() {
+      // "/tmp/data" should NOT match "/tmp/data_sibling/evil.dets"
+      let result =
+        shelf.validate_path("/tmp/data_sibling/evil.dets", "/tmp/data")
+      case result {
+        Error(shelf.InvalidPath(_)) -> Nil
+        other -> {
+          expect.to_equal(other, Error(shelf.InvalidPath("expected")))
+          Nil
+        }
+      }
+    }),
   ])
 }
