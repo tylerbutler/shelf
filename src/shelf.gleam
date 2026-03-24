@@ -1,5 +1,3 @@
-import gleam/dynamic/decode
-
 /// Persistent ETS tables backed by DETS.
 ///
 /// Shelf combines ETS (fast, in-memory) with DETS (persistent, on-disk)
