@@ -6,7 +6,6 @@ import shelf/duplicate_bag
 import shelf/set
 import startest.{describe, it}
 
-
 fn cleanup(path: String) {
   let _ = delete_file(path)
   Nil
