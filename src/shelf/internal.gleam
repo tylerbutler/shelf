@@ -68,7 +68,7 @@ fn decode_all_strict(
     [entry, ..rest] ->
       case decode.run(entry, decoder) {
         Ok(pair) -> decode_all_strict(rest, decoder, [pair, ..acc])
-        Error(_) -> Error(shelf.TypeMismatch)
+        Error(errors) -> Error(shelf.TypeMismatch(errors))
       }
   }
 }

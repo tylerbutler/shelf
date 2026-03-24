@@ -22,7 +22,7 @@
 ///
 import gleam/dynamic/decode.{type Decoder}
 import gleam/result
-import shelf.{type Config, type ShelfError, Config}
+import shelf.{type Config, type ShelfError}
 import shelf/internal.{type DetsRef, type EtsRef}
 
 /// An open persistent bag table with typed keys and values.
@@ -57,7 +57,10 @@ pub fn open_config(
   key key_decoder: Decoder(k),
   value value_decoder: Decoder(v),
 ) -> Result(PBag(k, v), ShelfError) {
-  let Config(name:, path:, write_mode:, decode_policy:) = config
+  let name = shelf.get_name(config)
+  let path = shelf.get_path(config)
+  let write_mode = shelf.get_write_mode(config)
+  let decode_policy = shelf.get_decode_policy(config)
   use refs <- result.try(internal.open_no_load(name, path, "bag"))
   let ets = refs.0
   let dets = refs.1
