@@ -28,8 +28,7 @@ pub fn error_handling_tests() {
             value: decode.string,
             fun: fn(_table) {
               // This will panic
-              let assert Ok(_) = Error(shelf.NotFound)
-              Ok("unreachable")
+              panic as "intentional panic for test"
             },
           )
         // Should be Error, not a panic
