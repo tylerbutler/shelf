@@ -1,0 +1,5 @@
+kind: Breaking
+body: |-
+    Require decoders on open for runtime type safety
+    All `open` and `open_config` functions now require `key` and `value` decoder arguments. DETS entries are validated through these decoders when loading from disk, ensuring type safety at the persistence boundary.
+time: 2026-03-23T18:21:38.000000000-07:00
