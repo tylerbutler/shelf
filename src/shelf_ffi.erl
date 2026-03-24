@@ -478,8 +478,11 @@ validate_path(Path, BaseDirectory) ->
     %% Normalize by splitting and rejoining (resolves . and ..)
     Normalized = normalize_path(Resolved),
     NormalizedBase = normalize_path(BaseAbs),
-    %% Ensure the resolved path starts with the base directory
-    case lists:prefix(NormalizedBase, Normalized) of
+    %% Ensure the resolved path is inside the base directory.
+    %% We must check for a directory boundary to prevent sibling directory
+    %% bypass (e.g. base="/app/data" must not match "/app/data_sibling/x").
+    case Normalized =:= NormalizedBase orelse
+         lists:prefix(NormalizedBase ++ "/", Normalized) of
         true ->
             {ok, list_to_binary(Normalized)};
         false ->
