@@ -89,7 +89,10 @@ open_no_load(Name, Path, TypeBin) ->
         ]),
         try
             Ets = ets:new(binary_to_atom(Name, utf8), [Type, protected, {keypos, 1}, {read_concurrency, true}]),
-            %% Spawn monitor to close DETS if owning process dies
+            %% Spawn a guardian to close DETS if the owning process dies.
+            %% Safe to call erlang:monitor inside the spawned process: if
+            %% OwnerPid is already dead when monitor/2 runs, it delivers
+            %% an immediate 'DOWN' rather than silently dropping it.
             OwnerPid = self(),
             spawn(fun() ->
                 erlang:monitor(process, OwnerPid),
@@ -137,7 +140,15 @@ dets_to_list(Dets) ->
 -define(LOAD_BATCH_SIZE, 5000).
 
 flush_batch(_Ets, []) -> ok;
+%% Reverse restores DETS traversal order before bulk insert.
+%% ETS bag tables preserve insertion order, so this matters for
+%% callers that expect values under a key to stay in DETS order.
 flush_batch(Ets, Batch) -> ets:insert(Ets, lists:reverse(Batch)).
+
+%% Strict and lenient share the same batching skeleton but differ in how
+%% they handle decode failures: strict throws to abort the fold early,
+%% lenient silently skips bad entries. A shared helper with a callback
+%% would obscure that semantic difference without reducing code volume.
 
 %% Strict mode: abort on first decode failure using throw.
 %% DecoderFun takes a raw entry and returns {ok, Pair} or {error, Errors}.
