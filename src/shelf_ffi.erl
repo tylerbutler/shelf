@@ -27,7 +27,7 @@ ensure_registry() ->
     case ets:whereis(?REGISTRY) of
         undefined ->
             try
-                ets:new(?REGISTRY, [set, public, named_table, {keypos, 1}]),
+                ets:new(?REGISTRY, [set, public, named_table, {keypos, 1}, {read_concurrency, true}, {write_concurrency, true}]),
                 ok
             catch
                 _:badarg ->
@@ -88,7 +88,17 @@ open_no_load(Name, Path, TypeBin) ->
             {repair, true}
         ]),
         try
-            Ets = ets:new(binary_to_atom(Name, utf8), [Type, protected, {keypos, 1}]),
+            Ets = ets:new(binary_to_atom(Name, utf8), [Type, protected, {keypos, 1}, {read_concurrency, true}]),
+            %% Spawn monitor to close DETS if owning process dies
+            OwnerPid = self(),
+            spawn(fun() ->
+                erlang:monitor(process, OwnerPid),
+                receive
+                    {'DOWN', _, process, OwnerPid, _} ->
+                        _ = dets:close(Dets),
+                        unregister_dets_name(Path)
+                end
+            end),
             {ok, {Ets, Dets}}
         catch
             _:badarg ->
@@ -122,55 +132,73 @@ dets_to_list(Dets) ->
 %% ── Streaming DETS → ETS loaders ────────────────────────────────────────
 %% Validate and insert entries one at a time using dets:foldl, avoiding
 %% materializing the entire DETS contents into a Gleam list.
+%% To avoid row-by-row ETS boundary crossing, we batch entries.
 
-%% Strict mode: abort on first decode failure.
+-define(LOAD_BATCH_SIZE, 5000).
+
+flush_batch(_Ets, []) -> ok;
+flush_batch(Ets, Batch) -> ets:insert(Ets, lists:reverse(Batch)).
+
+%% Strict mode: abort on first decode failure using throw.
 %% DecoderFun takes a raw entry and returns {ok, Pair} or {error, Errors}.
 dets_fold_into_ets_strict(Dets, Ets, DecoderFun) ->
     try
         Result = dets:foldl(
-            fun(Entry, Acc) ->
-                case Acc of
-                    {error, _} -> Acc;
-                    ok ->
-                        case DecoderFun(Entry) of
-                            {ok, Pair} ->
-                                ets:insert(Ets, Pair),
-                                ok;
-                            {error, Errors} ->
-                                {error, {type_mismatch, Errors}}
-                        end
+            fun(Entry, {Count, Batch}) ->
+                case DecoderFun(Entry) of
+                    {ok, Pair} ->
+                        NewBatch = [Pair | Batch],
+                        case Count + 1 of
+                            ?LOAD_BATCH_SIZE ->
+                                flush_batch(Ets, NewBatch),
+                                {0, []};
+                            NewCount ->
+                                {NewCount, NewBatch}
+                        end;
+                    {error, Errors} ->
+                        throw({type_mismatch, Errors})
                 end
             end,
-            ok,
+            {0, []},
             Dets
         ),
         case Result of
-            ok -> {ok, nil};
-            {error, {type_mismatch, Errors}} -> {error, {type_mismatch, Errors}};
+            {_, FinalBatch} ->
+                flush_batch(Ets, FinalBatch),
+                {ok, nil};
             {error, Reason} -> {error, translate_error(Reason)}
         end
     catch
+        throw:{type_mismatch, Errors} -> {error, {type_mismatch, Errors}};
         _:CatchReason -> {error, translate_error(CatchReason)}
     end.
 
-%% Lenient mode: skip entries that fail to decode.
+%% Lenient mode: skip entries that fail to decode, batch successful ones.
 dets_fold_into_ets_lenient(Dets, Ets, DecoderFun) ->
     try
         Result = dets:foldl(
-            fun(Entry, ok) ->
+            fun(Entry, {Count, Batch}) ->
                 case DecoderFun(Entry) of
                     {ok, Pair} ->
-                        ets:insert(Ets, Pair),
-                        ok;
+                        NewBatch = [Pair | Batch],
+                        case Count + 1 of
+                            ?LOAD_BATCH_SIZE ->
+                                flush_batch(Ets, NewBatch),
+                                {0, []};
+                            NewCount ->
+                                {NewCount, NewBatch}
+                        end;
                     {error, _} ->
-                        ok
+                        {Count, Batch}
                 end
             end,
-            ok,
+            {0, []},
             Dets
         ),
         case Result of
-            ok -> {ok, nil};
+            {_, FinalBatch} ->
+                flush_batch(Ets, FinalBatch),
+                {ok, nil};
             {error, Reason} -> {error, translate_error(Reason)}
         end
     catch
@@ -206,14 +234,20 @@ close(Ets, Dets) ->
                 {'EXIT', Reason} -> {error, Reason}
             end
     end,
-    _ = (catch dets:close(Dets)),
+    CloseResult = (catch dets:close(Dets)),
     _ = (catch ets:delete(Ets)),
     case Path of
         undefined -> ok;
         _ -> unregister_dets_name(Path)
     end,
     case SaveResult of
-        ok -> {ok, nil};
+        ok ->
+            case CloseResult of
+                ok -> {ok, nil};
+                {error, Reason3} -> {error, translate_error(Reason3)};
+                {'EXIT', Reason4} -> {error, translate_error(Reason4)};
+                _ -> {ok, nil}
+            end;
         {error, Reason2} -> {error, translate_error(Reason2)};
         _ -> {ok, nil}
     end.
@@ -351,7 +385,7 @@ save(Ets, Dets) ->
 safe_save_impl(Ets, Dets, OrigPath, TmpPath, Type) ->
     TmpPathList = binary_to_list(TmpPath),
     OrigPathList = binary_to_list(OrigPath),
-    TmpName = list_to_atom("shelf_tmp_" ++ integer_to_list(erlang:phash2({self(), OrigPath}))),
+    TmpName = {shelf_tmp, make_ref()},
     try
         %% 1. Open temp DETS
         {ok, TmpDets} = dets:open_file(TmpName, [
