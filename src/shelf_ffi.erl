@@ -1,7 +1,7 @@
 -module(shelf_ffi).
 -export([
     open_no_load/3,
-    close/2, cleanup/2,
+    close/3, cleanup/3,
     insert/3, insert_list/3, insert_new/3,
     lookup_set/2, lookup_bag/2, member/2,
     delete_key/2, delete_object/3, delete_all/1,
@@ -27,7 +27,7 @@ ensure_registry() ->
     case ets:whereis(?REGISTRY) of
         undefined ->
             try
-                ets:new(?REGISTRY, [set, public, named_table, {keypos, 1}, {read_concurrency, true}, {write_concurrency, true}]),
+                ets:new(?REGISTRY, [set, public, named_table, {keypos, 1}, {read_concurrency, true}]),
                 ok
             catch
                 _:badarg ->
@@ -94,15 +94,17 @@ open_no_load(Name, Path, TypeBin) ->
             %% OwnerPid is already dead when monitor/2 runs, it delivers
             %% an immediate 'DOWN' rather than silently dropping it.
             OwnerPid = self(),
-            spawn(fun() ->
+            Guardian = spawn(fun() ->
                 erlang:monitor(process, OwnerPid),
                 receive
                     {'DOWN', _, process, OwnerPid, _} ->
                         _ = dets:close(Dets),
-                        unregister_dets_name(Path)
+                        unregister_dets_name(Path);
+                    stop ->
+                        ok
                 end
             end),
-            {ok, {Ets, Dets}}
+            {ok, {Ets, Dets, Guardian}}
         catch
             _:badarg ->
                 _ = dets:close(Dets),
@@ -174,10 +176,10 @@ dets_fold_into_ets_strict(Dets, Ets, DecoderFun) ->
             Dets
         ),
         case Result of
+            {error, Reason} -> {error, translate_error(Reason)};
             {_, FinalBatch} ->
                 flush_batch(Ets, FinalBatch),
-                {ok, nil};
-            {error, Reason} -> {error, translate_error(Reason)}
+                {ok, nil}
         end
     catch
         throw:{type_mismatch, Errors} -> {error, {type_mismatch, Errors}};
@@ -207,20 +209,27 @@ dets_fold_into_ets_lenient(Dets, Ets, DecoderFun) ->
             Dets
         ),
         case Result of
+            {error, Reason} -> {error, translate_error(Reason)};
             {_, FinalBatch} ->
                 flush_batch(Ets, FinalBatch),
-                {ok, nil};
-            {error, Reason} -> {error, translate_error(Reason)}
+                {ok, nil}
         end
     catch
         _:CatchReason -> {error, translate_error(CatchReason)}
     end.
 
+%% ── Guardian ────────────────────────────────────────────────────────────
+
+stop_guardian(Guardian) ->
+    Guardian ! stop,
+    ok.
+
 %% ── Cleanup ─────────────────────────────────────────────────────────────
 %% Delete ETS table and close DETS without saving. Used on validation failure.
 
-cleanup(Ets, Dets) ->
+cleanup(Ets, Dets, Guardian) ->
     try
+        stop_guardian(Guardian),
         Path = dets_to_path(Dets),
         _ = dets:close(Dets),
         _ = ets:delete(Ets),
@@ -233,7 +242,8 @@ cleanup(Ets, Dets) ->
 %% ── Close ───────────────────────────────────────────────────────────────
 %% Atomic save ETS→DETS via temp file, close DETS, delete ETS.
 
-close(Ets, Dets) ->
+close(Ets, Dets, Guardian) ->
+    stop_guardian(Guardian),
     Path = try dets_to_path(Dets) catch _:_ -> undefined end,
     %% Use the atomic save, then close and clean up
     SaveResult = case Path of

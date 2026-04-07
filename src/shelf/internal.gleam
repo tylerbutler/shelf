@@ -18,6 +18,10 @@ pub type EtsRef
 @internal
 pub type DetsRef
 
+/// Guardian process PID — monitors the owner and cleans up DETS on crash.
+@internal
+pub type GuardianRef
+
 // ── Shared helpers ──────────────────────────────────────────────────────
 
 /// Compose key and value decoders into a tuple entry decoder.
@@ -79,7 +83,7 @@ pub fn generic_open(
   key_decoder: Decoder(k),
   value_decoder: Decoder(v),
 ) -> Result(
-  #(EtsRef, DetsRef, WriteMode, Decoder(#(k, v)), DecodePolicy),
+  #(EtsRef, DetsRef, GuardianRef, WriteMode, Decoder(#(k, v)), DecodePolicy),
   ShelfError,
 ) {
   let name = shelf.get_name(config)
@@ -91,11 +95,13 @@ pub fn generic_open(
   use refs <- result.try(open_no_load(name, resolved_path, table_type))
   let ets = refs.0
   let dets = refs.1
+  let guardian = refs.2
   let entry_decoder = build_entry_decoder(key_decoder, value_decoder)
   case stream_validate_and_load(ets, dets, entry_decoder, decode_policy) {
-    Ok(Nil) -> Ok(#(ets, dets, write_mode, entry_decoder, decode_policy))
+    Ok(Nil) ->
+      Ok(#(ets, dets, guardian, write_mode, entry_decoder, decode_policy))
     Error(e) -> {
-      let _ = cleanup(ets, dets)
+      let _ = cleanup(ets, dets, guardian)
       Error(e)
     }
   }
@@ -210,7 +216,7 @@ pub fn open_no_load(
   name: String,
   path: String,
   table_type: String,
-) -> Result(#(EtsRef, DetsRef), ShelfError)
+) -> Result(#(EtsRef, DetsRef, GuardianRef), ShelfError)
 
 @external(erlang, "shelf_ffi", "dets_to_list")
 @internal
@@ -218,11 +224,19 @@ pub fn dets_to_list(dets: DetsRef) -> Result(List(Dynamic), ShelfError)
 
 @external(erlang, "shelf_ffi", "cleanup")
 @internal
-pub fn cleanup(ets: EtsRef, dets: DetsRef) -> Result(Nil, ShelfError)
+pub fn cleanup(
+  ets: EtsRef,
+  dets: DetsRef,
+  guardian: GuardianRef,
+) -> Result(Nil, ShelfError)
 
 @external(erlang, "shelf_ffi", "close")
 @internal
-pub fn close(ets: EtsRef, dets: DetsRef) -> Result(Nil, ShelfError)
+pub fn close(
+  ets: EtsRef,
+  dets: DetsRef,
+  guardian: GuardianRef,
+) -> Result(Nil, ShelfError)
 
 @external(erlang, "shelf_ffi", "insert")
 @internal
