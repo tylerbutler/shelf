@@ -23,13 +23,14 @@
 import gleam/dynamic/decode.{type Decoder}
 import gleam/result
 import shelf.{type Config, type ShelfError}
-import shelf/internal.{type DetsRef, type EtsRef}
+import shelf/internal.{type DetsRef, type EtsRef, type GuardianRef}
 
 /// An open persistent duplicate bag table with typed keys and values.
 pub opaque type PDuplicateBag(k, v) {
   PDuplicateBag(
     ets: EtsRef,
     dets: DetsRef,
+    guardian: GuardianRef,
     write_mode: shelf.WriteMode,
     entry_decoder: Decoder(#(k, v)),
     decode_policy: shelf.DecodePolicy,
@@ -70,9 +71,10 @@ pub fn open_config(
   Ok(PDuplicateBag(
     ets: result.0,
     dets: result.1,
-    write_mode: result.2,
-    entry_decoder: result.3,
-    decode_policy: result.4,
+    guardian: result.2,
+    write_mode: result.3,
+    entry_decoder: result.4,
+    decode_policy: result.5,
   ))
 }
 
@@ -102,7 +104,7 @@ pub fn open(
 /// Close the table, saving all data to disk.
 ///
 pub fn close(table: PDuplicateBag(k, v)) -> Result(Nil, ShelfError) {
-  internal.close(table.ets, table.dets)
+  internal.close(table.ets, table.dets, table.guardian)
 }
 
 /// Use a table within a callback, ensuring it is closed afterward.

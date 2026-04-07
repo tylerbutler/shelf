@@ -1,7 +1,7 @@
 -module(shelf_ffi).
 -export([
     open_no_load/3,
-    close/2, cleanup/2,
+    close/3, cleanup/3,
     insert/3, insert_list/3, insert_new/3,
     lookup_set/2, lookup_bag/2, member/2,
     delete_key/2, delete_object/3, delete_all/1,
@@ -27,7 +27,7 @@ ensure_registry() ->
     case ets:whereis(?REGISTRY) of
         undefined ->
             try
-                ets:new(?REGISTRY, [set, public, named_table, {keypos, 1}]),
+                ets:new(?REGISTRY, [set, public, named_table, {keypos, 1}, {read_concurrency, true}]),
                 ok
             catch
                 _:badarg ->
@@ -88,8 +88,23 @@ open_no_load(Name, Path, TypeBin) ->
             {repair, true}
         ]),
         try
-            Ets = ets:new(binary_to_atom(Name, utf8), [Type, protected, {keypos, 1}]),
-            {ok, {Ets, Dets}}
+            Ets = ets:new(binary_to_atom(Name, utf8), [Type, protected, {keypos, 1}, {read_concurrency, true}]),
+            %% Spawn a guardian to close DETS if the owning process dies.
+            %% Safe to call erlang:monitor inside the spawned process: if
+            %% OwnerPid is already dead when monitor/2 runs, it delivers
+            %% an immediate 'DOWN' rather than silently dropping it.
+            OwnerPid = self(),
+            Guardian = spawn(fun() ->
+                erlang:monitor(process, OwnerPid),
+                receive
+                    {'DOWN', _, process, OwnerPid, _} ->
+                        _ = dets:close(Dets),
+                        unregister_dets_name(Path);
+                    stop ->
+                        ok
+                end
+            end),
+            {ok, {Ets, Dets, Guardian}}
         catch
             _:badarg ->
                 _ = dets:close(Dets),
@@ -122,66 +137,99 @@ dets_to_list(Dets) ->
 %% ── Streaming DETS → ETS loaders ────────────────────────────────────────
 %% Validate and insert entries one at a time using dets:foldl, avoiding
 %% materializing the entire DETS contents into a Gleam list.
+%% To avoid row-by-row ETS boundary crossing, we batch entries.
 
-%% Strict mode: abort on first decode failure.
+-define(LOAD_BATCH_SIZE, 5000).
+
+flush_batch(_Ets, []) -> ok;
+%% Reverse restores DETS traversal order before bulk insert.
+%% ETS bag tables preserve insertion order, so this matters for
+%% callers that expect values under a key to stay in DETS order.
+flush_batch(Ets, Batch) -> ets:insert(Ets, lists:reverse(Batch)).
+
+%% Strict and lenient share the same batching skeleton but differ in how
+%% they handle decode failures: strict throws to abort the fold early,
+%% lenient silently skips bad entries. A shared helper with a callback
+%% would obscure that semantic difference without reducing code volume.
+
+%% Strict mode: abort on first decode failure using throw.
 %% DecoderFun takes a raw entry and returns {ok, Pair} or {error, Errors}.
 dets_fold_into_ets_strict(Dets, Ets, DecoderFun) ->
     try
         Result = dets:foldl(
-            fun(Entry, Acc) ->
-                case Acc of
-                    {error, _} -> Acc;
-                    ok ->
-                        case DecoderFun(Entry) of
-                            {ok, Pair} ->
-                                ets:insert(Ets, Pair),
-                                ok;
-                            {error, Errors} ->
-                                {error, {type_mismatch, Errors}}
-                        end
+            fun(Entry, {Count, Batch}) ->
+                case DecoderFun(Entry) of
+                    {ok, Pair} ->
+                        NewBatch = [Pair | Batch],
+                        case Count + 1 of
+                            ?LOAD_BATCH_SIZE ->
+                                flush_batch(Ets, NewBatch),
+                                {0, []};
+                            NewCount ->
+                                {NewCount, NewBatch}
+                        end;
+                    {error, Errors} ->
+                        throw({type_mismatch, Errors})
                 end
             end,
-            ok,
+            {0, []},
             Dets
         ),
         case Result of
-            ok -> {ok, nil};
-            {error, {type_mismatch, Errors}} -> {error, {type_mismatch, Errors}};
-            {error, Reason} -> {error, translate_error(Reason)}
+            {error, Reason} -> {error, translate_error(Reason)};
+            {_, FinalBatch} ->
+                flush_batch(Ets, FinalBatch),
+                {ok, nil}
+        end
+    catch
+        throw:{type_mismatch, Errors} -> {error, {type_mismatch, Errors}};
+        _:CatchReason -> {error, translate_error(CatchReason)}
+    end.
+
+%% Lenient mode: skip entries that fail to decode, batch successful ones.
+dets_fold_into_ets_lenient(Dets, Ets, DecoderFun) ->
+    try
+        Result = dets:foldl(
+            fun(Entry, {Count, Batch}) ->
+                case DecoderFun(Entry) of
+                    {ok, Pair} ->
+                        NewBatch = [Pair | Batch],
+                        case Count + 1 of
+                            ?LOAD_BATCH_SIZE ->
+                                flush_batch(Ets, NewBatch),
+                                {0, []};
+                            NewCount ->
+                                {NewCount, NewBatch}
+                        end;
+                    {error, _} ->
+                        {Count, Batch}
+                end
+            end,
+            {0, []},
+            Dets
+        ),
+        case Result of
+            {error, Reason} -> {error, translate_error(Reason)};
+            {_, FinalBatch} ->
+                flush_batch(Ets, FinalBatch),
+                {ok, nil}
         end
     catch
         _:CatchReason -> {error, translate_error(CatchReason)}
     end.
 
-%% Lenient mode: skip entries that fail to decode.
-dets_fold_into_ets_lenient(Dets, Ets, DecoderFun) ->
-    try
-        Result = dets:foldl(
-            fun(Entry, ok) ->
-                case DecoderFun(Entry) of
-                    {ok, Pair} ->
-                        ets:insert(Ets, Pair),
-                        ok;
-                    {error, _} ->
-                        ok
-                end
-            end,
-            ok,
-            Dets
-        ),
-        case Result of
-            ok -> {ok, nil};
-            {error, Reason} -> {error, translate_error(Reason)}
-        end
-    catch
-        _:CatchReason -> {error, translate_error(CatchReason)}
-    end.
+%% ── Guardian ────────────────────────────────────────────────────────────
+
+stop_guardian(Guardian) ->
+    Guardian ! stop,
+    ok.
 
 %% ── Cleanup ─────────────────────────────────────────────────────────────
 %% Delete ETS table and close DETS without saving. Used on validation failure.
 
-cleanup(Ets, Dets) ->
+cleanup(Ets, Dets, Guardian) ->
     try
+        stop_guardian(Guardian),
         Path = dets_to_path(Dets),
         _ = dets:close(Dets),
         _ = ets:delete(Ets),
@@ -194,7 +242,8 @@ cleanup(Ets, Dets) ->
 %% ── Close ───────────────────────────────────────────────────────────────
 %% Atomic save ETS→DETS via temp file, close DETS, delete ETS.
 
-close(Ets, Dets) ->
+close(Ets, Dets, Guardian) ->
+    stop_guardian(Guardian),
     Path = try dets_to_path(Dets) catch _:_ -> undefined end,
     %% Use the atomic save, then close and clean up
     SaveResult = case Path of
@@ -206,14 +255,20 @@ close(Ets, Dets) ->
                 {'EXIT', Reason} -> {error, Reason}
             end
     end,
-    _ = (catch dets:close(Dets)),
+    CloseResult = (catch dets:close(Dets)),
     _ = (catch ets:delete(Ets)),
     case Path of
         undefined -> ok;
         _ -> unregister_dets_name(Path)
     end,
     case SaveResult of
-        ok -> {ok, nil};
+        ok ->
+            case CloseResult of
+                ok -> {ok, nil};
+                {error, Reason3} -> {error, translate_error(Reason3)};
+                {'EXIT', Reason4} -> {error, translate_error(Reason4)};
+                _ -> {ok, nil}
+            end;
         {error, Reason2} -> {error, translate_error(Reason2)};
         _ -> {ok, nil}
     end.
@@ -351,7 +406,7 @@ save(Ets, Dets) ->
 safe_save_impl(Ets, Dets, OrigPath, TmpPath, Type) ->
     TmpPathList = binary_to_list(TmpPath),
     OrigPathList = binary_to_list(OrigPath),
-    TmpName = list_to_atom("shelf_tmp_" ++ integer_to_list(erlang:phash2({self(), OrigPath}))),
+    TmpName = {shelf_tmp, make_ref()},
     try
         %% 1. Open temp DETS
         {ok, TmpDets} = dets:open_file(TmpName, [

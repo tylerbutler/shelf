@@ -43,9 +43,8 @@
 /// - DETS has a 2 GB maximum file size
 /// - No ordered set (DETS doesn't support it)
 /// - DETS performs disk I/O — `save()` has real latency
-/// - Opening tables with decoder validation materializes all DETS entries
-///   into memory; best suited for tables under ~50K entries
-///   (see https://github.com/tylerbutler/shelf/issues/13)
+/// - Opening tables streams entries via `dets:foldl` directly into ETS
+///   without materializing a full list in memory.
 ///
 /// ## Process Ownership
 ///
