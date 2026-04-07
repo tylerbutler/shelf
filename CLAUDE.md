@@ -10,7 +10,7 @@ Persistent ETS tables backed by DETS — fast in-memory access with automatic di
 gleam build              # Compile project
 gleam test               # Run tests
 gleam check              # Type check without building
-gleam format src test    # Format code
+gleam format src test examples/src    # Format code
 gleam docs build         # Generate documentation
 ```
 

@@ -71,7 +71,7 @@ For guaranteed cleanup, use `with_table` instead of manual open/close:
 
 ```gleam
 let assert Ok(Nil) = {
-  use table <- set.with_table("cache", "data/cache.dets")
+  use table <- set.with_table("cache", "data/cache.dets", decode.string, decode.string)
   set.insert(into: table, key: "key", value: "value")
 }
 // table is automatically closed here

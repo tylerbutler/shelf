@@ -8,14 +8,17 @@ Bag tables store multiple values per key, but silently ignore duplicate key-valu
 ## Opening a Bag Table
 
 ```gleam
+import gleam/dynamic/decode
 import shelf/bag
 
-let assert Ok(table) = bag.open(name: "tags", path: "data/tags.dets")
+let assert Ok(table) =
+  bag.open(name: "tags", path: "data/tags.dets", key: decode.string, value: decode.string)
 ```
 
 For custom configuration, use `open_config`:
 
 ```gleam
+import gleam/dynamic/decode
 import shelf
 import shelf/bag
 
@@ -23,7 +26,7 @@ let config =
   shelf.config(name: "tags", path: "data/tags.dets")
   |> shelf.write_mode(shelf.WriteThrough)
 
-let assert Ok(table) = bag.open_config(config)
+let assert Ok(table) = bag.open_config(config: config, key: decode.string, value: decode.string)
 ```
 
 ## Reading Data

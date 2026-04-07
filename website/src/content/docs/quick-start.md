@@ -18,11 +18,13 @@ gleam add shelf
 ## 2. Open a persistent table
 
 ```gleam
+import gleam/dynamic/decode
 import shelf/set
 
 pub fn main() {
   // Open a persistent set — loads existing data from disk
-  let assert Ok(table) = set.open(name: "users", path: "data/users.dets")
+  let assert Ok(table) =
+    set.open(name: "users", path: "data/users.dets", key: decode.string, value: decode.int)
 
   // Fast writes (to ETS)
   let assert Ok(Nil) = set.insert(table, "alice", 42)
@@ -39,7 +41,7 @@ pub fn main() {
 }
 ```
 
-On next startup, `set.open` automatically loads the saved data back into ETS.
+On next startup, `set.open` automatically loads the saved data back into ETS. The decoders ensure that every entry loaded from disk matches the expected types — any corrupted or mistyped entries are caught at load time.
 
 ## Next steps
 
