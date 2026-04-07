@@ -1,24 +1,16 @@
-import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode
 import shelf
 import shelf/set
 import startest.{describe, it}
 import startest/expect
-
-fn cleanup(path: String) {
-  let _ = delete_file(path)
-  Nil
-}
-
-@external(erlang, "file", "delete")
-fn delete_file(path: String) -> Result(Nil, Dynamic)
+import test_helpers
 
 pub fn error_handling_tests() {
   describe("error handling", [
     describe("with_table panic safety", [
       it("catches panics and still closes the table", fn() {
         let path = "/tmp/shelf_eh_panic.dets"
-        cleanup(path)
+        test_helpers.cleanup(path)
         // with_table with a panicking callback
         let result =
           set.with_table(
@@ -44,13 +36,13 @@ pub fn error_handling_tests() {
             value: decode.string,
           )
         let assert Ok(Nil) = set.close(table)
-        cleanup(path)
+        test_helpers.cleanup(path)
         Nil
       }),
       it("propagates close error when callback succeeds", fn() {
         // Verify normal operation works
         let path = "/tmp/shelf_eh_normal.dets"
-        cleanup(path)
+        test_helpers.cleanup(path)
         let assert Ok(42) =
           set.with_table(
             "eh_normal",
@@ -63,12 +55,12 @@ pub fn error_handling_tests() {
               set.lookup(table, "key")
             },
           )
-        cleanup(path)
+        test_helpers.cleanup(path)
         Nil
       }),
       it("returns callback error over close error", fn() {
         let path = "/tmp/shelf_eh_cb_err.dets"
-        cleanup(path)
+        test_helpers.cleanup(path)
         let result =
           set.with_table(
             "eh_cb_err",
@@ -79,14 +71,14 @@ pub fn error_handling_tests() {
             fun: fn(_table) { Error(shelf.NotFound) },
           )
         expect.to_equal(result, Error(shelf.NotFound))
-        cleanup(path)
+        test_helpers.cleanup(path)
         Nil
       }),
     ]),
     describe("TypeMismatch includes decode errors", [
       it("TypeMismatch contains decode error details", fn() {
         let path = "/tmp/shelf_eh_tm_detail.dets"
-        cleanup(path)
+        test_helpers.cleanup(path)
         // Write String values
         let assert Ok(t) =
           set.open(
@@ -117,7 +109,7 @@ pub fn error_handling_tests() {
             expect.to_equal(other, Error(shelf.TypeMismatch([])))
           }
         }
-        cleanup(path)
+        test_helpers.cleanup(path)
         Nil
       }),
     ]),
