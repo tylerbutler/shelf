@@ -22,7 +22,9 @@ fn extract_guardian_set(table: set.PSet(k, v)) -> Pid
 fn extract_guardian_bag(table: bag.PBag(k, v)) -> Pid
 
 @external(erlang, "guardian_test_ffi", "extract_guardian")
-fn extract_guardian_duplicate_bag(table: duplicate_bag.PDuplicateBag(k, v)) -> Pid
+fn extract_guardian_duplicate_bag(
+  table: duplicate_bag.PDuplicateBag(k, v),
+) -> Pid
 
 pub fn guardian_tests() {
   describe("guardian lifecycle", [
@@ -150,11 +152,7 @@ pub fn guardian_tests() {
   ])
 }
 
-fn open_close_collect(
-  path: String,
-  remaining: Int,
-  acc: List(Pid),
-) -> List(Pid) {
+fn open_close_collect(path: String, remaining: Int, acc: List(Pid)) -> List(Pid) {
   case remaining {
     0 -> acc
     n -> {
