@@ -1,0 +1,5 @@
+kind: Fixed
+body: |-
+    Fix with_table leaking table handle on callback panic
+    `with_table` now wraps the callback in a rescue handler. If the callback panics, the table is still properly closed and an `ErlangError` is returned instead of crashing the caller.
+time: 2026-03-23T18:49:01.000000000-07:00

@@ -30,10 +30,11 @@ fn pattern_1_with_table() {
   let assert Ok(greeting) =
     set.with_table(
       "safe_auto",
-      "/tmp/shelf_examples_safe_auto.dets",
-      decode.string,
-      decode.string,
-      fn(table) {
+      "shelf_examples_safe_auto.dets",
+      base_directory: "/tmp",
+      key: decode.string,
+      value: decode.string,
+      fun: fn(table) {
         // Inside the callback the table is open and ready to use.
         let assert Ok(Nil) =
           set.insert(into: table, key: "language", value: "Gleam")
@@ -66,7 +67,8 @@ fn pattern_2_save_reload() {
   let assert Ok(table) =
     set.open(
       name: "safe_manual",
-      path: "/tmp/shelf_examples_safe_manual.dets",
+      path: "shelf_examples_safe_manual.dets",
+      base_directory: "/tmp",
       key: decode.string,
       value: decode.string,
     )

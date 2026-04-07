@@ -1,0 +1,5 @@
+kind: Fixed
+body: |-
+    Prevent VM crashes due to atom table exhaustion during saves
+    Removed dynamic atom generation during `save/2` temporary DETS creation.
+time: 2026-04-04T20:54:58.050399-07:00

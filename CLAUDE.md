@@ -38,7 +38,7 @@ test/
 
 ### How It Works
 
-1. **Open**: Creates an ETS table + opens a DETS file + loads DETS→ETS via `ets:from_dets/2`
+1. **Open**: Creates an ETS table + opens a DETS file, then validates all DETS entries through user-supplied decoders before inserting into ETS
 2. **Reads**: Always from ETS (microsecond latency)
 3. **Writes**: Always to ETS; DETS depends on WriteMode
 4. **Save**: `ets:to_dets/2` atomically snapshots ETS contents to DETS
@@ -53,11 +53,11 @@ test/
 
 The `shelf_ffi.erl` module wraps raw `ets:*` and `dets:*` calls with error translation. Key native functions used:
 - `ets:to_dets(EtsTab, DetsTab)` — replaces all DETS contents with ETS (atomic snapshot)
-- `ets:from_dets(EtsTab, DetsTab)` — merges DETS objects into ETS (additive)
+- `dets:foldl/3` via `dets_to_list/1` — extracts raw DETS entries for Gleam-side decoder validation
 
 ### Design Decisions
 
-- **Direct Erlang wrapping** (not built on bravo/slate) to use efficient `ets:to_dets/ets:from_dets` bulk transfers
+- **Direct Erlang wrapping** (not built on bravo/slate) to use efficient `ets:to_dets` bulk transfers and decoder-validated loading
 - **Opaque table handles**: `PSet(k, v)`, `PBag(k, v)`, `PDuplicateBag(k, v)` enforce type safety
 - **No ordered set**: DETS doesn't support `ordered_set`
 - **ETS table name = user-provided name**: Converted to atom via `binary_to_atom`

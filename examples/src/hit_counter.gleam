@@ -15,7 +15,8 @@ pub fn main() {
   let assert Ok(counter) =
     set.open(
       name: "hit_counter",
-      path: "/tmp/shelf_examples_hit_counter.dets",
+      path: "shelf_examples_hit_counter.dets",
+      base_directory: "/tmp",
       key: decode.string,
       value: decode.int,
     )

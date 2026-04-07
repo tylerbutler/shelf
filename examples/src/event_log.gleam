@@ -21,7 +21,8 @@ pub fn main() {
   let assert Ok(table) =
     duplicate_bag.open(
       name: "event_log",
-      path: "/tmp/shelf_examples_event_log.dets",
+      path: "shelf_examples_event_log.dets",
+      base_directory: "/tmp",
       key: decode.string,
       value: decode.int,
     )
