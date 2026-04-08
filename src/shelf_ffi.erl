@@ -12,7 +12,8 @@
     dets_fold_into_ets_strict/3, dets_fold_into_ets_lenient/3,
     dets_insert/2, dets_insert_list/2,
     dets_delete_key/2, dets_delete_object/3, dets_delete_all/1,
-    validate_path/2
+    validate_path/2,
+    normalize_path/1
 ]).
 
 %% ── DETS atom registry ──────────────────────────────────────────────────
@@ -247,10 +248,9 @@ close(Ets, Dets, Guardian) ->
     case check_owner(Ets) of
         {error, _} = Err -> Err;
         ok ->
-            Path = try dets_to_path(Dets) catch _:_ -> undefined end,
+            Path = dets_to_path(Dets),
             SaveResult = case Path of
                 undefined ->
-                    %% DETS handle is stale/closed — cannot save.
                     {error, table_closed};
                 _ ->
                     case (catch save(Ets, Dets)) of
@@ -261,7 +261,6 @@ close(Ets, Dets, Guardian) ->
             end,
             case SaveResult of
                 ok ->
-                    %% Save succeeded — tear down resources.
                     stop_guardian(Guardian),
                     CloseResult = (catch dets:close(Dets)),
                     _ = (catch ets:delete(Ets)),
@@ -276,8 +275,6 @@ close(Ets, Dets, Guardian) ->
                         _ -> {ok, nil}
                     end;
                 {error, Reason2} ->
-                    %% Save failed — leave guardian, ETS, and DETS intact
-                    %% so the caller can retry save() or close() later.
                     {error, translate_error(Reason2)};
                 _ -> {ok, nil}
             end
