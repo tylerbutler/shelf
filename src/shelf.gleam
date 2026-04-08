@@ -146,6 +146,10 @@ pub opaque type Config {
 
 /// Create a config with defaults (WriteBack mode, Strict decode policy).
 ///
+/// The `name` is a diagnostic label for the table — it is not used as an
+/// ETS table name and does not need to be unique. Multiple tables can
+/// share the same name as long as they use different DETS file paths.
+///
 /// The `base_directory` restricts DETS file paths to prevent directory
 /// traversal attacks. The `path` is resolved relative to `base_directory`.
 ///
