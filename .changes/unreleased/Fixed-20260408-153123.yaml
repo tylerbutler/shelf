@@ -1,0 +1,3 @@
+kind: Fixed
+body: close() no longer destroys ETS state when save fails; the table, DETS handle, and guardian process are preserved so the caller can retry
+time: 2026-04-08T15:31:23.403812-07:00

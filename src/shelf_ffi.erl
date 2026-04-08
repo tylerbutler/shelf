@@ -241,15 +241,17 @@ cleanup(Ets, Dets, Guardian) ->
 
 %% ── Close ───────────────────────────────────────────────────────────────
 %% Atomic save ETS→DETS via temp file, close DETS, delete ETS.
+%% On save failure, everything is left intact so the caller can retry.
 
 close(Ets, Dets, Guardian) ->
     case check_owner(Ets) of
         {error, _} = Err -> Err;
         ok ->
-            stop_guardian(Guardian),
             Path = try dets_to_path(Dets) catch _:_ -> undefined end,
             SaveResult = case Path of
-                undefined -> ok;
+                undefined ->
+                    %% DETS handle is stale/closed — cannot save.
+                    {error, table_closed};
                 _ ->
                     case (catch save(Ets, Dets)) of
                         {ok, nil} -> ok;
@@ -257,21 +259,26 @@ close(Ets, Dets, Guardian) ->
                         {'EXIT', Reason} -> {error, Reason}
                     end
             end,
-            CloseResult = (catch dets:close(Dets)),
-            _ = (catch ets:delete(Ets)),
-            case Path of
-                undefined -> ok;
-                _ -> unregister_dets_name(Path)
-            end,
             case SaveResult of
                 ok ->
+                    %% Save succeeded — tear down resources.
+                    stop_guardian(Guardian),
+                    CloseResult = (catch dets:close(Dets)),
+                    _ = (catch ets:delete(Ets)),
+                    case Path of
+                        undefined -> ok;
+                        _ -> unregister_dets_name(Path)
+                    end,
                     case CloseResult of
                         ok -> {ok, nil};
                         {error, Reason3} -> {error, translate_error(Reason3)};
                         {'EXIT', Reason4} -> {error, translate_error(Reason4)};
                         _ -> {ok, nil}
                     end;
-                {error, Reason2} -> {error, translate_error(Reason2)};
+                {error, Reason2} ->
+                    %% Save failed — leave guardian, ETS, and DETS intact
+                    %% so the caller can retry save() or close() later.
+                    {error, translate_error(Reason2)};
                 _ -> {ok, nil}
             end
     end.
