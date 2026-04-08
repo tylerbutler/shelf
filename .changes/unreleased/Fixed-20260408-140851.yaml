@@ -1,0 +1,7 @@
+kind: Fixed
+body: |-
+    Correctly classify non-owner ETS write errors
+    Previously all ETS badarg errors were mapped to TableClosed, making
+    ownership violations indistinguishable from closed tables. The FFI
+    now checks ets:info(Ets, owner) to return the appropriate error.
+time: 2026-04-08T14:08:51.395419-07:00

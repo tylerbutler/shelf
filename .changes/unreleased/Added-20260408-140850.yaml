@@ -1,0 +1,8 @@
+kind: Added
+body: |-
+    Add NotOwner error variant to ShelfError
+    Non-owner processes that attempt writes or lifecycle operations now
+    receive a clear NotOwner error instead of the misleading TableClosed.
+    Reads (lookup, member, to_list, fold, size) continue to work from
+    any process.
+time: 2026-04-08T14:08:50.394788-07:00
