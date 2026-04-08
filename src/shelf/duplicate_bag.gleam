@@ -39,6 +39,7 @@ pub opaque type PDuplicateBag(k, v) {
     write_mode: shelf.WriteMode,
     entry_decoder: Decoder(#(k, v)),
     decode_policy: shelf.DecodePolicy,
+    skipped: Int,
   )
 }
 
@@ -80,6 +81,7 @@ pub fn open_config(
     write_mode: result.3,
     entry_decoder: result.4,
     decode_policy: result.5,
+    skipped: result.6,
   ))
 }
 
@@ -201,6 +203,13 @@ pub fn size(of table: PDuplicateBag(k, v)) -> Result(Int, ShelfError) {
   internal.size(table.ets)
 }
 
+/// Returns the number of entries that were skipped during the most recent
+/// load from DETS (open or reload). Always 0 when using Strict decode policy.
+///
+pub fn skipped_on_load(table: PDuplicateBag(k, v)) -> Int {
+  table.skipped
+}
+
 // ── Write ───────────────────────────────────────────────────────────────
 
 /// Insert a key-value pair. Duplicates are preserved.
@@ -281,7 +290,7 @@ pub fn save(table: PDuplicateBag(k, v)) -> Result(Nil, ShelfError) {
 /// Only useful in WriteBack mode — in WriteThrough mode, ETS and
 /// DETS are always in sync.
 ///
-pub fn reload(table: PDuplicateBag(k, v)) -> Result(Nil, ShelfError) {
+pub fn reload(table: PDuplicateBag(k, v)) -> Result(Int, ShelfError) {
   internal.generic_reload(
     table.ets,
     table.dets,

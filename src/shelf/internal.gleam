@@ -39,13 +39,14 @@ pub fn build_entry_decoder(
 ///
 /// Uses `dets:foldl` in the FFI to avoid materializing all entries into memory.
 /// Peak memory is ~1x (just the ETS table) instead of ~3x with the bulk approach.
+/// Returns the number of skipped entries (always 0 for Strict mode).
 @internal
 pub fn stream_validate_and_load(
   ets: EtsRef,
   dets: DetsRef,
   entry_decoder: Decoder(#(k, v)),
   policy: DecodePolicy,
-) -> Result(Nil, ShelfError) {
+) -> Result(Int, ShelfError) {
   let decoder_fn = fn(entry: Dynamic) -> Result(
     #(k, v),
     List(decode.DecodeError),
@@ -63,14 +64,14 @@ fn ffi_dets_fold_into_ets_strict(
   dets: DetsRef,
   ets: EtsRef,
   decoder_fn: fn(Dynamic) -> Result(#(k, v), List(decode.DecodeError)),
-) -> Result(Nil, ShelfError)
+) -> Result(Int, ShelfError)
 
 @external(erlang, "shelf_ffi", "dets_fold_into_ets_lenient")
 fn ffi_dets_fold_into_ets_lenient(
   dets: DetsRef,
   ets: EtsRef,
   decoder_fn: fn(Dynamic) -> Result(#(k, v), List(decode.DecodeError)),
-) -> Result(Nil, ShelfError)
+) -> Result(Int, ShelfError)
 
 // ── Generic table operations ────────────────────────────────────────────
 // These eliminate duplication between set, bag, and duplicate_bag modules.
@@ -83,7 +84,15 @@ pub fn generic_open(
   key_decoder: Decoder(k),
   value_decoder: Decoder(v),
 ) -> Result(
-  #(EtsRef, DetsRef, GuardianRef, WriteMode, Decoder(#(k, v)), DecodePolicy),
+  #(
+    EtsRef,
+    DetsRef,
+    GuardianRef,
+    WriteMode,
+    Decoder(#(k, v)),
+    DecodePolicy,
+    Int,
+  ),
   ShelfError,
 ) {
   let name = shelf.get_name(config)
@@ -98,8 +107,16 @@ pub fn generic_open(
   let guardian = refs.2
   let entry_decoder = build_entry_decoder(key_decoder, value_decoder)
   case stream_validate_and_load(ets, dets, entry_decoder, decode_policy) {
-    Ok(Nil) ->
-      Ok(#(ets, dets, guardian, write_mode, entry_decoder, decode_policy))
+    Ok(skipped) ->
+      Ok(#(
+        ets,
+        dets,
+        guardian,
+        write_mode,
+        entry_decoder,
+        decode_policy,
+        skipped,
+      ))
     Error(e) -> {
       let _ = cleanup(ets, dets, guardian)
       Error(e)
@@ -184,13 +201,14 @@ pub fn generic_delete_all(
 }
 
 /// Generic reload: clear ETS and stream-load from DETS.
+/// Returns the number of skipped entries (for lenient mode reporting).
 @internal
 pub fn generic_reload(
   ets: EtsRef,
   dets: DetsRef,
   entry_decoder: Decoder(#(k, v)),
   decode_policy: DecodePolicy,
-) -> Result(Nil, ShelfError) {
+) -> Result(Int, ShelfError) {
   use _ <- result.try(delete_all(ets))
   stream_validate_and_load(ets, dets, entry_decoder, decode_policy)
 }

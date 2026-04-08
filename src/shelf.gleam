@@ -85,7 +85,8 @@ pub type ShelfError {
   NotOwner
   /// DETS file could not be found or created
   FileError(String)
-  /// The DETS file is already open by another table
+  /// A DETS file at this path is already open by another shelf table.
+  /// This is a file-level conflict, not related to the table name.
   NameConflict
   /// The DETS file path is invalid (escapes base directory, contains
   /// null bytes, or is otherwise unsafe)

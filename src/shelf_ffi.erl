@@ -179,7 +179,7 @@ dets_fold_into_ets_strict(Dets, Ets, DecoderFun) ->
             {error, Reason} -> {error, translate_error(Reason)};
             {_, FinalBatch} ->
                 flush_batch(Ets, FinalBatch),
-                {ok, nil}
+                {ok, 0}
         end
     catch
         throw:{type_mismatch, Errors} -> {error, {type_mismatch, Errors}};
@@ -187,32 +187,33 @@ dets_fold_into_ets_strict(Dets, Ets, DecoderFun) ->
     end.
 
 %% Lenient mode: skip entries that fail to decode, batch successful ones.
+%% Returns {ok, SkippedCount} on success.
 dets_fold_into_ets_lenient(Dets, Ets, DecoderFun) ->
     try
         Result = dets:foldl(
-            fun(Entry, {Count, Batch}) ->
+            fun(Entry, {Count, Batch, Skipped}) ->
                 case DecoderFun(Entry) of
                     {ok, Pair} ->
                         NewBatch = [Pair | Batch],
                         case Count + 1 of
                             ?LOAD_BATCH_SIZE ->
                                 flush_batch(Ets, NewBatch),
-                                {0, []};
+                                {0, [], Skipped};
                             NewCount ->
-                                {NewCount, NewBatch}
+                                {NewCount, NewBatch, Skipped}
                         end;
                     {error, _} ->
-                        {Count, Batch}
+                        {Count, Batch, Skipped + 1}
                 end
             end,
-            {0, []},
+            {0, [], 0},
             Dets
         ),
         case Result of
             {error, Reason} -> {error, translate_error(Reason)};
-            {_, FinalBatch} ->
+            {_, FinalBatch, SkippedCount} ->
                 flush_batch(Ets, FinalBatch),
-                {ok, nil}
+                {ok, SkippedCount}
         end
     catch
         _:CatchReason -> {error, translate_error(CatchReason)}

@@ -322,7 +322,7 @@ pub fn duplicate_bag_tests() {
         let assert Ok(Nil) = duplicate_bag.save(table)
         let assert Ok(Nil) = duplicate_bag.insert(table, "unsaved", "oops")
         let assert Ok(True) = duplicate_bag.member(table, "unsaved")
-        let assert Ok(Nil) = duplicate_bag.reload(table)
+        let assert Ok(_) = duplicate_bag.reload(table)
         let assert Ok(True) = duplicate_bag.member(table, "saved")
         let assert Ok(False) = duplicate_bag.member(table, "unsaved")
         let assert Ok(Nil) = duplicate_bag.close(table)
