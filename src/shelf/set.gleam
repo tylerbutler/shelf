@@ -5,6 +5,11 @@
 /// into memory and validated against the provided decoders. On close,
 /// data is saved back to disk.
 ///
+/// **Ownership**: The process that calls `open()` owns the table. Reads
+/// work from any process; writes and lifecycle ops (`insert`, `delete_*`,
+/// `update_counter`, `save`, `reload`, `sync`, `close`) are owner-only
+/// and return `Error(NotOwner)` from other processes.
+///
 /// ## Example
 ///
 /// ```gleam
@@ -324,7 +329,7 @@ pub fn reload(table: PSet(k, v)) -> Result(Nil, ShelfError) {
 /// when you want to guarantee durability.
 ///
 pub fn sync(table: PSet(k, v)) -> Result(Nil, ShelfError) {
-  internal.sync_dets(table.dets)
+  internal.sync_dets(table.ets, table.dets)
 }
 
 // ── Counters ────────────────────────────────────────────────────────────

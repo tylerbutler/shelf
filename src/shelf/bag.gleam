@@ -4,6 +4,11 @@
 /// (for persistence). Multiple values can be stored per key, but
 /// duplicate key-value pairs are silently ignored.
 ///
+/// **Ownership**: The process that calls `open()` owns the table. Reads
+/// work from any process; writes and lifecycle ops (`insert`, `delete_*`,
+/// `save`, `reload`, `sync`, `close`) are owner-only and return
+/// `Error(NotOwner)` from other processes.
+///
 /// ## Example
 ///
 /// ```gleam
@@ -281,7 +286,7 @@ pub fn reload(table: PBag(k, v)) -> Result(Nil, ShelfError) {
 /// when you want to guarantee durability.
 ///
 pub fn sync(table: PBag(k, v)) -> Result(Nil, ShelfError) {
-  internal.sync_dets(table.dets)
+  internal.sync_dets(table.ets, table.dets)
 }
 
 // ── FFI bindings (bag-specific) ─────────────────────────────────────────

@@ -54,6 +54,15 @@
 /// reloads it. In long-running applications, ensure the owning process is
 /// supervised.
 ///
+/// **Reads** (`lookup`, `member`, `to_list`, `fold`, `size`) work from any
+/// process — ETS tables are created as `protected`.
+///
+/// **Writes and lifecycle** (`insert`, `delete_*`, `update_counter`, `save`,
+/// `reload`, `sync`, `close`) are restricted to the owner process. Non-owner
+/// attempts return `Error(NotOwner)`. If you need cross-process writes, wrap
+/// the table in a supervised actor/server that owns the table and forwards
+/// mutation requests.
+///
 /// ## Errors
 ///
 /// Operations return `Result` with `ShelfError` for failures.
@@ -67,6 +76,13 @@ pub type ShelfError {
   KeyAlreadyPresent
   /// Table has been closed or doesn't exist
   TableClosed
+  /// The calling process is not the table owner.
+  ///
+  /// ETS tables are `protected` — only the process that called `open()`
+  /// can perform writes and lifecycle operations. Other processes can
+  /// read freely. Wrap the table in a supervised actor/server if you
+  /// need cross-process writes.
+  NotOwner
   /// DETS file could not be found or created
   FileError(String)
   /// An ETS table with this name already exists, or the DETS file is
