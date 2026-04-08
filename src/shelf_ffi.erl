@@ -36,18 +36,19 @@ ensure_registry() ->
     end.
 
 start_registry_owner() ->
-    try
-        Pid = spawn(fun registry_loop/0),
-        register(shelf_dets_registry_owner, Pid),
-        Pid ! {create_registry, self()},
-        receive
-            {registry_created, Pid} -> ok
-        after 5000 ->
-            error(registry_timeout)
-        end
+    Pid = spawn(fun registry_loop/0),
+    try register(shelf_dets_registry_owner, Pid) of
+        true ->
+            Pid ! {create_registry, self()},
+            receive
+                {registry_created, Pid} -> ok
+            after 5000 ->
+                error(registry_timeout)
+            end
     catch
         error:badarg ->
-            %% Another process won the race to register. Wait for the table.
+            %% Another process won the race to register. Stop the orphan.
+            Pid ! stop,
             wait_for_registry(20)
     end.
 
