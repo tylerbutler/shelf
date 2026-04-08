@@ -250,7 +250,7 @@ close(Ets, Dets, Guardian) ->
                 ok ->
                     finalize_close(Ets, Dets, Guardian, Path);
                 {error, Reason} = Err ->
-                    case preserve_table_after_close_error(Dets, Reason) of
+                    case preserve_table_after_close_error(Path, Reason) of
                         true ->
                             Err;
                         false ->
@@ -268,9 +268,9 @@ attempt_close_save(Ets, Dets) ->
         _:Reason -> {error, translate_error(Reason)}
     end.
 
-preserve_table_after_close_error(_Dets, table_closed) -> false;
-preserve_table_after_close_error(Dets, _Reason) ->
-    dets_to_path(Dets) =/= undefined.
+preserve_table_after_close_error(_Path, table_closed) -> false;
+preserve_table_after_close_error(undefined, _Reason) -> false;
+preserve_table_after_close_error(_Path, _Reason) -> true.
 
 finalize_close(Ets, Dets, Guardian, Path) ->
     stop_guardian(Guardian),

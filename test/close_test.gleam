@@ -11,33 +11,6 @@ fn simulate_external_dets_close(path: String) -> Nil
 @external(erlang, "close_test_ffi", "cleanup_after_failed_close")
 fn cleanup_after_failed_close(path: String, name: String) -> Nil
 
-@external(erlang, "close_test_ffi", "create_directory")
-fn create_directory(path: String) -> Nil
-
-@external(erlang, "close_test_ffi", "make_directory_read_only")
-fn make_directory_read_only(path: String) -> Nil
-
-@external(erlang, "close_test_ffi", "make_directory_writable")
-fn make_directory_writable(path: String) -> Nil
-
-@external(erlang, "close_test_ffi", "delete_directory")
-fn delete_directory(path: String) -> Nil
-
-fn prepare_retry_directory(dir: String, path: String) {
-  make_directory_writable(dir)
-  test_helpers.cleanup(path)
-  delete_directory(dir)
-  create_directory(dir)
-  Nil
-}
-
-fn cleanup_retry_directory(dir: String, path: String) {
-  make_directory_writable(dir)
-  test_helpers.cleanup(path)
-  delete_directory(dir)
-  Nil
-}
-
 pub fn close_save_failure_tests() {
   describe("close/3 save failure", [
     it("returns TableClosed and tears down state for terminal failures", fn() {
@@ -64,7 +37,7 @@ pub fn close_save_failure_tests() {
     it("preserves ETS data on retryable save failures", fn() {
       let dir = "/tmp/shelf_close_preserve"
       let path = "/tmp/shelf_close_preserve/table.dets"
-      prepare_retry_directory(dir, path)
+      test_helpers.prepare_retry_directory(dir, path)
       let assert Ok(table) =
         set.open(
           name: "close_preserve",
@@ -75,20 +48,20 @@ pub fn close_save_failure_tests() {
         )
       let assert Ok(Nil) = set.insert(table, "key1", "value1")
 
-      make_directory_read_only(dir)
+      test_helpers.make_directory_read_only(dir)
 
       set.close(table) |> expect.to_be_error
       let assert Ok("value1") = set.lookup(table, "key1")
-      make_directory_writable(dir)
+      test_helpers.make_directory_writable(dir)
       let assert Ok(Nil) = set.close(table)
 
-      cleanup_retry_directory(dir, path)
+      test_helpers.cleanup_retry_directory(dir, path)
       Nil
     }),
     it("allows retrying close after a retryable save failure", fn() {
       let dir = "/tmp/shelf_close_usable"
       let path = "/tmp/shelf_close_usable/table.dets"
-      prepare_retry_directory(dir, path)
+      test_helpers.prepare_retry_directory(dir, path)
       let assert Ok(table) =
         set.open(
           name: "close_usable",
@@ -99,22 +72,22 @@ pub fn close_save_failure_tests() {
         )
       let assert Ok(Nil) = set.insert(table, "a", "1")
 
-      make_directory_read_only(dir)
+      test_helpers.make_directory_read_only(dir)
 
       let assert Error(_) = set.close(table)
       let assert Ok("1") = set.lookup(table, "a")
       let assert Ok(Nil) = set.insert(table, "b", "2")
       let assert Ok("2") = set.lookup(table, "b")
-      make_directory_writable(dir)
+      test_helpers.make_directory_writable(dir)
       let assert Ok(Nil) = set.close(table)
 
-      cleanup_retry_directory(dir, path)
+      test_helpers.cleanup_retry_directory(dir, path)
       Nil
     }),
     it("preserves state in WriteThrough mode", fn() {
       let dir = "/tmp/shelf_close_wt"
       let path = "/tmp/shelf_close_wt/table.dets"
-      prepare_retry_directory(dir, path)
+      test_helpers.prepare_retry_directory(dir, path)
 
       let config =
         shelf.config(name: "close_wt", path: path, base_directory: "/tmp")
@@ -123,14 +96,14 @@ pub fn close_save_failure_tests() {
         set.open_config(config, key: decode.string, value: decode.string)
       let assert Ok(Nil) = set.insert(table, "x", "y")
 
-      make_directory_read_only(dir)
+      test_helpers.make_directory_read_only(dir)
 
       let assert Error(_) = set.close(table)
       let assert Ok("y") = set.lookup(table, "x")
-      make_directory_writable(dir)
+      test_helpers.make_directory_writable(dir)
       let assert Ok(Nil) = set.close(table)
 
-      cleanup_retry_directory(dir, path)
+      test_helpers.cleanup_retry_directory(dir, path)
       Nil
     }),
   ])

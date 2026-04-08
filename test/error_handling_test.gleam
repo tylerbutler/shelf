@@ -5,33 +5,6 @@ import startest.{describe, it}
 import startest/expect
 import test_helpers
 
-@external(erlang, "close_test_ffi", "create_directory")
-fn create_directory(path: String) -> Nil
-
-@external(erlang, "close_test_ffi", "make_directory_read_only")
-fn make_directory_read_only(path: String) -> Nil
-
-@external(erlang, "close_test_ffi", "make_directory_writable")
-fn make_directory_writable(path: String) -> Nil
-
-@external(erlang, "close_test_ffi", "delete_directory")
-fn delete_directory(path: String) -> Nil
-
-fn prepare_retry_directory(dir: String, path: String) {
-  make_directory_writable(dir)
-  test_helpers.cleanup(path)
-  delete_directory(dir)
-  create_directory(dir)
-  Nil
-}
-
-fn cleanup_retry_directory(dir: String, path: String) {
-  make_directory_writable(dir)
-  test_helpers.cleanup(path)
-  delete_directory(dir)
-  Nil
-}
-
 pub fn error_handling_tests() {
   describe("error handling", [
     describe("with_table panic safety", [
@@ -104,7 +77,7 @@ pub fn error_handling_tests() {
       it("force-cleans up after a close error", fn() {
         let dir = "/tmp/shelf_eh_close_retry"
         let path = "/tmp/shelf_eh_close_retry/table.dets"
-        prepare_retry_directory(dir, path)
+        test_helpers.prepare_retry_directory(dir, path)
 
         let result =
           set.with_table(
@@ -115,12 +88,12 @@ pub fn error_handling_tests() {
             value: decode.string,
             fun: fn(table) {
               let assert Ok(Nil) = set.insert(table, "key", "value")
-              make_directory_read_only(dir)
+              test_helpers.make_directory_read_only(dir)
               Ok("done")
             },
           )
 
-        make_directory_writable(dir)
+        test_helpers.make_directory_writable(dir)
         result |> expect.to_be_error
 
         let assert Ok(table) =
@@ -134,7 +107,7 @@ pub fn error_handling_tests() {
         expect.to_equal(set.lookup(table, "key"), Error(shelf.NotFound))
         let assert Ok(Nil) = set.close(table)
 
-        cleanup_retry_directory(dir, path)
+        test_helpers.cleanup_retry_directory(dir, path)
         Nil
       }),
     ]),
