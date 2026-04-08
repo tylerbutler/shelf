@@ -195,6 +195,32 @@ pub fn generic_reload(
   stream_validate_and_load(ets, dets, entry_decoder, decode_policy)
 }
 
+/// Shared with_table implementation: open, run callback (with panic rescue),
+/// then close. Preserves crash detail from the rescue FFI.
+@internal
+pub fn generic_with_table(
+  open_fn: fn() -> Result(table, ShelfError),
+  close_fn: fn(table) -> Result(Nil, ShelfError),
+  fun: fn(table) -> Result(a, ShelfError),
+) -> Result(a, ShelfError) {
+  use table <- result.try(open_fn())
+  let callback_result = case rescue(fn() { fun(table) }) {
+    Ok(result) -> result
+    Error(crash_detail) -> Error(shelf.ErlangError(crash_detail))
+  }
+  case close_fn(table) {
+    Ok(Nil) -> callback_result
+    Error(close_err) ->
+      case callback_result {
+        Ok(_) -> Error(close_err)
+        Error(_) -> callback_result
+      }
+  }
+}
+
+@external(erlang, "shelf_rescue_ffi", "rescue")
+pub fn rescue(fun: fn() -> a) -> Result(a, String)
+
 /// Generic fold with key-value destructuring.
 @internal
 pub fn generic_fold(

@@ -129,29 +129,20 @@ pub fn with_table(
   value value_decoder: Decoder(v),
   fun fun: fn(PBag(k, v)) -> Result(a, ShelfError),
 ) -> Result(a, ShelfError) {
-  use table <- result.try(open(
-    name:,
-    path:,
-    base_directory:,
-    key: key_decoder,
-    value: value_decoder,
-  ))
-  let result = case rescue(fn() { fun(table) }) {
-    Ok(result) -> result
-    Error(_crash) -> Error(shelf.ErlangError("Callback panicked"))
-  }
-  case close(table) {
-    Ok(Nil) -> result
-    Error(close_err) ->
-      case result {
-        Ok(_) -> Error(close_err)
-        Error(_) -> result
-      }
-  }
+  internal.generic_with_table(
+    fn() {
+      open(
+        name:,
+        path:,
+        base_directory:,
+        key: key_decoder,
+        value: value_decoder,
+      )
+    },
+    close,
+    fun,
+  )
 }
-
-@external(erlang, "shelf_rescue_ffi", "rescue")
-fn rescue(fun: fn() -> a) -> Result(a, String)
 
 // ── Read ────────────────────────────────────────────────────────────────
 

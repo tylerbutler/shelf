@@ -228,15 +228,18 @@ stop_guardian(Guardian) ->
 %% Delete ETS table and close DETS without saving. Used on validation failure.
 
 cleanup(Ets, Dets, Guardian) ->
-    try
-        stop_guardian(Guardian),
-        Path = dets_to_path(Dets),
-        _ = dets:close(Dets),
-        _ = ets:delete(Ets),
-        unregister_dets_name(Path),
-        {ok, nil}
-    catch
-        _:_ -> {ok, nil}
+    stop_guardian(Guardian),
+    Path = try dets_to_path(Dets) catch _:_ -> undefined end,
+    DetsResult = (catch dets:close(Dets)),
+    _ = (catch ets:delete(Ets)),
+    case Path of
+        undefined -> ok;
+        _ -> unregister_dets_name(Path)
+    end,
+    case DetsResult of
+        ok -> {ok, nil};
+        {error, Reason} -> {error, translate_error(Reason)};
+        _ -> {ok, nil}
     end.
 
 %% ── Close ───────────────────────────────────────────────────────────────
