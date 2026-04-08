@@ -236,15 +236,29 @@ pub fn insert_list(
 ///
 /// Returns `Error(KeyAlreadyPresent)` if the key exists.
 ///
+/// In WriteThrough mode, uniqueness is checked in ETS first, then DETS
+/// is written, then ETS. Since writes are owner-only (single process),
+/// there is no race between the check and write.
+///
 pub fn insert_new(
   into table: PSet(k, v),
   key key: k,
   value value: v,
 ) -> Result(Nil, ShelfError) {
-  use _ <- result.try(ffi_insert_new(table.ets, table.dets, #(key, value)))
   case table.write_mode {
-    shelf.WriteThrough -> internal.dets_insert(table.dets, #(key, value))
-    shelf.WriteBack -> Ok(Nil)
+    shelf.WriteThrough -> {
+      // Check uniqueness in ETS first
+      use exists <- result.try(internal.member(table.ets, key))
+      case exists {
+        True -> Error(shelf.KeyAlreadyPresent)
+        False -> {
+          // DETS first, then ETS
+          use _ <- result.try(internal.dets_insert(table.dets, #(key, value)))
+          internal.insert(table.ets, table.dets, #(key, value))
+        }
+      }
+    }
+    shelf.WriteBack -> ffi_insert_new(table.ets, table.dets, #(key, value))
   }
 }
 
@@ -345,6 +359,9 @@ pub fn sync(table: PSet(k, v)) -> Result(Nil, ShelfError) {
 /// let assert Ok(3) = set.update_counter(table, "hits", 2)
 /// ```
 ///
+/// In WriteThrough mode, the ETS atomic increment happens first (only ETS
+/// supports update_counter), then DETS is updated. If the DETS write fails,
+/// the ETS increment is rolled back by applying the negated amount.
 pub fn update_counter(
   in table: PSet(k, Int),
   key key: k,
@@ -352,10 +369,15 @@ pub fn update_counter(
 ) -> Result(Int, ShelfError) {
   use new_val <- result.try(ffi_update_counter(table.ets, key, amount))
   case table.write_mode {
-    shelf.WriteThrough -> {
-      use _ <- result.try(internal.dets_insert(table.dets, #(key, new_val)))
-      Ok(new_val)
-    }
+    shelf.WriteThrough ->
+      case internal.dets_insert(table.dets, #(key, new_val)) {
+        Ok(Nil) -> Ok(new_val)
+        Error(e) -> {
+          // Undo ETS change to maintain consistency
+          let _ = ffi_update_counter(table.ets, key, -amount)
+          Error(e)
+        }
+      }
     shelf.WriteBack -> Ok(new_val)
   }
 }

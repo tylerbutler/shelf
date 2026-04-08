@@ -108,6 +108,8 @@ pub fn generic_open(
 }
 
 /// Generic insert with write-through support.
+/// In WriteThrough mode, DETS is written first so a DETS failure
+/// never leaves ETS in a divergent state.
 @internal
 pub fn generic_insert(
   ets: EtsRef,
@@ -116,10 +118,12 @@ pub fn generic_insert(
   key: k,
   value: v,
 ) -> Result(Nil, ShelfError) {
-  use _ <- result.try(insert(ets, dets, #(key, value)))
   case write_mode {
-    shelf.WriteThrough -> dets_insert(dets, #(key, value))
-    shelf.WriteBack -> Ok(Nil)
+    shelf.WriteThrough -> {
+      use _ <- result.try(dets_insert(dets, #(key, value)))
+      insert(ets, dets, #(key, value))
+    }
+    shelf.WriteBack -> insert(ets, dets, #(key, value))
   }
 }
 
@@ -131,10 +135,12 @@ pub fn generic_insert_list(
   write_mode: WriteMode,
   entries: List(#(k, v)),
 ) -> Result(Nil, ShelfError) {
-  use _ <- result.try(insert_list(ets, dets, entries))
   case write_mode {
-    shelf.WriteThrough -> dets_insert_list(dets, entries)
-    shelf.WriteBack -> Ok(Nil)
+    shelf.WriteThrough -> {
+      use _ <- result.try(dets_insert_list(dets, entries))
+      insert_list(ets, dets, entries)
+    }
+    shelf.WriteBack -> insert_list(ets, dets, entries)
   }
 }
 
@@ -146,10 +152,12 @@ pub fn generic_delete_key(
   write_mode: WriteMode,
   key: k,
 ) -> Result(Nil, ShelfError) {
-  use _ <- result.try(delete_key(ets, key))
   case write_mode {
-    shelf.WriteThrough -> dets_delete_key(dets, key)
-    shelf.WriteBack -> Ok(Nil)
+    shelf.WriteThrough -> {
+      use _ <- result.try(dets_delete_key(dets, key))
+      delete_key(ets, key)
+    }
+    shelf.WriteBack -> delete_key(ets, key)
   }
 }
 
@@ -162,10 +170,12 @@ pub fn generic_delete_object(
   key: k,
   value: v,
 ) -> Result(Nil, ShelfError) {
-  use _ <- result.try(delete_object(ets, key, value))
   case write_mode {
-    shelf.WriteThrough -> dets_delete_object(dets, key, value)
-    shelf.WriteBack -> Ok(Nil)
+    shelf.WriteThrough -> {
+      use _ <- result.try(dets_delete_object(dets, key, value))
+      delete_object(ets, key, value)
+    }
+    shelf.WriteBack -> delete_object(ets, key, value)
   }
 }
 
@@ -176,10 +186,12 @@ pub fn generic_delete_all(
   dets: DetsRef,
   write_mode: WriteMode,
 ) -> Result(Nil, ShelfError) {
-  use _ <- result.try(delete_all(ets))
   case write_mode {
-    shelf.WriteThrough -> dets_delete_all(dets)
-    shelf.WriteBack -> Ok(Nil)
+    shelf.WriteThrough -> {
+      use _ <- result.try(dets_delete_all(dets))
+      delete_all(ets)
+    }
+    shelf.WriteBack -> delete_all(ets)
   }
 }
 
