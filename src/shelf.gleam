@@ -85,8 +85,7 @@ pub type ShelfError {
   NotOwner
   /// DETS file could not be found or created
   FileError(String)
-  /// An ETS table with this name already exists, or the DETS file is
-  /// already open by another table
+  /// The DETS file is already open by another table
   NameConflict
   /// The DETS file path is invalid (escapes base directory, contains
   /// null bytes, or is otherwise unsafe)
@@ -132,7 +131,7 @@ pub type WriteMode {
 /// Configuration for opening a persistent table.
 pub opaque type Config {
   Config(
-    /// Unique name for the ETS table (must not conflict with other ETS tables)
+    /// Diagnostic label for the table (not used as an ETS table name)
     name: String,
     /// File path for the DETS backing store (relative to base_directory)
     path: String,

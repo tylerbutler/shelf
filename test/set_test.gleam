@@ -1,6 +1,10 @@
 import gleam/dynamic/decode
+import gleam/int
 import gleam/list
 import gleam/string
+
+const atom_safety_count = 100
+
 import shelf
 import shelf/set
 import startest.{describe, it}
@@ -249,6 +253,62 @@ pub fn set_tests() {
         expect.to_equal(sum, 6)
         let assert Ok(Nil) = set.close(table)
         test_helpers.cleanup(path)
+        Nil
+      }),
+    ]),
+    describe("atom safety", [
+      it("many distinct names do not exhaust atoms", fn() {
+        // Regression test for #28: open_no_load used binary_to_atom on
+        // user-provided names, risking atom exhaustion with many distinct names.
+        // Now ETS tables use a fixed atom, so this is safe.
+        int.range(1, atom_safety_count, [], fn(acc, i) {
+          let name = "atom_safety_" <> string.inspect(i)
+          let path = "/tmp/shelf_atom_safety_" <> string.inspect(i) <> ".dets"
+          test_helpers.cleanup(path)
+          let assert Ok(table) =
+            set.open(
+              name: name,
+              path: path,
+              base_directory: "/tmp",
+              key: decode.string,
+              value: decode.int,
+            )
+          let assert Ok(Nil) = set.insert(table, "k", i)
+          let assert Ok(Nil) = set.close(table)
+          test_helpers.cleanup(path)
+          [i, ..acc]
+        })
+        Nil
+      }),
+      it("same name with different paths coexist", fn() {
+        let path_a = "/tmp/shelf_same_name_a.dets"
+        let path_b = "/tmp/shelf_same_name_b.dets"
+        test_helpers.cleanup(path_a)
+        test_helpers.cleanup(path_b)
+        let assert Ok(table_a) =
+          set.open(
+            name: "same_name",
+            path: path_a,
+            base_directory: "/tmp",
+            key: decode.string,
+            value: decode.int,
+          )
+        let assert Ok(table_b) =
+          set.open(
+            name: "same_name",
+            path: path_b,
+            base_directory: "/tmp",
+            key: decode.string,
+            value: decode.int,
+          )
+        let assert Ok(Nil) = set.insert(table_a, "key", 1)
+        let assert Ok(Nil) = set.insert(table_b, "key", 2)
+        let assert Ok(1) = set.lookup(table_a, "key")
+        let assert Ok(2) = set.lookup(table_b, "key")
+        let assert Ok(Nil) = set.close(table_a)
+        let assert Ok(Nil) = set.close(table_b)
+        test_helpers.cleanup(path_a)
+        test_helpers.cleanup(path_b)
         Nil
       }),
     ]),
