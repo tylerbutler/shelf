@@ -108,11 +108,22 @@ pub fn open(
 
 /// Close the table, saving all data to disk.
 ///
+/// On `Ok(Nil)`, the handle must not be used again. If the final save
+/// fails with a retryable persistence error, `close()` returns
+/// `Error(...)` and leaves the table open so the caller can retry.
+/// If close fails terminally, Shelf still releases resources and future
+/// operations on the handle return `Error(TableClosed)`.
+///
 pub fn close(table: PBag(k, v)) -> Result(Nil, ShelfError) {
   internal.close(table.ets, table.dets, table.guardian)
 }
 
 /// Use a table within a callback, ensuring it is closed afterward.
+///
+/// If the final save fails during close, `with_table` force-cleans the
+/// table to release resources. If the callback succeeded, the close
+/// error is returned; if both the callback and close fail, the callback
+/// error is preserved.
 ///
 /// ```gleam
 /// use table <- bag.with_table("tags", "tags.dets",
@@ -142,11 +153,13 @@ pub fn with_table(
   }
   case close(table) {
     Ok(Nil) -> result
-    Error(close_err) ->
+    Error(close_err) -> {
+      let _ = internal.cleanup(table.ets, table.dets, table.guardian)
       case result {
         Ok(_) -> Error(close_err)
         Error(_) -> result
       }
+    }
   }
 }
 
