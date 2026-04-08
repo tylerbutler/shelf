@@ -183,7 +183,8 @@ pub fn generic_delete_all(
   }
 }
 
-/// Generic reload: clear ETS and stream-load from DETS.
+/// Generic reload: load DETS into a scratch table first, swap on success.
+/// On failure the live ETS table is untouched.
 @internal
 pub fn generic_reload(
   ets: EtsRef,
@@ -191,9 +192,31 @@ pub fn generic_reload(
   entry_decoder: Decoder(#(k, v)),
   decode_policy: DecodePolicy,
 ) -> Result(Nil, ShelfError) {
-  use _ <- result.try(delete_all(ets))
-  stream_validate_and_load(ets, dets, entry_decoder, decode_policy)
+  let decoder_fn = fn(entry: Dynamic) -> Result(
+    #(k, v),
+    List(decode.DecodeError),
+  ) {
+    decode.run(entry, entry_decoder)
+  }
+  case decode_policy {
+    Strict -> ffi_reload_atomic_strict(ets, dets, decoder_fn)
+    Lenient -> ffi_reload_atomic_lenient(ets, dets, decoder_fn)
+  }
 }
+
+@external(erlang, "shelf_ffi", "reload_atomic_strict")
+fn ffi_reload_atomic_strict(
+  ets: EtsRef,
+  dets: DetsRef,
+  decoder_fn: fn(Dynamic) -> Result(#(k, v), List(decode.DecodeError)),
+) -> Result(Nil, ShelfError)
+
+@external(erlang, "shelf_ffi", "reload_atomic_lenient")
+fn ffi_reload_atomic_lenient(
+  ets: EtsRef,
+  dets: DetsRef,
+  decoder_fn: fn(Dynamic) -> Result(#(k, v), List(decode.DecodeError)),
+) -> Result(Nil, ShelfError)
 
 /// Generic fold with key-value destructuring.
 @internal

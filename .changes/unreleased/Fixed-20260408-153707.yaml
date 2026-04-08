@@ -1,0 +1,3 @@
+kind: Fixed
+body: reload() no longer partially loads data on decode failure; original ETS data is preserved on error using a scratch table swap
+time: 2026-04-08T15:37:07.676009-07:00
