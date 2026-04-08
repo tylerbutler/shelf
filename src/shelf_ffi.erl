@@ -78,7 +78,7 @@ unregister_dets_name(Path) ->
 %% Creates an ETS table + opens a DETS file but does NOT load DETS into ETS.
 %% Used by the validated loading path where Gleam decodes entries before insertion.
 
-open_no_load(Name, Path, TypeBin) ->
+open_no_load(_Name, Path, TypeBin) ->
     Type = binary_to_atom(TypeBin, utf8),
     DetsName = path_to_dets_name(Path),
     try
@@ -88,7 +88,7 @@ open_no_load(Name, Path, TypeBin) ->
             {repair, true}
         ]),
         try
-            Ets = ets:new(binary_to_atom(Name, utf8), [Type, protected, {keypos, 1}, {read_concurrency, true}]),
+            Ets = ets:new(shelf_ets, [Type, protected, {keypos, 1}, {read_concurrency, true}]),
             %% Spawn a guardian to close DETS if the owning process dies.
             %% Safe to call erlang:monitor inside the spawned process: if
             %% OwnerPid is already dead when monitor/2 runs, it delivers
