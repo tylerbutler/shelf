@@ -230,11 +230,8 @@ stop_guardian(Guardian) ->
 
 cleanup(Ets, Dets, Guardian) ->
     try
-        stop_guardian(Guardian),
         Path = dets_to_path(Dets),
-        _ = dets:close(Dets),
-        _ = ets:delete(Ets),
-        unregister_dets_name(Path),
+        teardown_resources(Ets, Dets, Guardian, Path),
         {ok, nil}
     catch
         _:_ -> {ok, nil}
@@ -249,35 +246,61 @@ close(Ets, Dets, Guardian) ->
         {error, _} = Err -> Err;
         ok ->
             Path = dets_to_path(Dets),
-            SaveResult = case Path of
-                undefined ->
-                    {error, table_closed};
-                _ ->
-                    case (catch save(Ets, Dets)) of
-                        {ok, nil} -> ok;
-                        {error, Reason} -> {error, Reason};
-                        {'EXIT', Reason} -> {error, Reason}
-                    end
-            end,
-            case SaveResult of
+            case attempt_close_save(Ets, Dets) of
                 ok ->
-                    stop_guardian(Guardian),
-                    CloseResult = (catch dets:close(Dets)),
-                    _ = (catch ets:delete(Ets)),
-                    case Path of
-                        undefined -> ok;
-                        _ -> unregister_dets_name(Path)
-                    end,
-                    case CloseResult of
-                        ok -> {ok, nil};
-                        {error, Reason3} -> {error, translate_error(Reason3)};
-                        {'EXIT', Reason4} -> {error, translate_error(Reason4)};
-                        _ -> {ok, nil}
-                    end;
-                {error, Reason2} ->
-                    {error, translate_error(Reason2)};
-                _ -> {ok, nil}
+                    finalize_close(Ets, Dets, Guardian, Path);
+                {error, Reason} = Err ->
+                    case preserve_table_after_close_error(Dets, Reason) of
+                        true ->
+                            Err;
+                        false ->
+                            teardown_resources(Ets, Dets, Guardian, Path),
+                            Err
+                    end
             end
+    end.
+
+attempt_close_save(Ets, Dets) ->
+    try save(Ets, Dets) of
+        {ok, nil} -> ok;
+        {error, Reason} -> {error, Reason}
+    catch
+        _:Reason -> {error, translate_error(Reason)}
+    end.
+
+preserve_table_after_close_error(_Dets, table_closed) -> false;
+preserve_table_after_close_error(Dets, _Reason) ->
+    dets_to_path(Dets) =/= undefined.
+
+finalize_close(Ets, Dets, Guardian, Path) ->
+    stop_guardian(Guardian),
+    CloseResult = close_dets_handle(Dets),
+    _ = (catch ets:delete(Ets)),
+    case Path of
+        undefined -> ok;
+        _ -> unregister_dets_name(Path)
+    end,
+    case CloseResult of
+        ok -> {ok, nil};
+        {error, Reason} -> {error, Reason}
+    end.
+
+teardown_resources(Ets, Dets, Guardian, Path) ->
+    stop_guardian(Guardian),
+    _ = close_dets_handle(Dets),
+    _ = (catch ets:delete(Ets)),
+    case Path of
+        undefined -> ok;
+        _ -> unregister_dets_name(Path)
+    end,
+    ok.
+
+close_dets_handle(Dets) ->
+    try dets:close(Dets) of
+        ok -> ok;
+        {error, Reason} -> {error, translate_error(Reason)}
+    catch
+        _:Reason -> {error, translate_error(Reason)}
     end.
 
 %% Get the file path from a DETS reference as a binary.
@@ -546,6 +569,7 @@ translate_error(not_owner) -> not_owner;
 translate_error(type_mismatch) -> type_mismatch;
 translate_error({type_mismatch, Errors}) -> {type_mismatch, Errors};
 translate_error({invalid_path, Msg}) -> {invalid_path, Msg};
+translate_error(table_closed) -> table_closed;
 translate_error(badarg) -> table_closed;
 translate_error({file_error, _, enoent}) -> {file_error, <<"File not found">>};
 translate_error({file_error, _, eacces}) -> {file_error, <<"Permission denied">>};
