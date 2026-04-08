@@ -4,6 +4,11 @@
 /// (for persistence). Multiple values can be stored per key, and identical
 /// key-value pairs are preserved (unlike bag tables which deduplicate).
 ///
+/// **Ownership**: The process that calls `open()` owns the table. Reads
+/// work from any process; writes and lifecycle ops (`insert`, `delete_*`,
+/// `save`, `reload`, `sync`, `close`) are owner-only and return
+/// `Error(NotOwner)` from other processes.
+///
 /// ## Example
 ///
 /// ```gleam
@@ -292,7 +297,7 @@ pub fn reload(table: PDuplicateBag(k, v)) -> Result(Nil, ShelfError) {
 /// when you want to guarantee durability.
 ///
 pub fn sync(table: PDuplicateBag(k, v)) -> Result(Nil, ShelfError) {
-  internal.sync_dets(table.dets)
+  internal.sync_dets(table.ets, table.dets)
 }
 
 // ── FFI bindings (duplicate-bag-specific) ────────────────────────────────

@@ -292,7 +292,7 @@ pub fn save(ets: EtsRef, dets: DetsRef) -> Result(Nil, ShelfError)
 
 @external(erlang, "shelf_ffi", "sync_dets")
 @internal
-pub fn sync_dets(dets: DetsRef) -> Result(Nil, ShelfError)
+pub fn sync_dets(ets: EtsRef, dets: DetsRef) -> Result(Nil, ShelfError)
 
 // ── Targeted DETS operations (for WriteThrough mode) ────────────────────
 

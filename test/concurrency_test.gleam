@@ -54,7 +54,7 @@ pub fn concurrency_tests() {
       }),
     ]),
     describe("concurrent writes to different keys", [
-      it("rapid writes to different keys from owner process all succeed", fn() {
+      it("rapid owner-process writes to different keys all succeed", fn() {
         let path = "/tmp/shelf_conc_write_diff.dets"
         test_helpers.cleanup(path)
         let assert Ok(table) =
@@ -112,7 +112,7 @@ pub fn concurrency_tests() {
       }),
     ]),
     describe("concurrent writes to same key", [
-      it("last writer wins without crashes", fn() {
+      it("rapid owner-process overwrites to same key: last write wins", fn() {
         let path = "/tmp/shelf_conc_write_same.dets"
         test_helpers.cleanup(path)
         let assert Ok(table) =
