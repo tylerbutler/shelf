@@ -20,28 +20,71 @@
 %% DETS requires atom names. To avoid unbounded atom creation from
 %% user-provided paths, we maintain a registry ETS table that maps
 %% path binaries to deterministic atoms from a bounded pool.
+%%
+%% The registry ETS table is owned by a dedicated long-lived process
+%% (shelf_dets_registry_owner) so it survives the death of any individual
+%% caller process.
 
 -define(REGISTRY, shelf_dets_registry).
 -define(POOL_SIZE, 65536).
+-define(MAX_COLLISION_ATTEMPTS, 100).
 
 ensure_registry() ->
     case ets:whereis(?REGISTRY) of
-        undefined ->
+        undefined -> start_registry_owner();
+        _ -> ok
+    end.
+
+start_registry_owner() ->
+    Pid = spawn(fun registry_loop/0),
+    try register(shelf_dets_registry_owner, Pid) of
+        true ->
+            Pid ! {create_registry, self()},
+            receive
+                {registry_created, Pid} -> ok
+            after 5000 ->
+                error(registry_timeout)
+            end
+    catch
+        error:badarg ->
+            %% Another process won the race to register. Stop the orphan.
+            Pid ! stop,
+            wait_for_registry(20)
+    end.
+
+registry_loop() ->
+    receive
+        {create_registry, From} ->
             try
-                ets:new(?REGISTRY, [set, public, named_table, {keypos, 1}, {read_concurrency, true}]),
-                ok
+                ets:new(?REGISTRY, [set, public, named_table,
+                                    {keypos, 1}, {read_concurrency, true}]),
+                From ! {registry_created, self()}
             catch
                 _:badarg ->
-                    %% Another process created it between our check and create
-                    ok
-            end;
+                    %% Table already exists (edge case), still ack.
+                    From ! {registry_created, self()}
+            end,
+            registry_loop();
+        stop ->
+            ok;
+        _ ->
+            registry_loop()
+    end.
+
+wait_for_registry(0) ->
+    error(registry_not_available);
+wait_for_registry(N) ->
+    case ets:whereis(?REGISTRY) of
+        undefined ->
+            timer:sleep(50),
+            wait_for_registry(N - 1);
         _ ->
             ok
     end.
 
 %% Map a path binary to a bounded atom. Uses erlang:phash2 to hash
 %% the path into a fixed pool of atoms (shelf_dets_0 .. shelf_dets_N).
-%% Collisions are handled by appending a counter suffix.
+%% Collisions are capped at MAX_COLLISION_ATTEMPTS to keep atom creation bounded.
 path_to_dets_name(Path) ->
     ensure_registry(),
     case ets:lookup(?REGISTRY, Path) of
@@ -60,6 +103,8 @@ path_to_dets_name(Path) ->
             end
     end.
 
+find_available_name(_Path, _Hash, Attempt) when Attempt >= ?MAX_COLLISION_ATTEMPTS ->
+    error(atom_pool_exhausted);
 find_available_name(Path, Hash, Attempt) ->
     Candidate = list_to_atom("shelf_dets_" ++ integer_to_list(Hash) ++ "_" ++ integer_to_list(Attempt)),
     %% Check if this atom is already used by a different path
