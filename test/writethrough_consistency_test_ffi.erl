@@ -5,7 +5,7 @@
 %% Normalizes the path the same way shelf does during open.
 close_dets_by_path(Path) ->
     Resolved = filename:absname(binary_to_list(Path)),
-    Normalized = list_to_binary(normalize_path(Resolved)),
+    Normalized = list_to_binary(shelf_ffi:normalize_path(Resolved)),
     case ets:whereis(shelf_dets_registry) of
         undefined -> nil;
         _ ->
@@ -19,14 +19,3 @@ close_dets_by_path(Path) ->
             end
     end,
     nil.
-
-normalize_path(Path) ->
-    Parts = filename:split(Path),
-    NormalizedParts = normalize_parts(Parts, []),
-    filename:join(NormalizedParts).
-
-normalize_parts([], Acc) -> lists:reverse(Acc);
-normalize_parts(["." | Rest], Acc) -> normalize_parts(Rest, Acc);
-normalize_parts([".." | Rest], [_ | Acc]) -> normalize_parts(Rest, Acc);
-normalize_parts([".." | Rest], []) -> normalize_parts(Rest, []);
-normalize_parts([Part | Rest], Acc) -> normalize_parts(Rest, [Part | Acc]).
