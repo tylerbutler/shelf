@@ -12,35 +12,80 @@
     dets_fold_into_ets_strict/3, dets_fold_into_ets_lenient/3,
     dets_insert/2, dets_insert_list/2,
     dets_delete_key/2, dets_delete_object/3, dets_delete_all/1,
-    validate_path/2
+    reload_atomic_strict/3, reload_atomic_lenient/3,
+    validate_path/2,
+    normalize_path/1
 ]).
 
 %% ── DETS atom registry ──────────────────────────────────────────────────
 %% DETS requires atom names. To avoid unbounded atom creation from
 %% user-provided paths, we maintain a registry ETS table that maps
 %% path binaries to deterministic atoms from a bounded pool.
+%%
+%% The registry ETS table is owned by a dedicated long-lived process
+%% (shelf_dets_registry_owner) so it survives the death of any individual
+%% caller process.
 
 -define(REGISTRY, shelf_dets_registry).
 -define(POOL_SIZE, 65536).
+-define(MAX_COLLISION_ATTEMPTS, 100).
 
 ensure_registry() ->
     case ets:whereis(?REGISTRY) of
-        undefined ->
+        undefined -> start_registry_owner();
+        _ -> ok
+    end.
+
+start_registry_owner() ->
+    Pid = spawn(fun registry_loop/0),
+    try register(shelf_dets_registry_owner, Pid) of
+        true ->
+            Pid ! {create_registry, self()},
+            receive
+                {registry_created, Pid} -> ok
+            after 5000 ->
+                error(registry_timeout)
+            end
+    catch
+        error:badarg ->
+            %% Another process won the race to register. Stop the orphan.
+            Pid ! stop,
+            wait_for_registry(20)
+    end.
+
+registry_loop() ->
+    receive
+        {create_registry, From} ->
             try
-                ets:new(?REGISTRY, [set, public, named_table, {keypos, 1}, {read_concurrency, true}]),
-                ok
+                ets:new(?REGISTRY, [set, public, named_table,
+                                    {keypos, 1}, {read_concurrency, true}]),
+                From ! {registry_created, self()}
             catch
                 _:badarg ->
-                    %% Another process created it between our check and create
-                    ok
-            end;
+                    %% Table already exists (edge case), still ack.
+                    From ! {registry_created, self()}
+            end,
+            registry_loop();
+        stop ->
+            ok;
+        _ ->
+            registry_loop()
+    end.
+
+wait_for_registry(0) ->
+    error(registry_not_available);
+wait_for_registry(N) ->
+    case ets:whereis(?REGISTRY) of
+        undefined ->
+            timer:sleep(50),
+            wait_for_registry(N - 1);
         _ ->
             ok
     end.
 
 %% Map a path binary to a bounded atom. Uses erlang:phash2 to hash
 %% the path into a fixed pool of atoms (shelf_dets_0 .. shelf_dets_N).
-%% Collisions are handled by appending a counter suffix.
+%% Collisions are capped at MAX_COLLISION_ATTEMPTS to keep atom creation bounded.
 path_to_dets_name(Path) ->
     ensure_registry(),
     case ets:lookup(?REGISTRY, Path) of
@@ -54,11 +99,15 @@ path_to_dets_name(Path) ->
             case ets:insert_new(?REGISTRY, {Path, Name}) of
                 true -> Name;
                 false ->
-                    [{Path, ExistingName}] = ets:lookup(?REGISTRY, Path),
-                    ExistingName
+                    case ets:lookup(?REGISTRY, Path) of
+                        [{Path, ExistingName}] -> ExistingName;
+                        [] -> path_to_dets_name(Path)
+                    end
             end
     end.
 
+find_available_name(_Path, _Hash, Attempt) when Attempt >= ?MAX_COLLISION_ATTEMPTS ->
+    error(atom_pool_exhausted);
 find_available_name(Path, Hash, Attempt) ->
     Candidate = list_to_atom("shelf_dets_" ++ integer_to_list(Hash) ++ "_" ++ integer_to_list(Attempt)),
     %% Check if this atom is already used by a different path
@@ -219,6 +268,50 @@ dets_fold_into_ets_lenient(Dets, Ets, DecoderFun) ->
         _:CatchReason -> {error, translate_error(CatchReason)}
     end.
 
+%% ── Atomic reload ───────────────────────────────────────────────────────
+%% Load DETS entries into a scratch ETS table first.  Only replace the
+%% live table contents after the full validation succeeds; on failure the
+%% live ETS is untouched.
+
+reload_atomic_strict(Ets, Dets, DecoderFun) ->
+    reload_atomic_impl(Ets, Dets, DecoderFun, strict).
+
+reload_atomic_lenient(Ets, Dets, DecoderFun) ->
+    reload_atomic_impl(Ets, Dets, DecoderFun, lenient).
+
+reload_atomic_impl(Ets, Dets, DecoderFun, Policy) ->
+    case check_owner(Ets) of
+        {error, _} = Err -> Err;
+        ok -> reload_atomic_validated(Ets, Dets, DecoderFun, Policy)
+    end.
+
+reload_atomic_validated(Ets, Dets, DecoderFun, Policy) ->
+    Type = ets:info(Ets, type),
+    Scratch = ets:new(shelf_reload_scratch, [Type, protected]),
+    try
+        LoadResult = case Policy of
+            strict ->
+                dets_fold_into_ets_strict(Dets, Scratch, DecoderFun);
+            lenient ->
+                dets_fold_into_ets_lenient(Dets, Scratch, DecoderFun)
+        end,
+        case LoadResult of
+            {ok, Skipped} ->
+                %% Validation passed — swap contents.
+                ets:delete_all_objects(Ets),
+                ets:insert(Ets, ets:tab2list(Scratch)),
+                ets:delete(Scratch),
+                {ok, Skipped};
+            {error, _} = Err ->
+                ets:delete(Scratch),
+                Err
+        end
+    catch
+        _:Reason ->
+            (catch ets:delete(Scratch)),
+            {error, translate_error(Reason)}
+    end.
+
 %% ── Guardian ────────────────────────────────────────────────────────────
 
 stop_guardian(Guardian) ->
@@ -230,11 +323,8 @@ stop_guardian(Guardian) ->
 
 cleanup(Ets, Dets, Guardian) ->
     try
-        stop_guardian(Guardian),
         Path = dets_to_path(Dets),
-        _ = dets:close(Dets),
-        _ = ets:delete(Ets),
-        unregister_dets_name(Path),
+        teardown_resources(Ets, Dets, Guardian, Path),
         {ok, nil}
     catch
         _:_ -> {ok, nil}
@@ -242,39 +332,68 @@ cleanup(Ets, Dets, Guardian) ->
 
 %% ── Close ───────────────────────────────────────────────────────────────
 %% Atomic save ETS→DETS via temp file, close DETS, delete ETS.
+%% On save failure, everything is left intact so the caller can retry.
 
 close(Ets, Dets, Guardian) ->
     case check_owner(Ets) of
         {error, _} = Err -> Err;
         ok ->
-            stop_guardian(Guardian),
-            Path = try dets_to_path(Dets) catch _:_ -> undefined end,
-            SaveResult = case Path of
-                undefined -> ok;
-                _ ->
-                    case (catch save(Ets, Dets)) of
-                        {ok, nil} -> ok;
-                        {error, Reason} -> {error, Reason};
-                        {'EXIT', Reason} -> {error, Reason}
-                    end
-            end,
-            CloseResult = (catch dets:close(Dets)),
-            _ = (catch ets:delete(Ets)),
-            case Path of
-                undefined -> ok;
-                _ -> unregister_dets_name(Path)
-            end,
-            case SaveResult of
+            Path = dets_to_path(Dets),
+            case attempt_close_save(Ets, Dets) of
                 ok ->
-                    case CloseResult of
-                        ok -> {ok, nil};
-                        {error, Reason3} -> {error, translate_error(Reason3)};
-                        {'EXIT', Reason4} -> {error, translate_error(Reason4)};
-                        _ -> {ok, nil}
-                    end;
-                {error, Reason2} -> {error, translate_error(Reason2)};
-                _ -> {ok, nil}
+                    finalize_close(Ets, Dets, Guardian, Path);
+                {error, Reason} = Err ->
+                    case preserve_table_after_close_error(Path, Reason) of
+                        true ->
+                            Err;
+                        false ->
+                            teardown_resources(Ets, Dets, Guardian, Path),
+                            Err
+                    end
             end
+    end.
+
+attempt_close_save(Ets, Dets) ->
+    try save(Ets, Dets) of
+        {ok, nil} -> ok;
+        {error, Reason} -> {error, Reason}
+    catch
+        _:Reason -> {error, translate_error(Reason)}
+    end.
+
+preserve_table_after_close_error(_Path, table_closed) -> false;
+preserve_table_after_close_error(undefined, _Reason) -> false;
+preserve_table_after_close_error(_Path, _Reason) -> true.
+
+finalize_close(Ets, Dets, Guardian, Path) ->
+    stop_guardian(Guardian),
+    CloseResult = close_dets_handle(Dets),
+    _ = (catch ets:delete(Ets)),
+    case Path of
+        undefined -> ok;
+        _ -> unregister_dets_name(Path)
+    end,
+    case CloseResult of
+        ok -> {ok, nil};
+        {error, Reason} -> {error, Reason}
+    end.
+
+teardown_resources(Ets, Dets, Guardian, Path) ->
+    stop_guardian(Guardian),
+    _ = close_dets_handle(Dets),
+    _ = (catch ets:delete(Ets)),
+    case Path of
+        undefined -> ok;
+        _ -> unregister_dets_name(Path)
+    end,
+    ok.
+
+close_dets_handle(Dets) ->
+    try dets:close(Dets) of
+        ok -> ok;
+        {error, Reason} -> {error, translate_error(Reason)}
+    catch
+        _:Reason -> {error, translate_error(Reason)}
     end.
 
 %% Get the file path from a DETS reference as a binary.
@@ -543,6 +662,7 @@ translate_error(not_owner) -> not_owner;
 translate_error(type_mismatch) -> type_mismatch;
 translate_error({type_mismatch, Errors}) -> {type_mismatch, Errors};
 translate_error({invalid_path, Msg}) -> {invalid_path, Msg};
+translate_error(table_closed) -> table_closed;
 translate_error(badarg) -> table_closed;
 translate_error({file_error, _, enoent}) -> {file_error, <<"File not found">>};
 translate_error({file_error, _, eacces}) -> {file_error, <<"Permission denied">>};

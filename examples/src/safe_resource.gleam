@@ -92,7 +92,7 @@ fn pattern_2_save_reload() {
   // --- Step 5: Reload to discard unsaved changes ---
   // reload() replaces ETS contents with whatever was last saved to DETS.
   // This effectively "undoes" every write since the last save().
-  let assert Ok(Nil) = set.reload(table)
+  let assert Ok(_skipped) = set.reload(table)
   io.println("  Called reload → unsaved changes discarded")
 
   // --- Step 6: Verify the undo ---

@@ -1,0 +1,3 @@
+kind: Fixed
+body: WriteThrough mode now writes DETS before ETS, preventing inconsistency when DETS operations fail; update_counter rolls back ETS on DETS failure
+time: 2026-04-08T15:33:27.380529-07:00
