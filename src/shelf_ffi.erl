@@ -9,10 +9,10 @@
     save/2, sync_dets/1, sync_dets/2,
     update_counter/3,
     dets_to_list/1,
-    dets_fold_into_ets_strict/3, dets_fold_into_ets_lenient/3,
+    dets_fold_into_ets_strict/3,
     dets_insert/2, dets_insert_list/2,
     dets_delete_key/2, dets_delete_object/3, dets_delete_all/1,
-    reload_atomic_strict/3, reload_atomic_lenient/3,
+    reload_atomic/3,
     validate_path/2,
     normalize_path/1
 ]).
@@ -196,11 +196,6 @@ flush_batch(_Ets, []) -> ok;
 %% callers that expect values under a key to stay in DETS order.
 flush_batch(Ets, Batch) -> ets:insert(Ets, lists:reverse(Batch)).
 
-%% Strict and lenient share the same batching skeleton but differ in how
-%% they handle decode failures: strict throws to abort the fold early,
-%% lenient silently skips bad entries. A shared helper with a callback
-%% would obscure that semantic difference without reducing code volume.
-
 %% Strict mode: abort on first decode failure using throw.
 %% DecoderFun takes a raw entry and returns {ok, Pair} or {error, Errors}.
 dets_fold_into_ets_strict(Dets, Ets, DecoderFun) ->
@@ -228,43 +223,10 @@ dets_fold_into_ets_strict(Dets, Ets, DecoderFun) ->
             {error, Reason} -> {error, translate_error(Reason)};
             {_, FinalBatch} ->
                 flush_batch(Ets, FinalBatch),
-                {ok, 0}
+                {ok, nil}
         end
     catch
         throw:{type_mismatch, Errors} -> {error, {type_mismatch, Errors}};
-        _:CatchReason -> {error, translate_error(CatchReason)}
-    end.
-
-%% Lenient mode: skip entries that fail to decode, batch successful ones.
-%% Returns {ok, SkippedCount} on success.
-dets_fold_into_ets_lenient(Dets, Ets, DecoderFun) ->
-    try
-        Result = dets:foldl(
-            fun(Entry, {Count, Batch, Skipped}) ->
-                case DecoderFun(Entry) of
-                    {ok, Pair} ->
-                        NewBatch = [Pair | Batch],
-                        case Count + 1 of
-                            ?LOAD_BATCH_SIZE ->
-                                flush_batch(Ets, NewBatch),
-                                {0, [], Skipped};
-                            NewCount ->
-                                {NewCount, NewBatch, Skipped}
-                        end;
-                    {error, _} ->
-                        {Count, Batch, Skipped + 1}
-                end
-            end,
-            {0, [], 0},
-            Dets
-        ),
-        case Result of
-            {error, Reason} -> {error, translate_error(Reason)};
-            {_, FinalBatch, SkippedCount} ->
-                flush_batch(Ets, FinalBatch),
-                {ok, SkippedCount}
-        end
-    catch
         _:CatchReason -> {error, translate_error(CatchReason)}
     end.
 
@@ -273,35 +235,23 @@ dets_fold_into_ets_lenient(Dets, Ets, DecoderFun) ->
 %% live table contents after the full validation succeeds; on failure the
 %% live ETS is untouched.
 
-reload_atomic_strict(Ets, Dets, DecoderFun) ->
-    reload_atomic_impl(Ets, Dets, DecoderFun, strict).
-
-reload_atomic_lenient(Ets, Dets, DecoderFun) ->
-    reload_atomic_impl(Ets, Dets, DecoderFun, lenient).
-
-reload_atomic_impl(Ets, Dets, DecoderFun, Policy) ->
+reload_atomic(Ets, Dets, DecoderFun) ->
     case check_owner(Ets) of
         {error, _} = Err -> Err;
-        ok -> reload_atomic_validated(Ets, Dets, DecoderFun, Policy)
+        ok -> reload_atomic_validated(Ets, Dets, DecoderFun)
     end.
 
-reload_atomic_validated(Ets, Dets, DecoderFun, Policy) ->
+reload_atomic_validated(Ets, Dets, DecoderFun) ->
     Type = ets:info(Ets, type),
     Scratch = ets:new(shelf_reload_scratch, [Type, protected]),
     try
-        LoadResult = case Policy of
-            strict ->
-                dets_fold_into_ets_strict(Dets, Scratch, DecoderFun);
-            lenient ->
-                dets_fold_into_ets_lenient(Dets, Scratch, DecoderFun)
-        end,
-        case LoadResult of
-            {ok, Skipped} ->
+        case dets_fold_into_ets_strict(Dets, Scratch, DecoderFun) of
+            {ok, nil} ->
                 %% Validation passed — swap contents.
                 ets:delete_all_objects(Ets),
                 ets:insert(Ets, ets:tab2list(Scratch)),
                 ets:delete(Scratch),
-                {ok, Skipped};
+                {ok, nil};
             {error, _} = Err ->
                 ets:delete(Scratch),
                 Err

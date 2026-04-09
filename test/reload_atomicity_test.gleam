@@ -10,7 +10,7 @@ fn write_raw_dets_entry(path: String, key: String, value: a) -> Nil
 
 pub fn reload_atomicity_tests() {
   describe("reload atomicity", [
-    it("strict reload failure preserves original ETS data", fn() {
+    it("reload failure preserves original ETS data", fn() {
       let path = "/tmp/shelf_reload_atom.dets"
       test_helpers.cleanup(path)
 
@@ -66,7 +66,7 @@ pub fn reload_atomicity_tests() {
       let assert Ok(2) = set.size(table)
 
       // Reload should discard unsaved "y"
-      let assert Ok(_skipped) = set.reload(table)
+      let assert Ok(Nil) = set.reload(table)
       let assert Ok(1) = set.size(table)
       let assert Ok(10) = set.lookup(table, "x")
       set.lookup(table, "y") |> expect.to_be_error

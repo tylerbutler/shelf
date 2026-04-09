@@ -5,10 +5,7 @@
 import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode.{type Decoder}
 import gleam/result
-import shelf.{
-  type Config, type DecodePolicy, type ShelfError, type WriteMode, Lenient,
-  Strict,
-}
+import shelf.{type Config, type ShelfError, type WriteMode}
 
 /// Raw ETS table reference (Erlang tid).
 @internal
@@ -39,24 +36,20 @@ pub fn build_entry_decoder(
 ///
 /// Uses `dets:foldl` in the FFI to avoid materializing all entries into memory.
 /// Peak memory is ~1x (just the ETS table) instead of ~3x with the bulk approach.
-/// Returns the number of skipped entries (always 0 for Strict mode).
+/// Any entry that fails decoding causes the load to fail with `TypeMismatch`.
 @internal
 pub fn stream_validate_and_load(
   ets: EtsRef,
   dets: DetsRef,
   entry_decoder: Decoder(#(k, v)),
-  policy: DecodePolicy,
-) -> Result(Int, ShelfError) {
+) -> Result(Nil, ShelfError) {
   let decoder_fn = fn(entry: Dynamic) -> Result(
     #(k, v),
     List(decode.DecodeError),
   ) {
     decode.run(entry, entry_decoder)
   }
-  case policy {
-    Strict -> ffi_dets_fold_into_ets_strict(dets, ets, decoder_fn)
-    Lenient -> ffi_dets_fold_into_ets_lenient(dets, ets, decoder_fn)
-  }
+  ffi_dets_fold_into_ets_strict(dets, ets, decoder_fn)
 }
 
 @external(erlang, "shelf_ffi", "dets_fold_into_ets_strict")
@@ -64,14 +57,7 @@ fn ffi_dets_fold_into_ets_strict(
   dets: DetsRef,
   ets: EtsRef,
   decoder_fn: fn(Dynamic) -> Result(#(k, v), List(decode.DecodeError)),
-) -> Result(Int, ShelfError)
-
-@external(erlang, "shelf_ffi", "dets_fold_into_ets_lenient")
-fn ffi_dets_fold_into_ets_lenient(
-  dets: DetsRef,
-  ets: EtsRef,
-  decoder_fn: fn(Dynamic) -> Result(#(k, v), List(decode.DecodeError)),
-) -> Result(Int, ShelfError)
+) -> Result(Nil, ShelfError)
 
 // ── Generic table operations ────────────────────────────────────────────
 // These eliminate duplication between set, bag, and duplicate_bag modules.
@@ -84,39 +70,21 @@ pub fn generic_open(
   key_decoder: Decoder(k),
   value_decoder: Decoder(v),
 ) -> Result(
-  #(
-    EtsRef,
-    DetsRef,
-    GuardianRef,
-    WriteMode,
-    Decoder(#(k, v)),
-    DecodePolicy,
-    Int,
-  ),
+  #(EtsRef, DetsRef, GuardianRef, WriteMode, Decoder(#(k, v))),
   ShelfError,
 ) {
   let name = shelf.get_name(config)
   let path = shelf.get_path(config)
   let base_directory = shelf.get_base_directory(config)
   let write_mode = shelf.get_write_mode(config)
-  let decode_policy = shelf.get_decode_policy(config)
   use resolved_path <- result.try(shelf.validate_path(path, base_directory))
   use refs <- result.try(open_no_load(name, resolved_path, table_type))
   let ets = refs.0
   let dets = refs.1
   let guardian = refs.2
   let entry_decoder = build_entry_decoder(key_decoder, value_decoder)
-  case stream_validate_and_load(ets, dets, entry_decoder, decode_policy) {
-    Ok(skipped) ->
-      Ok(#(
-        ets,
-        dets,
-        guardian,
-        write_mode,
-        entry_decoder,
-        decode_policy,
-        skipped,
-      ))
+  case stream_validate_and_load(ets, dets, entry_decoder) {
+    Ok(Nil) -> Ok(#(ets, dets, guardian, write_mode, entry_decoder))
     Error(e) -> {
       let _ = cleanup(ets, dets, guardian)
       Error(e)
@@ -214,39 +182,27 @@ pub fn generic_delete_all(
 
 /// Generic reload: load DETS into a scratch table first, swap on success.
 /// On failure the live ETS table is untouched.
-/// Returns the number of skipped entries (always 0 for Strict mode).
 @internal
 pub fn generic_reload(
   ets: EtsRef,
   dets: DetsRef,
   entry_decoder: Decoder(#(k, v)),
-  decode_policy: DecodePolicy,
-) -> Result(Int, ShelfError) {
+) -> Result(Nil, ShelfError) {
   let decoder_fn = fn(entry: Dynamic) -> Result(
     #(k, v),
     List(decode.DecodeError),
   ) {
     decode.run(entry, entry_decoder)
   }
-  case decode_policy {
-    Strict -> ffi_reload_atomic_strict(ets, dets, decoder_fn)
-    Lenient -> ffi_reload_atomic_lenient(ets, dets, decoder_fn)
-  }
+  ffi_reload_atomic(ets, dets, decoder_fn)
 }
 
-@external(erlang, "shelf_ffi", "reload_atomic_strict")
-fn ffi_reload_atomic_strict(
+@external(erlang, "shelf_ffi", "reload_atomic")
+fn ffi_reload_atomic(
   ets: EtsRef,
   dets: DetsRef,
   decoder_fn: fn(Dynamic) -> Result(#(k, v), List(decode.DecodeError)),
-) -> Result(Int, ShelfError)
-
-@external(erlang, "shelf_ffi", "reload_atomic_lenient")
-fn ffi_reload_atomic_lenient(
-  ets: EtsRef,
-  dets: DetsRef,
-  decoder_fn: fn(Dynamic) -> Result(#(k, v), List(decode.DecodeError)),
-) -> Result(Int, ShelfError)
+) -> Result(Nil, ShelfError)
 
 /// Generic fold with key-value destructuring.
 @internal

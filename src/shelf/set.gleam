@@ -45,8 +45,6 @@ pub opaque type PSet(k, v) {
     guardian: GuardianRef,
     write_mode: shelf.WriteMode,
     entry_decoder: Decoder(#(k, v)),
-    decode_policy: shelf.DecodePolicy,
-    skipped: Int,
   )
 }
 
@@ -86,12 +84,10 @@ pub fn open_config(
     guardian: result.2,
     write_mode: result.3,
     entry_decoder: result.4,
-    decode_policy: result.5,
-    skipped: result.6,
   ))
 }
 
-/// Open a persistent set table with defaults (WriteBack mode, Strict decoding).
+/// Open a persistent set table with defaults (WriteBack mode).
 ///
 /// ```gleam
 /// let assert Ok(table) =
@@ -221,13 +217,6 @@ pub fn size(of table: PSet(k, v)) -> Result(Int, ShelfError) {
   internal.size(table.ets)
 }
 
-/// Returns the number of entries that were skipped during the most recent
-/// load from DETS (open or reload). Always 0 when using Strict decode policy.
-///
-pub fn skipped_on_load(table: PSet(k, v)) -> Int {
-  table.skipped
-}
-
 // ── Write ───────────────────────────────────────────────────────────────
 
 /// Insert a key-value pair. Overwrites if key exists.
@@ -343,17 +332,11 @@ pub fn save(table: PSet(k, v)) -> Result(Nil, ShelfError) {
 ///
 /// Clears the ETS table, re-reads all DETS entries, validates them
 /// through the stored decoders, and loads valid entries into ETS.
-/// The configured decode policy is respected on reload.
 /// Only useful in WriteBack mode — in WriteThrough mode, ETS and
 /// DETS are always in sync.
 ///
-pub fn reload(table: PSet(k, v)) -> Result(Int, ShelfError) {
-  internal.generic_reload(
-    table.ets,
-    table.dets,
-    table.entry_decoder,
-    table.decode_policy,
-  )
+pub fn reload(table: PSet(k, v)) -> Result(Nil, ShelfError) {
+  internal.generic_reload(table.ets, table.dets, table.entry_decoder)
 }
 
 /// Flush the DETS write buffer to the OS.

@@ -9,9 +9,6 @@ import startest.{describe, it}
 import startest/expect
 import test_helpers
 
-/// Write raw Erlang terms directly to a DETS file, bypassing Gleam's
-/// type system. Used to simulate data written by a previous session
-/// with different types.
 @external(erlang, "type_safety_test_ffi", "write_raw_dets")
 fn write_raw_dets(
   path: String,
@@ -22,7 +19,7 @@ fn write_raw_dets(
 pub fn type_safety_tests() {
   describe("type safety", [
     describe("set", [
-      it("rejects DETS data with wrong value type (strict)", fn() {
+      it("rejects DETS data with wrong value type", fn() {
         let path = "/tmp/shelf_ts_wrong_value.dets"
         test_helpers.cleanup(path)
 
@@ -54,7 +51,7 @@ pub fn type_safety_tests() {
         test_helpers.cleanup(path)
         Nil
       }),
-      it("rejects DETS data with wrong key type (strict)", fn() {
+      it("rejects DETS data with wrong key type", fn() {
         let path = "/tmp/shelf_ts_wrong_key.dets"
         test_helpers.cleanup(path)
 
@@ -145,34 +142,8 @@ pub fn type_safety_tests() {
         Nil
       }),
     ]),
-    describe("lenient mode", [
-      it("skips invalid entries in lenient mode", fn() {
-        let path = "/tmp/shelf_ts_lenient.dets"
-        test_helpers.cleanup(path)
-
-        // Write data with raw Erlang FFI — mix of valid and invalid entries
-        let assert Ok(Nil) =
-          write_raw_dets(path, "set", [
-            #(dynamic.string("good"), dynamic.int(1)),
-            #(dynamic.string("also_good"), dynamic.int(2)),
-            #(dynamic.int(999), dynamic.string("bad_key")),
-          ])
-
-        // Open in lenient mode — should skip the bad entry
-        let config =
-          shelf.config(name: "ts_lenient", path: path, base_directory: "/tmp")
-          |> shelf.decode_policy(shelf.Lenient)
-        let assert Ok(t) =
-          set.open_config(config: config, key: decode.string, value: decode.int)
-        // Only the two good entries should be loaded
-        let assert Ok(2) = set.size(t)
-        let assert Ok(1) = set.lookup(t, "good")
-        let assert Ok(2) = set.lookup(t, "also_good")
-        let assert Ok(Nil) = set.close(t)
-        test_helpers.cleanup(path)
-        Nil
-      }),
-      it("strict mode rejects if any entry is invalid", fn() {
+    describe("rejects mixed data", [
+      it("rejects if any entry is invalid", fn() {
         let path = "/tmp/shelf_ts_strict_reject.dets"
         test_helpers.cleanup(path)
 
@@ -183,7 +154,7 @@ pub fn type_safety_tests() {
             #(dynamic.int(999), dynamic.string("bad")),
           ])
 
-        // Open in strict mode (default) — should fail
+        // Open should fail with TypeMismatch
         let result =
           set.open(
             name: "ts_strict_reject",
@@ -267,7 +238,7 @@ pub fn type_safety_tests() {
       }),
     ]),
     describe("entry order preservation", [
-      it("bag preserves value order after save and reload (strict)", fn() {
+      it("bag preserves value order after save and reload", fn() {
         let path = "/tmp/shelf_ts_bag_order.dets"
         test_helpers.cleanup(path)
 
@@ -301,82 +272,33 @@ pub fn type_safety_tests() {
         test_helpers.cleanup(path)
         Nil
       }),
-      it(
-        "duplicate_bag preserves value order after save and reload (strict)",
-        fn() {
-          let path = "/tmp/shelf_ts_dbag_order.dets"
-          test_helpers.cleanup(path)
-
-          // Write ordered entries with duplicates
-          let assert Ok(Nil) =
-            write_raw_dets(path, "duplicate_bag", [
-              #(dynamic.string("log"), dynamic.string("first")),
-              #(dynamic.string("log"), dynamic.string("second")),
-              #(dynamic.string("log"), dynamic.string("third")),
-            ])
-
-          // Open with strict decoding
-          let assert Ok(t) =
-            duplicate_bag.open(
-              name: "ts_dbag_order",
-              path: path,
-              base_directory: "/tmp",
-              key: decode.string,
-              value: decode.string,
-            )
-          let assert Ok(values) = duplicate_bag.lookup(t, "log")
-          expect.to_equal(list.length(values), 3)
-          let assert Ok(first) = list.first(values)
-          let assert Ok(last) = list.last(values)
-          expect.to_not_equal(first, last)
-          let assert Ok(Nil) = duplicate_bag.close(t)
-          test_helpers.cleanup(path)
-          Nil
-        },
-      ),
-      it("lenient and strict modes produce same order", fn() {
-        let path = "/tmp/shelf_ts_order_modes.dets"
+      it("duplicate_bag preserves value order after save and reload", fn() {
+        let path = "/tmp/shelf_ts_dbag_order.dets"
         test_helpers.cleanup(path)
 
-        // Write ordered entries
+        // Write ordered entries with duplicates
         let assert Ok(Nil) =
-          write_raw_dets(path, "bag", [
-            #(dynamic.string("seq"), dynamic.string("a")),
-            #(dynamic.string("seq"), dynamic.string("b")),
-            #(dynamic.string("seq"), dynamic.string("c")),
+          write_raw_dets(path, "duplicate_bag", [
+            #(dynamic.string("log"), dynamic.string("first")),
+            #(dynamic.string("log"), dynamic.string("second")),
+            #(dynamic.string("log"), dynamic.string("third")),
           ])
 
-        // Open strict
-        let assert Ok(t1) =
-          bag.open(
-            name: "ts_order_strict",
+        // Open with strict decoding
+        let assert Ok(t) =
+          duplicate_bag.open(
+            name: "ts_dbag_order",
             path: path,
             base_directory: "/tmp",
             key: decode.string,
             value: decode.string,
           )
-        let assert Ok(strict_values) = bag.lookup(t1, "seq")
-        let assert Ok(Nil) = bag.close(t1)
-
-        // Open lenient with same data
-        let config =
-          shelf.config(
-            name: "ts_order_lenient",
-            path: path,
-            base_directory: "/tmp",
-          )
-          |> shelf.decode_policy(shelf.Lenient)
-        let assert Ok(t2) =
-          bag.open_config(
-            config: config,
-            key: decode.string,
-            value: decode.string,
-          )
-        let assert Ok(lenient_values) = bag.lookup(t2, "seq")
-        let assert Ok(Nil) = bag.close(t2)
-
-        // Both modes should produce the same order
-        expect.to_equal(strict_values, lenient_values)
+        let assert Ok(values) = duplicate_bag.lookup(t, "log")
+        expect.to_equal(list.length(values), 3)
+        let assert Ok(first) = list.first(values)
+        let assert Ok(last) = list.last(values)
+        expect.to_not_equal(first, last)
+        let assert Ok(Nil) = duplicate_bag.close(t)
         test_helpers.cleanup(path)
         Nil
       }),
@@ -418,21 +340,6 @@ pub fn type_safety_tests() {
         let assert Ok(Nil) = set.close(t2)
         test_helpers.cleanup(path1)
         test_helpers.cleanup(path2)
-        Nil
-      }),
-    ]),
-    describe("decode policy config", [
-      it("config defaults to Strict", fn() {
-        let _config =
-          shelf.config(name: "test", path: "test.dets", base_directory: "/tmp")
-        // Config is opaque — default behavior verified by type safety tests
-        Nil
-      }),
-      it("config decode_policy can be set to Lenient", fn() {
-        let _config =
-          shelf.config(name: "test", path: "test.dets", base_directory: "/tmp")
-          |> shelf.decode_policy(shelf.Lenient)
-        // Config is opaque — lenient behavior verified by lenient mode tests
         Nil
       }),
     ]),
