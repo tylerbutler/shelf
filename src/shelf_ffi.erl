@@ -99,8 +99,10 @@ path_to_dets_name(Path) ->
             case ets:insert_new(?REGISTRY, {Path, Name}) of
                 true -> Name;
                 false ->
-                    [{Path, ExistingName}] = ets:lookup(?REGISTRY, Path),
-                    ExistingName
+                    case ets:lookup(?REGISTRY, Path) of
+                        [{Path, ExistingName}] -> ExistingName;
+                        [] -> path_to_dets_name(Path)
+                    end
             end
     end.
 
@@ -283,9 +285,9 @@ reload_atomic_impl(Ets, Dets, DecoderFun, Policy) ->
     end.
 
 reload_atomic_validated(Ets, Dets, DecoderFun, Policy) ->
+    Type = ets:info(Ets, type),
+    Scratch = ets:new(shelf_reload_scratch, [Type, protected]),
     try
-        Type = ets:info(Ets, type),
-        Scratch = ets:new(shelf_reload_scratch, [Type, protected]),
         LoadResult = case Policy of
             strict ->
                 dets_fold_into_ets_strict(Dets, Scratch, DecoderFun);
@@ -305,6 +307,7 @@ reload_atomic_validated(Ets, Dets, DecoderFun, Policy) ->
         end
     catch
         _:Reason ->
+            (catch ets:delete(Scratch)),
             {error, translate_error(Reason)}
     end.
 
