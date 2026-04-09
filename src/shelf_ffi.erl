@@ -12,6 +12,7 @@
     dets_fold_into_ets_strict/3, dets_fold_into_ets_lenient/3,
     dets_insert/2, dets_insert_list/2,
     dets_delete_key/2, dets_delete_object/3, dets_delete_all/1,
+    reload_atomic_strict/3, reload_atomic_lenient/3,
     validate_path/2,
     normalize_path/1
 ]).
@@ -262,6 +263,49 @@ dets_fold_into_ets_lenient(Dets, Ets, DecoderFun) ->
         end
     catch
         _:CatchReason -> {error, translate_error(CatchReason)}
+    end.
+
+%% ── Atomic reload ───────────────────────────────────────────────────────
+%% Load DETS entries into a scratch ETS table first.  Only replace the
+%% live table contents after the full validation succeeds; on failure the
+%% live ETS is untouched.
+
+reload_atomic_strict(Ets, Dets, DecoderFun) ->
+    reload_atomic_impl(Ets, Dets, DecoderFun, strict).
+
+reload_atomic_lenient(Ets, Dets, DecoderFun) ->
+    reload_atomic_impl(Ets, Dets, DecoderFun, lenient).
+
+reload_atomic_impl(Ets, Dets, DecoderFun, Policy) ->
+    case check_owner(Ets) of
+        {error, _} = Err -> Err;
+        ok -> reload_atomic_validated(Ets, Dets, DecoderFun, Policy)
+    end.
+
+reload_atomic_validated(Ets, Dets, DecoderFun, Policy) ->
+    try
+        Type = ets:info(Ets, type),
+        Scratch = ets:new(shelf_reload_scratch, [Type, protected]),
+        LoadResult = case Policy of
+            strict ->
+                dets_fold_into_ets_strict(Dets, Scratch, DecoderFun);
+            lenient ->
+                dets_fold_into_ets_lenient(Dets, Scratch, DecoderFun)
+        end,
+        case LoadResult of
+            {ok, _} ->
+                %% Validation passed — swap contents.
+                ets:delete_all_objects(Ets),
+                ets:insert(Ets, ets:tab2list(Scratch)),
+                ets:delete(Scratch),
+                {ok, nil};
+            {error, _} = Err ->
+                ets:delete(Scratch),
+                Err
+        end
+    catch
+        _:Reason ->
+            {error, translate_error(Reason)}
     end.
 
 %% ── Guardian ────────────────────────────────────────────────────────────
