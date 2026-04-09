@@ -1,5 +1,4 @@
 import gleam/dynamic/decode
-import shelf
 import shelf/set
 import startest.{describe, it}
 import startest/expect
