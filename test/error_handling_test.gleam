@@ -74,6 +74,42 @@ pub fn error_handling_tests() {
         test_helpers.cleanup(path)
         Nil
       }),
+      it("force-cleans up after a close error", fn() {
+        let dir = "/tmp/shelf_eh_close_retry"
+        let path = "/tmp/shelf_eh_close_retry/table.dets"
+        test_helpers.prepare_retry_directory(dir, path)
+
+        let result =
+          set.with_table(
+            "eh_close_retry",
+            path,
+            base_directory: "/tmp",
+            key: decode.string,
+            value: decode.string,
+            fun: fn(table) {
+              let assert Ok(Nil) = set.insert(table, "key", "value")
+              test_helpers.make_directory_read_only(dir)
+              Ok("done")
+            },
+          )
+
+        test_helpers.make_directory_writable(dir)
+        result |> expect.to_be_error
+
+        let assert Ok(table) =
+          set.open(
+            name: "eh_close_retry_reopen",
+            path: path,
+            base_directory: "/tmp",
+            key: decode.string,
+            value: decode.string,
+          )
+        expect.to_equal(set.lookup(table, "key"), Error(shelf.NotFound))
+        let assert Ok(Nil) = set.close(table)
+
+        test_helpers.cleanup_retry_directory(dir, path)
+        Nil
+      }),
     ]),
     describe("TypeMismatch includes decode errors", [
       it("TypeMismatch contains decode error details", fn() {
