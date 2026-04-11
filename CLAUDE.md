@@ -53,15 +53,15 @@ test/
 
 The `shelf_ffi.erl` module wraps raw `ets:*` and `dets:*` calls with error translation. Key native functions used:
 - `ets:to_dets(EtsTab, DetsTab)` — replaces all DETS contents with ETS (atomic snapshot)
-- `dets:foldl/3` via `dets_to_list/1` — extracts raw DETS entries for Gleam-side decoder validation
+- `dets:foldl/3` via `dets_fold_into_ets_strict/3` — streams DETS entries through decoders into ETS with batched inserts
 
 ### Design Decisions
 
 - **Direct Erlang wrapping** (not built on bravo/slate) to use efficient `ets:to_dets` bulk transfers and decoder-validated loading
 - **Opaque table handles**: `PSet(k, v)`, `PBag(k, v)`, `PDuplicateBag(k, v)` enforce type safety
 - **No ordered set**: DETS doesn't support `ordered_set`
-- **ETS table name = user-provided name**: Converted to atom via `binary_to_atom`
-- **DETS table name = file path**: Converted to atom to avoid collisions
+- **ETS table name**: Always `shelf_ets` (unnamed tables via `ets:new/2`); user-provided name is a diagnostic label only
+- **DETS table name**: Mapped through a bounded atom registry (`path_to_dets_name`) to avoid unbounded atom creation
 
 ## Dependencies
 

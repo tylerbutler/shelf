@@ -39,7 +39,6 @@ pub opaque type PBag(k, v) {
     guardian: GuardianRef,
     write_mode: shelf.WriteMode,
     entry_decoder: Decoder(#(k, v)),
-    decode_policy: shelf.DecodePolicy,
   )
 }
 
@@ -79,11 +78,10 @@ pub fn open_config(
     guardian: result.2,
     write_mode: result.3,
     entry_decoder: result.4,
-    decode_policy: result.5,
   ))
 }
 
-/// Open a persistent bag table with defaults (WriteBack mode, Strict decoding).
+/// Open a persistent bag table with defaults (WriteBack mode).
 ///
 /// ```gleam
 /// let assert Ok(table) =
@@ -108,11 +106,22 @@ pub fn open(
 
 /// Close the table, saving all data to disk.
 ///
+/// On `Ok(Nil)`, the handle must not be used again. If the final save
+/// fails with a retryable persistence error, `close()` returns
+/// `Error(...)` and leaves the table open so the caller can retry.
+/// If close fails terminally, Shelf still releases resources and future
+/// operations on the handle return `Error(TableClosed)`.
+///
 pub fn close(table: PBag(k, v)) -> Result(Nil, ShelfError) {
   internal.close(table.ets, table.dets, table.guardian)
 }
 
 /// Use a table within a callback, ensuring it is closed afterward.
+///
+/// If the final save fails during close, `with_table` force-cleans the
+/// table to release resources. If the callback succeeded, the close
+/// error is returned; if both the callback and close fail, the callback
+/// error is preserved.
 ///
 /// ```gleam
 /// use table <- bag.with_table("tags", "tags.dets",
@@ -257,17 +266,11 @@ pub fn save(table: PBag(k, v)) -> Result(Nil, ShelfError) {
 ///
 /// Clears the ETS table, re-reads all DETS entries, validates them
 /// through the stored decoders, and loads valid entries into ETS.
-/// The configured decode policy is respected on reload.
 /// Only useful in WriteBack mode — in WriteThrough mode, ETS and
 /// DETS are always in sync.
 ///
 pub fn reload(table: PBag(k, v)) -> Result(Nil, ShelfError) {
-  internal.generic_reload(
-    table.ets,
-    table.dets,
-    table.entry_decoder,
-    table.decode_policy,
-  )
+  internal.generic_reload(table.ets, table.dets, table.entry_decoder)
 }
 
 /// Flush the DETS write buffer to the OS.

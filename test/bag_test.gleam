@@ -321,7 +321,7 @@ pub fn bag_tests() {
         let assert Ok(Nil) = bag.save(table)
         let assert Ok(Nil) = bag.insert(table, "unsaved", "oops")
         let assert Ok(True) = bag.member(table, "unsaved")
-        let assert Ok(Nil) = bag.reload(table)
+        let assert Ok(_) = bag.reload(table)
         let assert Ok(True) = bag.member(table, "saved")
         let assert Ok(False) = bag.member(table, "unsaved")
         let assert Ok(Nil) = bag.close(table)

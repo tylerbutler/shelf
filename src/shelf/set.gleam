@@ -45,7 +45,6 @@ pub opaque type PSet(k, v) {
     guardian: GuardianRef,
     write_mode: shelf.WriteMode,
     entry_decoder: Decoder(#(k, v)),
-    decode_policy: shelf.DecodePolicy,
   )
 }
 
@@ -85,11 +84,10 @@ pub fn open_config(
     guardian: result.2,
     write_mode: result.3,
     entry_decoder: result.4,
-    decode_policy: result.5,
   ))
 }
 
-/// Open a persistent set table with defaults (WriteBack mode, Strict decoding).
+/// Open a persistent set table with defaults (WriteBack mode).
 ///
 /// ```gleam
 /// let assert Ok(table) =
@@ -115,7 +113,13 @@ pub fn open(
 /// Close the table, saving all data to disk.
 ///
 /// Performs a final snapshot of ETS to DETS, closes the DETS file,
-/// and deletes the ETS table. The handle must not be used after closing.
+/// and deletes the ETS table.
+///
+/// On `Ok(Nil)`, the handle must not be used again. If the final save
+/// fails with a retryable persistence error, `close()` returns
+/// `Error(...)` and leaves the table open so the caller can retry.
+/// If close fails terminally, Shelf still releases resources and future
+/// operations on the handle return `Error(TableClosed)`.
 ///
 pub fn close(table: PSet(k, v)) -> Result(Nil, ShelfError) {
   internal.close(table.ets, table.dets, table.guardian)
@@ -124,7 +128,10 @@ pub fn close(table: PSet(k, v)) -> Result(Nil, ShelfError) {
 /// Use a table within a callback, ensuring it is closed afterward.
 ///
 /// The table is opened before the callback and closed after it returns
-/// (even if it returns an error). Data is auto-saved on close.
+/// (even if it returns an error). Data is auto-saved on close; if the
+/// final save fails, `with_table` force-cleans the table to release
+/// resources. If the callback succeeded, the close error is returned;
+/// if both the callback and close fail, the callback error is preserved.
 ///
 /// ```gleam
 /// use table <- set.with_table("cache", "cache.dets",
@@ -227,15 +234,29 @@ pub fn insert_list(
 ///
 /// Returns `Error(KeyAlreadyPresent)` if the key exists.
 ///
+/// In WriteThrough mode, uniqueness is checked in ETS first, then DETS
+/// is written, then ETS. Since writes are owner-only (single process),
+/// there is no race between the check and write.
+///
 pub fn insert_new(
   into table: PSet(k, v),
   key key: k,
   value value: v,
 ) -> Result(Nil, ShelfError) {
-  use _ <- result.try(ffi_insert_new(table.ets, table.dets, #(key, value)))
   case table.write_mode {
-    shelf.WriteThrough -> internal.dets_insert(table.dets, #(key, value))
-    shelf.WriteBack -> Ok(Nil)
+    shelf.WriteThrough -> {
+      // Check uniqueness in ETS first
+      use exists <- result.try(internal.member(table.ets, key))
+      case exists {
+        True -> Error(shelf.KeyAlreadyPresent)
+        False -> {
+          // DETS first, then ETS
+          use _ <- result.try(internal.dets_insert(table.dets, #(key, value)))
+          internal.insert(table.ets, table.dets, #(key, value))
+        }
+      }
+    }
+    shelf.WriteBack -> ffi_insert_new(table.ets, table.dets, #(key, value))
   }
 }
 
@@ -300,17 +321,11 @@ pub fn save(table: PSet(k, v)) -> Result(Nil, ShelfError) {
 ///
 /// Clears the ETS table, re-reads all DETS entries, validates them
 /// through the stored decoders, and loads valid entries into ETS.
-/// The configured decode policy is respected on reload.
 /// Only useful in WriteBack mode — in WriteThrough mode, ETS and
 /// DETS are always in sync.
 ///
 pub fn reload(table: PSet(k, v)) -> Result(Nil, ShelfError) {
-  internal.generic_reload(
-    table.ets,
-    table.dets,
-    table.entry_decoder,
-    table.decode_policy,
-  )
+  internal.generic_reload(table.ets, table.dets, table.entry_decoder)
 }
 
 /// Flush the DETS write buffer to the OS.
@@ -336,6 +351,9 @@ pub fn sync(table: PSet(k, v)) -> Result(Nil, ShelfError) {
 /// let assert Ok(3) = set.update_counter(table, "hits", 2)
 /// ```
 ///
+/// In WriteThrough mode, the ETS atomic increment happens first (only ETS
+/// supports update_counter), then DETS is updated. If the DETS write fails,
+/// the ETS increment is rolled back by applying the negated amount.
 pub fn update_counter(
   in table: PSet(k, Int),
   key key: k,
@@ -343,10 +361,15 @@ pub fn update_counter(
 ) -> Result(Int, ShelfError) {
   use new_val <- result.try(ffi_update_counter(table.ets, key, amount))
   case table.write_mode {
-    shelf.WriteThrough -> {
-      use _ <- result.try(internal.dets_insert(table.dets, #(key, new_val)))
-      Ok(new_val)
-    }
+    shelf.WriteThrough ->
+      case internal.dets_insert(table.dets, #(key, new_val)) {
+        Ok(Nil) -> Ok(new_val)
+        Error(e) -> {
+          // Undo ETS change to maintain consistency
+          let _ = ffi_update_counter(table.ets, key, -amount)
+          Error(e)
+        }
+      }
     shelf.WriteBack -> Ok(new_val)
   }
 }
