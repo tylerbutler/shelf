@@ -227,9 +227,6 @@ pub fn open_no_load(
   table_type: String,
 ) -> Result(#(EtsRef, DetsRef, GuardianRef), ShelfError)
 
-@external(erlang, "shelf_ffi", "dets_to_list")
-@internal
-pub fn dets_to_list(dets: DetsRef) -> Result(List(Dynamic), ShelfError)
 
 @external(erlang, "shelf_ffi", "cleanup")
 @internal

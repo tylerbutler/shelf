@@ -8,7 +8,6 @@
     to_list/1, fold/3, size/1,
     save/2, sync_dets/1, sync_dets/2,
     update_counter/3,
-    dets_to_list/1,
     dets_fold_into_ets_strict/3,
     dets_insert/2, dets_insert_list/2,
     dets_delete_key/2, dets_delete_object/3, dets_delete_all/1,
@@ -169,20 +168,6 @@ open_no_load(_Name, Path, TypeBin) ->
             {error, translate_error(Reason)}
     end.
 
-%% ── DETS to list ───────────────────────────────────────────────────────
-%% Returns all entries from a DETS table as a list of raw Erlang terms.
-
-dets_to_list(Dets) ->
-    try
-        Result = dets:foldl(fun(Entry, Acc) -> [Entry | Acc] end, [], Dets),
-        case Result of
-            {error, Reason} -> {error, translate_error(Reason)};
-            _ when is_list(Result) -> {ok, Result}
-        end
-    catch
-        _:CatchReason -> {error, translate_error(CatchReason)}
-    end.
-
 %% ── Streaming DETS → ETS loaders ────────────────────────────────────────
 %% Validate and insert entries one at a time using dets:foldl, avoiding
 %% materializing the entire DETS contents into a Gleam list.
@@ -196,7 +181,7 @@ flush_batch(_Ets, []) -> ok;
 %% callers that expect values under a key to stay in DETS order.
 flush_batch(Ets, Batch) -> ets:insert(Ets, lists:reverse(Batch)).
 
-%% Strict mode: abort on first decode failure using throw.
+%% Abort on first decode failure using throw.
 %% DecoderFun takes a raw entry and returns {ok, Pair} or {error, Errors}.
 dets_fold_into_ets_strict(Dets, Ets, DecoderFun) ->
     try

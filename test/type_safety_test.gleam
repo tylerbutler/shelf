@@ -262,8 +262,8 @@ pub fn type_safety_tests() {
         let assert Ok(values) = bag.lookup(t, "color")
         // The values should contain all three entries
         expect.to_equal(list.length(values), 3)
-        // Order should match: dets_to_list reverses DETS iteration order,
-        // and decode_all_strict must reverse back to preserve the original.
+        // Order is preserved: dets:foldl accumulates entries in reverse,
+        // and flush_batch calls lists:reverse before each ets:insert.
         // Verify by checking first and last elements are not swapped.
         let assert Ok(first) = list.first(values)
         let assert Ok(last) = list.last(values)
