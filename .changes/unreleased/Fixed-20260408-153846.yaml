@@ -1,3 +1,0 @@
-kind: Fixed
-body: with_table now preserves panic crash detail instead of returning generic 'Callback panicked'; cleanup/3 no longer swallows all errors; with_table extracted to shared helper eliminating duplication across set/bag/duplicate_bag
-time: 2026-04-08T15:38:46.680077-07:00

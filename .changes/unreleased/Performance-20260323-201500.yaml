@@ -1,5 +1,0 @@
-kind: Performance
-body: |-
-    Streaming DETS loader reduces peak memory from ~3x to ~1x
-    Replace the bulk validate_and_load approach (materializes all DETS entries into a Gleam list before decoding) with stream_validate_and_load backed by dets:foldl in the FFI. Entries are decoded and inserted into ETS one at a time, avoiding the intermediate list allocation.
-time: 2026-03-23T20:15:00.000000000-07:00

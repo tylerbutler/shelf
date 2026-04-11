@@ -1,5 +1,0 @@
-kind: Performance
-body: |-
-    Reduce table lock contention during concurrent operations
-    Added `{read_concurrency, true}` and `{write_concurrency, true}` flags to internal registry and user ETS tables.
-time: 2026-04-04T20:54:59.551188-07:00

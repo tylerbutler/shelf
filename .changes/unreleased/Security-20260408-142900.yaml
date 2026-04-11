@@ -1,5 +1,0 @@
-kind: Security
-body: |-
-    Prevent atom exhaustion from user-provided table names
-    ETS table creation no longer converts user-provided `Config.name` values to atoms. Previously, each distinct name created a permanent atom via `binary_to_atom`, which could exhaust the VM atom table in dynamic or multi-tenant workloads. The `name` field is now a diagnostic label only.
-time: 2026-04-08T14:29:00.000000000-07:00
