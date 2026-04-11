@@ -227,7 +227,6 @@ pub fn open_no_load(
   table_type: String,
 ) -> Result(#(EtsRef, DetsRef, GuardianRef), ShelfError)
 
-
 @external(erlang, "shelf_ffi", "cleanup")
 @internal
 pub fn cleanup(
