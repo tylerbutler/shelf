@@ -5,16 +5,6 @@
 
 Persistent ETS tables backed by DETS — fast in-memory access with automatic disk persistence for the BEAM.
 
-> [!IMPORTANT]
-> shelf is not yet 1.0. This means:
->
-> - the API is unstable
-> - features and APIs may be removed in minor releases
-> - quality should not be considered production-ready
->
-> We welcome usage and feedback in
-> the meantime! We will do our best to minimize breaking changes regardless.
-
 Shelf combines ETS (fast, in-memory) with DETS (persistent, on-disk) to give you microsecond reads with durable storage. It implements the classic Erlang persistence pattern, wrapped in a type-safe Gleam API.
 
 If you only need ETS or DETS individually, check out these excellent standalone wrappers:
