@@ -1,7 +1,7 @@
 [tools]
 changie = "latest"
 erlang = "27"
-gleam = "latest"
+gleam = "1.14.0"
 just = "latest"
 
 [env]
