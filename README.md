@@ -5,16 +5,6 @@
 
 Persistent ETS tables backed by DETS — fast in-memory access with automatic disk persistence for the BEAM.
 
-> [!IMPORTANT]
-> shelf is not yet 1.0. This means:
->
-> - the API is unstable
-> - features and APIs may be removed in minor releases
-> - quality should not be considered production-ready
->
-> We welcome usage and feedback in
-> the meantime! We will do our best to minimize breaking changes regardless.
-
 Shelf combines ETS (fast, in-memory) with DETS (persistent, on-disk) to give you microsecond reads with durable storage. It implements the classic Erlang persistence pattern, wrapped in a type-safe Gleam API.
 
 If you only need ETS or DETS individually, check out these excellent standalone wrappers:
@@ -254,11 +244,12 @@ All operations return `Result(value, ShelfError)`. The error type covers all fai
 | `NotFound` | Key doesn't exist (from `lookup`) |
 | `KeyAlreadyPresent` | Key exists (from `insert_new`) |
 | `TableClosed` | Table has been closed or doesn't exist |
-| `NameConflict` | An ETS table or DETS file is already open with conflicting parameters |
+| `NotOwner` | The calling process is not the table owner (see [Process Ownership](#process-ownership)) |
+| `NameConflict` | A DETS file at this path is already open by another shelf table |
 | `InvalidPath(String)` | File path escapes the base directory or contains unsafe characters |
 | `FileError(String)` | DETS file couldn't be found, created, or opened |
 | `FileSizeLimitExceeded` | DETS file exceeds the 2 GB limit |
-| `TypeMismatch` | Data loaded from DETS failed decoder validation |
+| `TypeMismatch(List(DecodeError))` | Data loaded from DETS failed decoder validation |
 | `ErlangError(String)` | Catch-all for unexpected Erlang-level errors |
 
 ```gleam
@@ -267,8 +258,8 @@ case set.open(name: "cache", path: "data/cache.dets",
   key: decode.string, value: decode.string)
 {
   Ok(table) -> use_table(table)
-  Error(shelf.TypeMismatch) -> io.println("DETS data doesn't match expected types!")
-  Error(shelf.NameConflict) -> io.println("Table already open!")
+  Error(shelf.TypeMismatch(_errors)) -> io.println("DETS data doesn't match expected types!")
+  Error(shelf.NameConflict) -> io.println("DETS file already open!")
   Error(shelf.InvalidPath(msg)) -> io.println("Invalid path: " <> msg)
   Error(shelf.FileError(msg)) -> io.println("File error: " <> msg)
   Error(err) -> io.println("Unexpected: " <> string.inspect(err))
@@ -349,23 +340,29 @@ let assert Ok(entries) = set.to_list(from: t)
 
 All DETS file paths are validated against the provided `base_directory` to prevent path traversal attacks. Paths containing `..` segments or other unsafe patterns that would escape the base directory are rejected with an `InvalidPath` error.
 
-## Concurrency
+## Process Ownership
 
-ETS tables support concurrent reads from any process. Write safety depends on the table type:
+ETS tables are owned by the process that calls `open()`. This determines what each process can do:
 
-- **Set tables**: Concurrent writes to *different* keys are safe. Concurrent writes to the *same* key result in last-writer-wins (no corruption, but potential data loss).
-- **Bag / Duplicate Bag**: Same concurrency model as set — concurrent writes to different keys are safe.
+- **Reads** (`lookup`, `member`, `to_list`, `fold`, `size`) work from **any** process — ETS tables are created as `protected`.
+- **Writes and lifecycle** (`insert`, `delete_*`, `update_counter`, `save`, `reload`, `sync`, `close`) are restricted to the **owner** process. Non-owner attempts return `Error(NotOwner)`.
 
-All shelf operations are individual ETS/DETS calls — there is no built-in transaction support. If you need atomic multi-key updates, coordinate through a single process (e.g., a GenServer).
+If you need cross-process writes, wrap the table in a supervised actor/server that owns the table and forwards mutation requests.
 
-### Process Supervision
+### Crash Behavior
 
-ETS tables are owned by the process that creates them. If the owning process crashes, the ETS table is deleted and unsaved data is lost. The DETS file is preserved.
+If the owning process crashes, the ETS table is deleted and unsaved data is lost. The DETS file is preserved — the next `open()` call reloads it.
 
 For long-running applications:
 - Open tables in a supervised process (e.g., an OTP GenServer or Gleam actor)
 - Consider periodic `save()` calls for WriteBack mode
 - Use WriteThrough mode for data that cannot tolerate loss
+
+### Write Safety
+
+Within the owner process, all shelf operations are individual ETS/DETS calls — there is no built-in transaction support. If you need atomic multi-key updates, coordinate through a single process (e.g., a GenServer).
+
+For set tables, concurrent reads from other processes while the owner writes to *different* keys are safe. Writes to the *same* key result in last-writer-wins (no corruption, but potential data loss from the reader's perspective). Bag and duplicate bag tables follow the same model.
 
 ## See Also
 

@@ -20,8 +20,9 @@ gleam docs build         # Generate documentation
 src/
 ├── shelf.gleam                 # Shared types (ShelfError, WriteMode, Config)
 ├── shelf_ffi.erl               # Erlang FFI for ETS + DETS + transfers
+├── shelf_rescue_ffi.erl        # Erlang FFI for panic rescue in with_table
 └── shelf/
-    ├── internal.gleam          # Internal types (EtsRef, DetsRef)
+    ├── internal.gleam          # Internal types (EtsRef, DetsRef) + shared operations
     ├── set.gleam               # Persistent set tables (unique keys)
     ├── bag.gleam               # Persistent bag tables (multiple values per key)
     └── duplicate_bag.gleam     # Persistent duplicate bag tables
@@ -31,7 +32,20 @@ test/
 ├── bag_test.gleam              # Bag table tests
 ├── duplicate_bag_test.gleam    # Duplicate bag table tests
 ├── persistence_test.gleam      # Save/reload/survive-restart tests
-└── write_through_test.gleam    # WriteThrough mode tests
+├── write_through_test.gleam    # WriteThrough mode tests
+├── writethrough_consistency_test.gleam  # WriteThrough DETS-first ordering tests
+├── ownership_test.gleam        # Process ownership + NotOwner tests
+├── concurrency_test.gleam      # Cross-process read tests
+├── guardian_test.gleam         # Guardian process cleanup tests
+├── atomic_save_test.gleam      # Atomic save (temp file + rename) tests
+├── reload_atomicity_test.gleam # Atomic reload (scratch table swap) tests
+├── close_test.gleam            # Close lifecycle + error recovery tests
+├── update_counter_test.gleam   # Atomic counter tests
+├── path_validation_test.gleam  # Path traversal / security tests
+├── type_safety_test.gleam      # Decoder validation tests
+├── error_handling_test.gleam   # ShelfError translation tests
+├── error_path_test.gleam       # Error path coverage tests
+└── ffi_fixes_test.gleam        # FFI edge case regression tests
 ```
 
 ## Architecture
@@ -47,7 +61,7 @@ test/
 ### Write Modes
 
 - **WriteBack** (default): Writes go to ETS only. Call `save()` to persist.
-- **WriteThrough**: Every write triggers `ets:to_dets/2` immediately.
+- **WriteThrough**: Every write goes to DETS first (via `dets:insert`), then ETS. Ensures DETS failure never leaves ETS in a divergent state.
 
 ### FFI Pattern
 

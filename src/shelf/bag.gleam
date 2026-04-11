@@ -17,6 +17,7 @@
 ///
 /// let assert Ok(table) =
 ///   bag.open(name: "tags", path: "data/tags.dets",
+///     base_directory: "/app/data",
 ///     key: decode.string, value: decode.string)
 /// let assert Ok(Nil) = bag.insert(table, "color", "red")
 /// let assert Ok(Nil) = bag.insert(table, "color", "blue")

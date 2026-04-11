@@ -17,6 +17,7 @@
 ///
 /// let assert Ok(table) =
 ///   duplicate_bag.open(name: "events", path: "data/events.dets",
+///     base_directory: "/app/data",
 ///     key: decode.string, value: decode.string)
 /// let assert Ok(Nil) = duplicate_bag.insert(table, "click", "btn_1")
 /// let assert Ok(Nil) = duplicate_bag.insert(table, "click", "btn_1")

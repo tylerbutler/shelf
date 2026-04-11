@@ -13,13 +13,13 @@ Repository context:
 - shelf provides persistent ETS tables backed by DETS via Gleam modules in `src/shelf/{set,bag,duplicate_bag}.gleam`.
 - Shared types live in `src/shelf.gleam` with internal types in `src/shelf/internal.gleam`.
 - FFI and low-level behavior live in `src/shelf_ffi.erl`, wrapping `ets:*` and `dets:*` calls.
-- Two write modes: WriteBack (ETS-only, batch save) and WriteThrough (`ets:to_dets` on every write).
+- Two write modes: WriteBack (ETS-only, batch save) and WriteThrough (`dets:insert` + `ets:insert` on every write; `ets:to_dets/2` is only used by `save()`).
 
 Performance strategy:
 - Prefer OTP-native architectures: supervised workers, clear process ownership, bounded mailboxes, and failure isolation.
 - Model read/write paths explicitly; identify hot keys, fan-out, contention points, and IO bottlenecks.
 - Reads always come from ETS (microsecond latency); writes depend on the configured WriteMode.
-- WriteThrough uses `ets:to_dets/2` per write — profile and optimize this path for throughput-sensitive use cases.
+- WriteThrough uses `dets:insert` + `ets:insert` per write (DETS first for consistency) — profile and optimize this path for throughput-sensitive use cases.
 - WriteBack batches persistence via explicit `save()` calls — optimize batch size and timing.
 
 Rules for recommendations:
