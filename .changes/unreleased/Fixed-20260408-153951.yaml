@@ -1,3 +1,0 @@
-kind: Fixed
-body: DETS atom registry now owned by a dedicated long-lived process (survives caller death); collision attempts capped at 100 to keep atom creation bounded
-time: 2026-04-08T15:39:51.903036-07:00

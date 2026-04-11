@@ -1,5 +1,0 @@
-kind: Fixed
-body: |-
-    Fix data loss risk on save
-    save() now uses an atomic strategy: data is written to a temporary file first, then atomically renamed over the original. A crash mid-save no longer risks leaving the DETS file empty or corrupted.
-time: 2026-03-22T21:32:06.055550726-07:00

@@ -1,5 +1,0 @@
-kind: Security
-body: |-
-    Add path traversal protection for DETS file paths
-    All open functions now require a base_directory parameter. DETS file paths are validated to ensure they resolve within the base directory. Paths containing ".." traversal or null bytes are rejected with the new InvalidPath error.
-time: 2026-03-22T21:32:15.330621587-07:00

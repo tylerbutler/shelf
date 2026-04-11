@@ -1,5 +1,0 @@
-kind: Performance
-body: |-
-    Increase initial table loading speed by batching FFI inserts
-    `open_no_load/3` batch processes 5,000 entries at a time via `dets:foldl` directly into ETS rather than row-by-row boundary crossing.
-time: 2026-04-04T20:55:01.051485-07:00

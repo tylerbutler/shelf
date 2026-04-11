@@ -1,5 +1,0 @@
-kind: Fixed
-body: |-
-    Cleanly close DETS files if the owning process crashes
-    Added process monitors to ensure file descriptors do not leak if the owner goes down.
-time: 2026-04-04T20:54:56.550113-07:00

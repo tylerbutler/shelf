@@ -1,3 +1,0 @@
-kind: Fixed
-body: close() now preserves state for retryable save failures while still returning TableClosed consistently and releasing resources for terminal close errors
-time: 2026-04-08T15:31:23.403812-07:00

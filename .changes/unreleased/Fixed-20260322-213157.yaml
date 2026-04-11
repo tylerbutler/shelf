@@ -1,5 +1,0 @@
-kind: Fixed
-body: |-
-    Fix delete_object documentation for set tables
-    The docs incorrectly stated that the value parameter is "ignored" for set tables. In reality, delete_object performs an atomic Compare-and-Delete — the entry is only deleted if both key and value match.
-time: 2026-03-22T21:31:57.647355821-07:00

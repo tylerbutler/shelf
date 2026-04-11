@@ -1,0 +1,151 @@
+# Changelog
+
+
+## v1.0.0 - 2026-04-11
+
+
+#### Breaking
+
+##### ETS tables no longer use named_table
+
+Multiple tables with the same name can now coexist since ETS tables use anonymous references. The NameConflict error now only applies to DETS file path conflicts.
+
+##### open(), with_table(), and config() now require a base_directory parameter
+
+All table-opening functions now take a base_directory argument that restricts where DETS files can be created. Update calls from e.g. set.open(name: "t", path: "data/t.dets", ...) to set.open(name: "t", path: "t.dets", base_directory: "data", ...).
+
+##### Require decoders on open for runtime type safety
+
+All `open` and `open_config` functions now require `key` and `value` decoder arguments. When a table is opened, every entry loaded from the DETS file on disk is validated through these decoders before being inserted into ETS. Entries that fail validation cause the open to fail with `TypeMismatch`.
+
+This catches type mismatches at the persistence boundary — for example, if application code changes the value type from `String` to `Int` but the DETS file still contains old `String` values, the mismatch is caught immediately on open rather than causing runtime errors later.
+
+**Before:**
+```gleam
+let assert Ok(table) = set.open(name: "cache", path: "data/cache.dets")
+```
+
+**After:**
+```gleam
+import gleam/dynamic/decode
+
+let assert Ok(table) =
+  set.open(name: "cache", path: "data/cache.dets",
+    key: decode.string, value: decode.int)
+```
+
+The `open_config` variant accepts a `Config` for additional options like write mode:
+```gleam
+let config =
+  shelf.config(name: "cache", path: "data/cache.dets",
+    base_directory: "/app/data")
+  |> shelf.write_mode(shelf.WriteThrough)
+let assert Ok(table) =
+  set.open_config(config: config, key: decode.string, value: decode.int)
+```
+
+
+#### Added
+
+##### Add InvalidPath error variant
+
+New ShelfError variant returned when a DETS file path escapes the base directory, contains null bytes, or is otherwise unsafe.
+
+##### Add NotOwner error variant to ShelfError
+
+Non-owner processes that attempt writes or lifecycle operations now
+receive a clear NotOwner error instead of the misleading TableClosed.
+Reads (lookup, member, to_list, fold, size) continue to work from
+any process.
+
+
+#### Changed
+
+##### NameConflict error docs clarified as DETS file conflict, not table name conflict
+
+
+#### Fixed
+
+##### Fix atom exhaustion vulnerability
+
+ETS tables now use anonymous references instead of named tables, and DETS atoms are bounded via a hash-based pool (65K max). Dynamic table creation no longer risks crashing the VM.
+
+##### Fix delete_object documentation for set tables
+
+The docs incorrectly stated that the value parameter is "ignored" for set tables. In reality, delete_object performs an atomic Compare-and-Delete — the entry is only deleted if both key and value match.
+
+##### Fix data loss risk on save
+
+save() now uses an atomic strategy: data is written to a temporary file first, then atomically renamed over the original. A crash mid-save no longer risks leaving the DETS file empty or corrupted.
+
+##### Fix resource leak when opening tables with invalid DETS data
+
+If decoder validation failed during `open` or `open_config`, the DETS file handle was left open. Both ETS and DETS resources are now properly cleaned up on any open failure.
+
+##### Fix with_table leaking table handle on callback panic
+
+`with_table` now wraps the callback in a rescue handler. If the callback panics, the table is still properly closed and an `ErlangError` is returned instead of crashing the caller.
+
+##### Fix close leak and size returning undefined for empty tables
+
+`close` previously ignored its own save error, silently leaking the DETS handle. `size` returned `undefined` instead of `0` for empty tables. ETS tables are now created as `protected` instead of `public` to prevent external mutation.
+
+##### Cleanly close DETS files if the owning process crashes
+
+Added process monitors to ensure file descriptors do not leak if the owner goes down.
+
+##### Prevent VM crashes due to atom table exhaustion during saves
+
+Removed dynamic atom generation during `save/2` temporary DETS creation.
+
+##### Correctly classify non-owner ETS write errors
+
+Previously all ETS badarg errors were mapped to TableClosed, making
+ownership violations indistinguishable from closed tables. The FFI
+now checks ets:info(Ets, owner) to return the appropriate error.
+
+##### close() now preserves state for retryable save failures while still returning TableClosed consistently and releasing resources for terminal close errors
+
+##### WriteThrough mode now writes DETS before ETS, preventing inconsistency when DETS operations fail; update_counter rolls back ETS on DETS failure
+
+##### reload() no longer partially loads data on decode failure; original ETS data is preserved on error using a scratch table swap
+
+##### with_table now preserves panic crash detail instead of returning generic 'Callback panicked'; cleanup/3 no longer swallows all errors; with_table extracted to shared helper eliminating duplication across set/bag/duplicate_bag
+
+##### DETS atom registry now owned by a dedicated long-lived process (survives caller death); collision attempts capped at 100 to keep atom creation bounded
+
+
+#### Performance
+
+##### Streaming DETS loader reduces peak memory from ~3x to ~1x
+
+Opening tables with existing DETS data now uses dets:foldl to validate and insert entries one at a time, instead of materializing the entire DETS contents into a Gleam list first. This significantly reduces memory pressure for large tables.
+
+##### Streaming DETS loader reduces peak memory from ~3x to ~1x
+
+Replace the bulk validate_and_load approach (materializes all DETS entries into a Gleam list before decoding) with stream_validate_and_load backed by dets:foldl in the FFI. Entries are decoded and inserted into ETS one at a time, avoiding the intermediate list allocation.
+
+##### Reduce table lock contention during concurrent operations
+
+Added `{read_concurrency, true}` and `{write_concurrency, true}` flags to internal registry and user ETS tables.
+
+##### Increase initial table loading speed by batching FFI inserts
+
+`open_no_load/3` batch processes 5,000 entries at a time via `dets:foldl` directly into ETS rather than row-by-row boundary crossing.
+
+
+#### Security
+
+##### Add path traversal protection for DETS file paths
+
+All open functions now require a base_directory parameter. DETS file paths are validated to ensure they resolve within the base directory. Paths containing ".." traversal or null bytes are rejected with the new InvalidPath error.
+
+##### Prevent atom exhaustion from user-provided table names
+
+ETS table creation no longer converts user-provided `Config.name` values to atoms. Previously, each distinct name created a permanent atom via `binary_to_atom`, which could exhaust the VM atom table in dynamic or multi-tenant workloads. The `name` field is now a diagnostic label only.
+
+
+## v0.1.0 - 2026-03-08
+
+Initial release.
+
