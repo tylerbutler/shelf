@@ -12,7 +12,7 @@ import gleam/dynamic/decode
 import shelf/bag
 
 let assert Ok(table) =
-  bag.open(name: "tags", path: "data/tags.dets", key: decode.string, value: decode.string)
+  bag.open(name: "tags", path: "data/tags.dets", base_directory: "/app/data", key: decode.string, value: decode.string)
 ```
 
 For custom configuration, use `open_config`:
@@ -23,7 +23,7 @@ import shelf
 import shelf/bag
 
 let config =
-  shelf.config(name: "tags", path: "data/tags.dets")
+  shelf.config(name: "tags", path: "data/tags.dets", base_directory: "/app/data")
   |> shelf.write_mode(shelf.WriteThrough)
 
 let assert Ok(table) = bag.open_config(config: config, key: decode.string, value: decode.string)

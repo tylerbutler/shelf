@@ -24,7 +24,7 @@ import shelf/set
 pub fn main() {
   // Open a persistent set — loads existing data from disk
   let assert Ok(table) =
-    set.open(name: "users", path: "data/users.dets", key: decode.string, value: decode.int)
+    set.open(name: "users", path: "data/users.dets", base_directory: "/app/data", key: decode.string, value: decode.int)
 
   // Fast writes (to ETS)
   let assert Ok(Nil) = set.insert(table, "alice", 42)

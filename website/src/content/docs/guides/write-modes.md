@@ -14,7 +14,7 @@ import gleam/dynamic/decode
 import shelf/set
 
 let assert Ok(table) =
-  set.open(name: "sessions", path: "data/sessions.dets", key: decode.string, value: decode.string)
+  set.open(name: "sessions", path: "data/sessions.dets", base_directory: "/app/data", key: decode.string, value: decode.string)
 
 // Fast writes — ETS only
 let assert Ok(Nil) = set.insert(table, "user:1", session_1)
@@ -51,7 +51,7 @@ import shelf
 import shelf/set
 
 let config =
-  shelf.config(name: "accounts", path: "data/accounts.dets")
+  shelf.config(name: "accounts", path: "data/accounts.dets", base_directory: "/app/data")
   |> shelf.write_mode(shelf.WriteThrough)
 
 let assert Ok(table) = set.open_config(config: config, key: decode.string, value: decode.string)
@@ -92,11 +92,11 @@ import shelf
 
 // WriteBack (the default — no config needed)
 let assert Ok(table) =
-  set.open(name: "cache", path: "data/cache.dets", key: decode.string, value: decode.string)
+  set.open(name: "cache", path: "data/cache.dets", base_directory: "/app/data", key: decode.string, value: decode.string)
 
 // WriteThrough (use config)
 let config =
-  shelf.config(name: "accounts", path: "data/accounts.dets")
+  shelf.config(name: "accounts", path: "data/accounts.dets", base_directory: "/app/data")
   |> shelf.write_mode(shelf.WriteThrough)
 let assert Ok(table) =
   set.open_config(config: config, key: decode.string, value: decode.string)

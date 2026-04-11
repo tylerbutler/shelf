@@ -12,7 +12,7 @@ import gleam/dynamic/decode
 import shelf/set
 
 let assert Ok(table) =
-  set.open(name: "users", path: "data/users.dets", key: decode.string, value: decode.int)
+  set.open(name: "users", path: "data/users.dets", base_directory: "/app/data", key: decode.string, value: decode.int)
 ```
 
 If the DETS file exists, its contents are loaded into ETS automatically. If the file doesn't exist, both tables start empty.
@@ -25,7 +25,7 @@ import shelf
 import shelf/set
 
 let config =
-  shelf.config(name: "users", path: "data/users.dets")
+  shelf.config(name: "users", path: "data/users.dets", base_directory: "/app/data")
   |> shelf.write_mode(shelf.WriteThrough)
 
 let assert Ok(table) = set.open_config(config: config, key: decode.string, value: decode.int)
@@ -112,7 +112,7 @@ Use `with_table` to ensure a table is always closed, even if an error occurs:
 
 ```gleam
 let assert Ok(Nil) = {
-  use table <- set.with_table("cache", "data/cache.dets", decode.string, decode.string)
+  use table <- set.with_table("cache", "data/cache.dets", base_directory: "/app/data", key: decode.string, value: decode.string)
   set.insert(into: table, key: "key", value: "value")
 }
 ```
