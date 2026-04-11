@@ -32,29 +32,37 @@ DETS is local to one Erlang node. Data is not replicated or distributed. For mul
 - **Mnesia** — Built-in distributed database for Erlang
 - **Raft-based solutions** — For consensus-based replication
 
-## Table Names Must Be Unique
+## DETS File Paths Must Be Unique
 
-ETS table names are VM-global atoms. If you try to open a table with a name that's already in use by another ETS table (from shelf or any other library), you'll get `Error(NameConflict)`.
+Shelf uses unnamed ETS tables internally, so table names do not need to be globally unique. However, each DETS file path can only be open by one shelf table at a time. Opening a second table with the same resolved file path returns `Error(NameConflict)`.
 
-Use descriptive, namespaced names to avoid collisions:
+Use distinct file paths for each table:
 
 ```gleam
-// Good — namespaced
-set.open(name: "myapp_user_sessions", path: "data/sessions.dets", key: decode.string, value: decode.string)
+// These are fine — different file paths
+set.open(name: "sessions", path: "sessions.dets", base_directory: "/app/data", key: decode.string, value: decode.string)
+set.open(name: "cache", path: "cache.dets", base_directory: "/app/data", key: decode.string, value: decode.string)
 
-// Risky — generic name might collide
-set.open(name: "cache", path: "data/cache.dets", key: decode.string, value: decode.string)
+// This would conflict if "sessions.dets" is already open
+set.open(name: "other_sessions", path: "sessions.dets", base_directory: "/app/data", key: decode.string, value: decode.string)
 ```
 
 ## Process Ownership
 
-ETS tables are owned by the process that created them. If that process crashes or exits, the ETS table is automatically deleted — any unsaved data is lost. The DETS file on disk remains intact.
+ETS tables are owned by the process that calls `open()`. Shelf creates ETS tables as `protected`, which determines what each process can do:
 
-When the application restarts and calls `open()` again, data is reloaded from the DETS file.
+- **Reads** (`lookup`, `member`, `to_list`, `fold`, `size`) work from **any** process.
+- **Writes and lifecycle** (`insert`, `delete_*`, `update_counter`, `save`, `reload`, `sync`, `close`) are restricted to the **owner** process. Non-owner attempts return `Error(NotOwner)`.
+
+If you need cross-process writes, wrap the table in a supervised actor/server that owns the table and forwards mutation requests.
+
+### Crash Behavior
+
+If the owning process crashes or exits, the ETS table is automatically deleted — any unsaved data is lost. The DETS file on disk remains intact. When the application restarts and calls `open()` again, data is reloaded from the DETS file.
 
 To mitigate this:
 - Use `with_table` for short-lived operations
-- In long-running applications, ensure the process that opens tables is supervised
+- In long-running applications, open tables in a supervised process (e.g., an OTP GenServer or Gleam actor)
 - Use WriteThrough mode for critical data to minimize the window of potential data loss
 
 ## Error Handling
@@ -65,9 +73,11 @@ All shelf operations return `Result(value, ShelfError)`. The error variants are:
 |-------|-------|
 | `NotFound` | Key doesn't exist (from `lookup`) |
 | `KeyAlreadyPresent` | Key exists (from `insert_new`, set tables only) |
-| `TypeMismatch` | Data loaded from disk didn't match the expected decoder types |
 | `TableClosed` | Table has been closed or doesn't exist |
-| `NameConflict` | An ETS table with this name is already open |
+| `NotOwner` | The calling process is not the table owner (see Process Ownership above) |
+| `NameConflict` | A DETS file at this path is already open by another shelf table |
+| `InvalidPath(String)` | File path escapes the base directory or contains unsafe characters |
 | `FileError(String)` | DETS file couldn't be found, created, or opened |
 | `FileSizeLimitExceeded` | DETS file exceeds the 2 GB limit |
+| `TypeMismatch(List(DecodeError))` | Data loaded from DETS failed decoder validation |
 | `ErlangError(String)` | Catch-all for unexpected Erlang-level errors |

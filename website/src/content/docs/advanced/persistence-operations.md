@@ -29,7 +29,7 @@ let assert Ok(Nil) = set.save(table)
 - At application shutdown
 - After critical data changes
 
-In WriteThrough mode, `save()` is called automatically after every write, so you rarely need to call it manually.
+In WriteThrough mode, every write goes to DETS directly (via `dets:insert`), so data is already persisted — you rarely need to call `save()` manually.
 
 ## reload
 
@@ -71,7 +71,7 @@ For guaranteed cleanup, use `with_table` instead of manual open/close:
 
 ```gleam
 let assert Ok(Nil) = {
-  use table <- set.with_table("cache", "data/cache.dets", decode.string, decode.string)
+  use table <- set.with_table("cache", "data/cache.dets", base_directory: "/app/data", key: decode.string, value: decode.string)
   set.insert(into: table, key: "key", value: "value")
 }
 // table is automatically closed here
@@ -89,8 +89,8 @@ flowchart LR
   end
   subgraph wt["WriteThrough mode"]
     direction LR
-    I2[insert] -->|write| E2[ETS]
-    E2 -->|"auto save()"| D2[DETS]
+    I2[insert] -->|"dets:insert"| D2[DETS]
+    I2 -->|"ets:insert"| E2[ETS]
     D2 -->|"sync()"| F2[filesystem]
   end
 ```
