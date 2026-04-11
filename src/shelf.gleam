@@ -85,7 +85,8 @@ pub type ShelfError {
   NotOwner
   /// DETS file could not be found or created
   FileError(String)
-  /// The DETS file is already open by another table
+  /// A DETS file at this path is already open by another shelf table.
+  /// This is a file-level conflict, not related to the table name.
   NameConflict
   /// The DETS file path is invalid (escapes base directory, contains
   /// null bytes, or is otherwise unsafe)
@@ -100,18 +101,6 @@ pub type ShelfError {
   TypeMismatch(List(decode.DecodeError))
   /// Erlang-level error (catch-all)
   ErlangError(String)
-}
-
-/// Controls how decode failures are handled when loading data from DETS.
-pub type DecodePolicy {
-  /// Any entry that fails to decode causes the open to fail with
-  /// `TypeMismatch`. This is the default and recommended policy.
-  Strict
-  /// Entries that fail to decode are silently dropped — the count of
-  /// skipped entries is not reported. Only successfully decoded entries
-  /// are loaded into the ETS table. Use with caution: you may unknowingly
-  /// lose data if your decoders don't match all stored entries.
-  Lenient
 }
 
 /// Controls when writes are persisted to disk.
@@ -139,12 +128,10 @@ pub opaque type Config {
     base_directory: String,
     /// When to persist writes to disk
     write_mode: WriteMode,
-    /// How to handle entries that fail to decode when loading from DETS
-    decode_policy: DecodePolicy,
   )
 }
 
-/// Create a config with defaults (WriteBack mode, Strict decode policy).
+/// Create a config with defaults (WriteBack mode).
 ///
 /// The `name` is a diagnostic label for the table — it is not used as an
 /// ETS table name and does not need to be unique. Multiple tables can
@@ -163,13 +150,7 @@ pub fn config(
   path path: String,
   base_directory base_directory: String,
 ) -> Config {
-  Config(
-    name:,
-    path:,
-    base_directory:,
-    write_mode: WriteBack,
-    decode_policy: Strict,
-  )
+  Config(name:, path:, base_directory:, write_mode: WriteBack)
 }
 
 /// Set the write mode on a config.
@@ -183,22 +164,6 @@ pub fn config(
 ///
 pub fn write_mode(config config: Config, mode mode: WriteMode) -> Config {
   Config(..config, write_mode: mode)
-}
-
-/// Set the decode policy on a config.
-///
-/// ```gleam
-/// let conf =
-///   shelf.config(name: "users", path: "users.dets",
-///     base_directory: "/app/data")
-///   |> shelf.decode_policy(shelf.Lenient)
-/// ```
-///
-pub fn decode_policy(
-  config config: Config,
-  policy policy: DecodePolicy,
-) -> Config {
-  Config(..config, decode_policy: policy)
 }
 
 // ── Internal accessors ──────────────────────────────────────────────────
@@ -222,11 +187,6 @@ pub fn get_base_directory(config: Config) -> String {
 @internal
 pub fn get_write_mode(config: Config) -> WriteMode {
   config.write_mode
-}
-
-@internal
-pub fn get_decode_policy(config: Config) -> DecodePolicy {
-  config.decode_policy
 }
 
 /// Validate that a path is safe and resolve it against the base directory.

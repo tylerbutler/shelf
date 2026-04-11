@@ -94,7 +94,7 @@ pub fn persistence_tests() {
       let assert Ok(True) = set.member(table, "unsaved")
 
       // Reload — unsaved changes should be gone
-      let assert Ok(Nil) = set.reload(table)
+      let assert Ok(_) = set.reload(table)
       let assert Ok(True) = set.member(table, "saved")
       let assert Ok(False) = set.member(table, "unsaved")
 
@@ -124,7 +124,7 @@ pub fn persistence_tests() {
       let assert Ok(Nil) = set.save(table)
 
       // Reload should show latest saved state
-      let assert Ok(Nil) = set.reload(table)
+      let assert Ok(_) = set.reload(table)
       let assert Ok(2) = set.lookup(table, "round")
 
       let assert Ok(Nil) = set.close(table)

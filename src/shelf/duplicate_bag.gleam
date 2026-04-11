@@ -38,7 +38,6 @@ pub opaque type PDuplicateBag(k, v) {
     guardian: GuardianRef,
     write_mode: shelf.WriteMode,
     entry_decoder: Decoder(#(k, v)),
-    decode_policy: shelf.DecodePolicy,
   )
 }
 
@@ -79,11 +78,10 @@ pub fn open_config(
     guardian: result.2,
     write_mode: result.3,
     entry_decoder: result.4,
-    decode_policy: result.5,
   ))
 }
 
-/// Open a persistent duplicate bag table with defaults (WriteBack mode, Strict decoding).
+/// Open a persistent duplicate bag table with defaults (WriteBack mode).
 ///
 /// ```gleam
 /// let assert Ok(table) =
@@ -290,17 +288,11 @@ pub fn save(table: PDuplicateBag(k, v)) -> Result(Nil, ShelfError) {
 ///
 /// Clears the ETS table, re-reads all DETS entries, validates them
 /// through the stored decoders, and loads valid entries into ETS.
-/// The configured decode policy is respected on reload.
 /// Only useful in WriteBack mode — in WriteThrough mode, ETS and
 /// DETS are always in sync.
 ///
 pub fn reload(table: PDuplicateBag(k, v)) -> Result(Nil, ShelfError) {
-  internal.generic_reload(
-    table.ets,
-    table.dets,
-    table.entry_decoder,
-    table.decode_policy,
-  )
+  internal.generic_reload(table.ets, table.dets, table.entry_decoder)
 }
 
 /// Flush the DETS write buffer to the OS.

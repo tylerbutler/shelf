@@ -237,30 +237,13 @@ Within a running session, Gleam's type system guarantees correctness — decoder
 
 > **Performance note**: Loading from DETS (on `open` and `reload`) decodes and inserts entries one at a time via streaming (`dets:foldl`), keeping peak memory at ~1× table size. This is a one-time startup cost — all subsequent reads and writes remain at raw ETS speed.
 
-### Decode Policy
-
-By default, shelf uses `Strict` mode: if any entry in the DETS file fails decoding, `open` returns `Error(TypeMismatch)`. Use `Lenient` to skip invalid entries instead:
-
-```gleam
-let config =
-  shelf.config(name: "cache", path: "data/cache.dets",
-    base_directory: "/app/data")
-  |> shelf.decode_policy(shelf.Lenient)
-
-let assert Ok(table) =
-  set.open_config(config: config,
-    key: decode.string, value: decode.int)
-// Entries that don't match the decoders are silently dropped
-```
-
 ### Schema Migration
 
 If you change the key or value types between application versions, `open()` returns `Error(TypeMismatch(...))` because existing DETS data fails the new decoders.
 
 Strategies for handling schema changes:
 1. **Delete and rebuild**: Delete the DETS file and repopulate from your source of truth
-2. **Lenient mode**: Open with `shelf.Lenient` decode policy to load only entries that match the new schema (non-matching entries are dropped)
-3. **Manual migration**: Write a one-time script that reads the old DETS file directly (via Erlang's `dets` module), transforms the data, and writes it back in the new format
+2. **Manual migration**: Write a one-time script that reads the old DETS file directly (via Erlang's `dets` module), transforms the data, and writes it back in the new format
 
 ## Error Handling
 

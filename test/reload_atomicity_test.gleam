@@ -10,7 +10,7 @@ fn write_raw_dets_entry(path: String, key: String, value: a) -> Nil
 
 pub fn reload_atomicity_tests() {
   describe("reload atomicity", [
-    it("strict reload failure preserves original ETS data", fn() {
+    it("reload failure preserves original ETS data", fn() {
       let path = "/tmp/shelf_reload_atom.dets"
       test_helpers.cleanup(path)
 
