@@ -207,7 +207,14 @@ set.insert(into: table, key: "key", value: "value")
 | `sync(table)` | Flush DETS write buffer to OS |
 | `close(table)` | Save + close DETS + delete ETS |
 
-**`save` vs `sync`**: `save()` atomically copies ETS contents into DETS using a temp-file-plus-rename strategy for crash safety — use this in WriteBack mode to persist your changes. `sync()` flushes DETS's internal write buffer to the OS filesystem — use this in WriteThrough mode when you need to guarantee durability after a write (DETS buffers writes for performance).
+**`save` vs `sync`**: `save()` snapshots ETS → DETS using a temp-file +
+atomic rename (use in WriteBack to persist your changes). `sync()` drains
+DETS's internal write buffer into the open DETS file (use in WriteThrough
+when pending DETS writes need to be reflected in the on-disk file).
+
+For the precise per-call durability guarantees and crash semantics, see
+the canonical [Durability story](https://shelf.tylerbutler.com/advanced/persistence-operations/#durability-story)
+in the website docs.
 
 ## Type Safety
 
