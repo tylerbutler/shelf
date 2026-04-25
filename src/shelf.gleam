@@ -15,8 +15,8 @@
 ///   set.open(name: "cache", path: "data/cache.dets",
 ///     base_directory: "/app/storage",
 ///     key: decode.string, value: decode.string)
-/// let assert Ok(Nil) = set.insert(table, "key", "value")
-/// let assert Ok("value") = set.lookup(table, "key")
+/// let assert Ok(Nil) = set.insert(into: table, key: "key", value: "value")
+/// let assert Ok("value") = set.lookup(from: table, key: "key")
 /// let assert Ok(Nil) = set.save(table)   // persist to disk
 /// let assert Ok(Nil) = set.close(table)
 /// ```

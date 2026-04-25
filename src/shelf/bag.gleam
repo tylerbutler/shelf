@@ -19,9 +19,9 @@
 ///   bag.open(name: "tags", path: "data/tags.dets",
 ///     base_directory: "/app/data",
 ///     key: decode.string, value: decode.string)
-/// let assert Ok(Nil) = bag.insert(table, "color", "red")
-/// let assert Ok(Nil) = bag.insert(table, "color", "blue")
-/// let assert Ok(["red", "blue"]) = bag.lookup(table, "color")
+/// let assert Ok(Nil) = bag.insert(into: table, key: "color", value: "red")
+/// let assert Ok(Nil) = bag.insert(into: table, key: "color", value: "blue")
+/// let assert Ok(["red", "blue"]) = bag.lookup(from: table, key: "color")
 /// // values contains "red" and "blue" (order is unspecified)
 /// let assert Ok(Nil) = bag.save(table)
 /// let assert Ok(Nil) = bag.close(table)
@@ -128,7 +128,7 @@ pub fn close(table: PBag(k, v)) -> Result(Nil, ShelfError) {
 /// use table <- bag.with_table("tags", "tags.dets",
 ///   base_directory: "/app/data",
 ///   key: decode.string, value: decode.string)
-/// bag.insert(table, "color", "red")
+/// bag.insert(into: table, key: "color", value: "red")
 /// ```
 ///
 pub fn with_table(
