@@ -102,6 +102,10 @@ export default defineConfig({
 							slug: "advanced/limitations",
 						},
 						{
+							label: "Schema Migration",
+							slug: "advanced/schema-migration",
+						},
+						{
 							label: "Troubleshooting",
 							slug: "advanced/troubleshooting",
 						},

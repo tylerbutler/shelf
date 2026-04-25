@@ -7,3 +7,4 @@ target = "erlang"
 gleam_stdlib = ">= 0.48.0 and < 2.0.0"
 gleam_erlang = ">= 1.0.0 and < 2.0.0"
 shelf = { path = ".." }
+simplifile = ">= 2.4.0 and < 3.0.0"

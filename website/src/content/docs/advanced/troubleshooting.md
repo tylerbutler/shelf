@@ -38,9 +38,9 @@ You have three realistic options:
 2. **Delete the DETS file** — if the data is regenerable (a cache, an
    index), this is the simplest path.
 3. **Run a one-time migration** that opens the old DETS file with the
-   old decoders, transforms the entries, and writes them back. See the
-   [Schema Migration](https://github.com/tylerbutler/shelf#schema-migration)
-   section in the project README for the procedure.
+   old decoders, transforms the entries, and writes them back. See
+   [Schema Migration](/advanced/schema-migration/) for the full
+   procedure.
 
 The `decode_errors` value carried by `TypeMismatch` is the standard
 `gleam/dynamic/decode` error list — log it to see exactly which fields
