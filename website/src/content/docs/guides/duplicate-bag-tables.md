@@ -15,6 +15,7 @@ let assert Ok(table) =
   duplicate_bag.open(
     name: "events",
     path: "data/events.dets",
+    base_directory: "/app/data",
     key: decode.string,
     value: decode.string,
   )
@@ -28,7 +29,7 @@ import shelf
 import shelf/duplicate_bag
 
 let config =
-  shelf.config(name: "events", path: "data/events.dets")
+  shelf.config(name: "events", path: "data/events.dets", base_directory: "/app/data")
   |> shelf.write_mode(shelf.WriteThrough)
 
 let assert Ok(table) =
@@ -91,7 +92,7 @@ Like bag tables, duplicate bag tables do **not** support `insert_new` or `update
 // Delete all values for a key
 let assert Ok(Nil) = duplicate_bag.delete_key(from: table, key: "click")
 
-// Delete a specific key-value pair (removes matching occurrences)
+// Delete every occurrence of this exact key-value pair
 let assert Ok(Nil) = duplicate_bag.delete_object(from: table, key: "hover", value: "menu")
 
 // Delete all entries

@@ -1,6 +1,6 @@
 /// Persistent ETS tables backed by DETS.
 ///
-/// Shelf combines ETS (fast, in-memory) with DETS (persistent, on-disk)
+/// shelf combines ETS (fast, in-memory) with DETS (persistent, on-disk)
 /// to give you microsecond reads with durable storage. The classic
 /// Erlang persistence pattern, wrapped in a type-safe Gleam API.
 ///
