@@ -35,6 +35,9 @@ let assert Ok(Nil) = set.save(table)
 
 In WriteThrough mode, every write goes to DETS directly (via `dets:insert`), so data is already persisted — you rarely need to call `save()` manually.
 
+For exactly which on-disk layer this call advances data past, and what
+guarantees it gives across crashes, see [Durability story](#durability-story).
+
 ## reload
 
 Clears the ETS table and loads all DETS contents into it. Discards any unsaved changes in ETS.
@@ -48,20 +51,54 @@ let assert Ok(Nil) = set.reload(table)
 
 ## sync
 
-Flushes the DETS internal write buffer to the OS filesystem. DETS buffers writes for performance — `sync()` forces those buffers to disk.
+Forces DETS's internal write buffer out to the open DETS file by calling
+`dets:sync/1`. Useful in WriteThrough mode after a critical write, when you
+need pending DETS buffers reflected in the on-disk file before continuing.
 
 ```gleam
 let assert Ok(Nil) = set.sync(table)
 ```
 
-**When to use**: In WriteThrough mode, after a critical write when you need to guarantee the data has reached the filesystem. In WriteBack mode, `sync()` is less useful since you control persistence via `save()`.
+In WriteBack mode `sync()` is rarely needed — `save()` already writes a
+fresh DETS file and reopens it.
 
-:::note[save vs sync]
-`save()` copies data from ETS into DETS. `sync()` flushes DETS's internal buffer to the OS. They serve different purposes:
-- After `save()`: data is in DETS but may be in OS buffers
-- After `sync()`: data is flushed from DETS buffers to the filesystem
-- For maximum durability: call `save()` then `sync()`
-:::
+## Durability story
+
+Data goes through several layers between an `insert()` call and physical
+storage. This section is the **single source of truth** for which call
+addresses which layer; other pages link here.
+
+| Layer | Where data lives | Call that advances data past this layer |
+|-------|------------------|------------------------------------------|
+| 1 | Application memory | `insert()`, `delete_*`, `update_counter` |
+| 2 | ETS table (in-process) | WriteBack: `save()`. WriteThrough: every write |
+| 3 | DETS in-memory buffer | `sync()` (open DETS) or `save()` (closes a temp DETS, which flushes) |
+| 4 | DETS file content (OS page cache) | `save()` writes a temp file then atomically `rename()`s over the original |
+| 5 | Physical disk | Not exposed — DETS does not surface `fsync(2)` on the file or its directory |
+
+What the calls actually do:
+
+- **`save()`** snapshots ETS → a *temporary* DETS file (`ets:to_dets/2`), closes
+  that temp file (flushing its buffer), then atomically `file:rename/2`s it
+  over the original DETS path and reopens at the original path. The rename
+  is POSIX-atomic, so a process or VM crash mid-`save()` leaves either the
+  previous file or the new file fully present — never a half-written file.
+- **`sync()`** calls `dets:sync/1` on the *currently open* DETS, draining its
+  in-memory write buffer into the file. It does **not** invoke `fsync(2)` on
+  the file descriptor and does **not** fsync the containing directory.
+- **`reload()`** discards the ETS table and rebuilds it from the on-disk DETS
+  file. It does not change durability — it changes which copy of the data
+  the table reflects.
+- **`close()`** performs a `save()` and then closes DETS / deletes ETS.
+
+Practical guarantees:
+
+| You want… | Then call |
+|-----------|-----------|
+| WriteBack changes safe across a process crash | `save()` |
+| WriteThrough writes flushed past DETS's buffer into the file | `sync()` |
+| Strongest crash safety shelf can provide | `save()` (atomic rename, then no further shelf call is needed in WriteBack) |
+| `fsync(2)`-level guarantees against OS crash / power loss | Not provided. If you need this, call out to a process that opens the DETS file path with `file:open/2` and `file:sync/1`, or place the data directory on a filesystem mounted with stronger durability semantics. |
 
 ## close
 

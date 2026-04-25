@@ -268,7 +268,12 @@ pub fn delete_all(from table: PDuplicateBag(k, v)) -> Result(Nil, ShelfError) {
 ///
 /// Uses an atomic save strategy: data is written to a temporary file
 /// first, then atomically renamed over the original DETS file. This
-/// prevents data loss if the process is killed mid-save.
+/// prevents data loss if the process is killed mid-save (the original
+/// file remains intact until the rename succeeds).
+///
+/// See the
+/// [Durability story](https://shelf.tylerbutler.com/advanced/persistence-operations/#durability-story)
+/// for the full layer-by-layer breakdown of which crashes this protects against.
 ///
 pub fn save(table: PDuplicateBag(k, v)) -> Result(Nil, ShelfError) {
   internal.save(table.ets, table.dets)
@@ -285,11 +290,13 @@ pub fn reload(table: PDuplicateBag(k, v)) -> Result(Nil, ShelfError) {
   internal.generic_reload(table.ets, table.dets, table.entry_decoder)
 }
 
-/// Flush the DETS write buffer to the OS.
+/// Drain the DETS in-memory write buffer into the open DETS file.
 ///
-/// DETS buffers writes internally. This forces them to be written
-/// to the underlying filesystem. Most useful in WriteThrough mode
-/// when you want to guarantee durability.
+/// Calls `dets:sync/1`. Most useful in WriteThrough mode after a critical
+/// write, to make sure pending DETS writes are reflected in the file on
+/// disk. Note: this does not call `fsync(2)` on the file descriptor — see
+/// the [Durability story](https://shelf.tylerbutler.com/advanced/persistence-operations/#durability-story)
+/// for what `sync()` does and does not guarantee.
 ///
 pub fn sync(table: PDuplicateBag(k, v)) -> Result(Nil, ShelfError) {
   internal.sync_dets(table.ets, table.dets)

@@ -64,20 +64,25 @@ let assert Ok(Nil) = set.insert(into: table, key: "acct:1", value: account)
 
 ### Guaranteeing Durability
 
-DETS buffers writes internally for performance. After a WriteThrough write, the data is in DETS but may still be in the OS write buffer. Use `sync()` to force the DETS buffer to the filesystem:
+After a WriteThrough write, the data has been handed to DETS but may still
+be in DETS's in-memory write buffer. Call `sync()` to drain that buffer
+into the on-disk DETS file:
 
 ```gleam
 let assert Ok(Nil) = set.insert(into: table, key: "critical", value: value)
 let assert Ok(Nil) = set.sync(table)
-// Data is now on disk
 ```
+
+`sync()` does **not** call `fsync(2)` on the underlying file. For the full
+layer-by-layer breakdown of what `save()` and `sync()` actually guarantee,
+see the canonical [Durability story](/advanced/persistence-operations/#durability-story).
 
 ## Comparison
 
 | | WriteBack | WriteThrough |
 |---|-----------|-------------|
 | Write speed | Fast (ETS only) | Slower (ETS + DETS) |
-| Data loss on crash | Since last `save()` | None (after `sync()`) |
+| Data loss on process crash | Since last `save()` | None — written DETS file survives |
 | When to persist | Manual `save()` call | Automatic on every write |
 | `reload()` useful? | Yes — discards unsaved changes | Not typically — ETS and DETS are in sync |
 | Best for | Caches, sessions, high-throughput | Accounts, config, audit logs |
