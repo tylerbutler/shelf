@@ -1,0 +1,5 @@
+kind: Changed
+body: |-
+    Use named arguments consistently in documentation examples (#62)
+    README examples, website guides, and public source docs now show the same named-argument call style for table operations so generated package docs match the recommended usage.
+time: 2026-04-24T19:21:25.752915-07:00
