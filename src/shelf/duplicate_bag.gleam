@@ -110,7 +110,7 @@ pub fn open(
 /// On `Ok(Nil)`, the handle must not be used again. If the final save
 /// fails with a retryable persistence error, `close()` returns
 /// `Error(...)` and leaves the table open so the caller can retry.
-/// If close fails terminally, Shelf still releases resources and future
+/// If close fails terminally, shelf still releases resources and future
 /// operations on the handle return `Error(TableClosed)`.
 ///
 pub fn close(table: PDuplicateBag(k, v)) -> Result(Nil, ShelfError) {

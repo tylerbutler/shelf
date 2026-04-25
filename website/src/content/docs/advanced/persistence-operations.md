@@ -9,14 +9,18 @@ shelf provides four persistence operations to control how and when data moves be
 
 | Function | Behavior |
 |----------|----------|
-| `save(table)` | Snapshot ETS → DETS (replaces DETS contents) |
+| `save(table)` | Atomic snapshot ETS → DETS (writes to a temp file, then renames for crash safety) |
 | `reload(table)` | Discard ETS, reload from DETS |
 | `sync(table)` | Flush DETS write buffer to OS |
 | `close(table)` | Save + close DETS + delete ETS |
 
 ## save
 
-Atomically snapshots the entire ETS table into DETS, replacing all DETS contents with the current ETS state. Uses `ets:to_dets/2` internally — the transfer happens efficiently inside the Erlang VM without materializing the table as a list.
+Atomically snapshots the entire ETS table into DETS, replacing all DETS contents with the current ETS state.
+
+The save uses a temp-file-plus-rename strategy for crash safety: data is written to a temporary file first, then atomically renamed over the original DETS file. If the process is killed mid-save, the original file remains intact until the rename succeeds.
+
+Internally, the ETS-to-DETS copy uses `ets:to_dets/2`, which transfers entries inside the Erlang VM without materializing the table as a list.
 
 ```gleam
 // After a batch of writes...
