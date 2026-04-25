@@ -242,8 +242,10 @@ Within a running session, Gleam's type system guarantees correctness — decoder
 If you change the key or value types between application versions, `open()` returns `Error(TypeMismatch(...))` because existing DETS data fails the new decoders.
 
 Strategies for handling schema changes:
-1. **Delete and rebuild**: Delete the DETS file and repopulate from your source of truth
-2. **Manual migration**: Write a one-time script that reads the old DETS file directly (via Erlang's `dets` module), transforms the data, and writes it back in the new format
+1. **Delete and rebuild**: Delete the DETS file and repopulate from your source of truth.
+2. **Run a migration**: Open the old DETS file with the *old* decoders as a temporary shelf table, transform the entries, write them to a temporary path with the *new* decoders, then atomically `rename` the new file over the old one and reopen.
+
+The website documents the procedure step-by-step at [Schema Migration](https://shelf.tylerbutler.com/advanced/schema-migration/), and a runnable end-to-end version lives at [`examples/src/schema_migration.gleam`](examples/src/schema_migration.gleam).
 
 ## Error Handling
 
