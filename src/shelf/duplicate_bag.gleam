@@ -19,9 +19,9 @@
 ///   duplicate_bag.open(name: "events", path: "data/events.dets",
 ///     base_directory: "/app/data",
 ///     key: decode.string, value: decode.string)
-/// let assert Ok(Nil) = duplicate_bag.insert(table, "click", "btn_1")
-/// let assert Ok(Nil) = duplicate_bag.insert(table, "click", "btn_1")
-/// let assert Ok(["btn_1", "btn_1"]) = duplicate_bag.lookup(table, "click")
+/// let assert Ok(Nil) = duplicate_bag.insert(into: table, key: "click", value: "btn_1")
+/// let assert Ok(Nil) = duplicate_bag.insert(into: table, key: "click", value: "btn_1")
+/// let assert Ok(["btn_1", "btn_1"]) = duplicate_bag.lookup(from: table, key: "click")
 /// // values contains "btn_1" twice (order is unspecified)
 /// let assert Ok(Nil) = duplicate_bag.close(table)
 /// ```
@@ -128,7 +128,7 @@ pub fn close(table: PDuplicateBag(k, v)) -> Result(Nil, ShelfError) {
 /// use table <- duplicate_bag.with_table("events", "events.dets",
 ///   base_directory: "/app/data",
 ///   key: decode.string, value: decode.string)
-/// duplicate_bag.insert(table, "click", "btn_1")
+/// duplicate_bag.insert(into: table, key: "click", value: "btn_1")
 /// ```
 ///
 pub fn with_table(

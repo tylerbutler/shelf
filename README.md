@@ -34,11 +34,11 @@ pub fn main() {
       key: decode.string, value: decode.int)
 
   // Fast writes (to ETS)
-  let assert Ok(Nil) = set.insert(table, "alice", 42)
-  let assert Ok(Nil) = set.insert(table, "bob", 99)
+  let assert Ok(Nil) = set.insert(into: table, key: "alice", value: 42)
+  let assert Ok(Nil) = set.insert(into: table, key: "bob", value: 99)
 
   // Fast reads (from ETS)
-  let assert Ok(42) = set.lookup(table, "alice")
+  let assert Ok(42) = set.lookup(from: table, key: "alice")
 
   // Persist to disk when ready
   let assert Ok(Nil) = set.save(table)
@@ -87,8 +87,8 @@ let assert Ok(table) =
     key: decode.string, value: session_decoder)
 
 // These are ETS-only (fast)
-let assert Ok(Nil) = set.insert(table, "user:123", session)
-let assert Ok(Nil) = set.insert(table, "user:456", session)
+let assert Ok(Nil) = set.insert(into: table, key: "user:123", value: session)
+let assert Ok(Nil) = set.insert(into: table, key: "user:456", value: session)
 
 // Persist when ready (e.g., on a timer, after N writes)
 let assert Ok(Nil) = set.save(table)
@@ -115,7 +115,7 @@ let assert Ok(table) =
     key: decode.string, value: account_decoder)
 
 // This writes to both ETS and DETS
-let assert Ok(Nil) = set.insert(table, "acct:789", account)
+let assert Ok(Nil) = set.insert(into: table, key: "acct:789", value: account)
 ```
 
 ## Table Types
@@ -132,9 +132,9 @@ let assert Ok(t) =
   set.open(name: "cache", path: "cache.dets",
     base_directory: "/app/data",
     key: decode.string, value: decode.string)
-let assert Ok(Nil) = set.insert(t, "key", "value")       // overwrites if exists
-let assert Error(shelf.KeyAlreadyPresent) = set.insert_new(t, "key", "value2")
-let assert Ok("value") = set.lookup(t, "key")
+let assert Ok(Nil) = set.insert(into: t, key: "key", value: "value")       // overwrites if exists
+let assert Error(shelf.KeyAlreadyPresent) = set.insert_new(into: t, key: "key", value: "value2")
+let assert Ok("value") = set.lookup(from: t, key: "key")
 let assert Ok(True) = set.member(of: t, key: "key")      // check existence
 ```
 
@@ -147,10 +147,10 @@ let assert Ok(t) =
   bag.open(name: "tags", path: "tags.dets",
     base_directory: "/app/data",
     key: decode.string, value: decode.string)
-let assert Ok(Nil) = bag.insert(t, "color", "red")
-let assert Ok(Nil) = bag.insert(t, "color", "blue")
-let assert Ok(Nil) = bag.insert(t, "color", "red")    // ignored (duplicate)
-let assert Ok(["red", "blue"]) = bag.lookup(t, "color")
+let assert Ok(Nil) = bag.insert(into: t, key: "color", value: "red")
+let assert Ok(Nil) = bag.insert(into: t, key: "color", value: "blue")
+let assert Ok(Nil) = bag.insert(into: t, key: "color", value: "red")    // ignored (duplicate)
+let assert Ok(["red", "blue"]) = bag.lookup(from: t, key: "color")
 ```
 
 ### Duplicate Bag — duplicates allowed
@@ -162,9 +162,9 @@ let assert Ok(t) =
   duplicate_bag.open(name: "events", path: "events.dets",
     base_directory: "/app/data",
     key: decode.string, value: decode.string)
-let assert Ok(Nil) = duplicate_bag.insert(t, "click", "btn")
-let assert Ok(Nil) = duplicate_bag.insert(t, "click", "btn")  // kept!
-let assert Ok(["btn", "btn"]) = duplicate_bag.lookup(t, "click")
+let assert Ok(Nil) = duplicate_bag.insert(into: t, key: "click", value: "btn")
+let assert Ok(Nil) = duplicate_bag.insert(into: t, key: "click", value: "btn")  // kept!
+let assert Ok(["btn", "btn"]) = duplicate_bag.lookup(from: t, key: "click")
 ```
 
 ### API Comparison
@@ -194,7 +194,7 @@ Use `with_table` to ensure tables are always closed:
 use table <- set.with_table("cache", "data/cache.dets",
   base_directory: "/app/data",
   key: decode.string, value: decode.string)
-set.insert(table, "key", "value")
+set.insert(into: table, key: "key", value: "value")
 // table is auto-closed when the callback returns
 ```
 
@@ -273,9 +273,9 @@ let assert Ok(t) =
   set.open(name: "stats", path: "stats.dets",
     base_directory: "/app/data",
     key: decode.string, value: decode.int)
-set.insert(t, "page_views", 0)
-set.update_counter(t, "page_views", 1)   // Ok(1)
-set.update_counter(t, "page_views", 10)  // Ok(11)
+set.insert(into: t, key: "page_views", value: 0)
+set.update_counter(in: t, key: "page_views", increment: 1)   // Ok(1)
+set.update_counter(in: t, key: "page_views", increment: 10)  // Ok(11)
 ```
 
 ## Common Operations

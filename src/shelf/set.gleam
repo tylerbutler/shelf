@@ -20,8 +20,8 @@
 ///   set.open(name: "users", path: "users.dets",
 ///     base_directory: "/app/data",
 ///     key: decode.string, value: decode.int)
-/// let assert Ok(Nil) = set.insert(table, "alice", 42)
-/// let assert Ok(42) = set.lookup(table, "alice")
+/// let assert Ok(Nil) = set.insert(into: table, key: "alice", value: 42)
+/// let assert Ok(42) = set.lookup(from: table, key: "alice")
 /// let assert Ok(Nil) = set.save(table)    // persist to disk
 /// let assert Ok(Nil) = set.close(table)   // auto-saves on close
 /// ```
@@ -137,7 +137,7 @@ pub fn close(table: PSet(k, v)) -> Result(Nil, ShelfError) {
 /// use table <- set.with_table("cache", "cache.dets",
 ///   base_directory: "/app/data",
 ///   key: decode.string, value: decode.string)
-/// set.insert(table, "key", "value")
+/// set.insert(into: table, key: "key", value: "value")
 /// ```
 ///
 pub fn with_table(
@@ -346,9 +346,9 @@ pub fn sync(table: PSet(k, v)) -> Result(Nil, ShelfError) {
 /// new value after incrementing. The increment can be negative.
 ///
 /// ```gleam
-/// let assert Ok(Nil) = set.insert(table, "hits", 0)
-/// let assert Ok(1) = set.update_counter(table, "hits", 1)
-/// let assert Ok(3) = set.update_counter(table, "hits", 2)
+/// let assert Ok(Nil) = set.insert(into: table, key: "hits", value: 0)
+/// let assert Ok(1) = set.update_counter(in: table, key: "hits", increment: 1)
+/// let assert Ok(3) = set.update_counter(in: table, key: "hits", increment: 2)
 /// ```
 ///
 /// In WriteThrough mode, the ETS atomic increment happens first (only ETS

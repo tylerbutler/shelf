@@ -17,8 +17,8 @@ let assert Ok(table) =
   set.open(name: "sessions", path: "data/sessions.dets", base_directory: "/app/data", key: decode.string, value: decode.string)
 
 // Fast writes — ETS only
-let assert Ok(Nil) = set.insert(table, "user:1", session_1)
-let assert Ok(Nil) = set.insert(table, "user:2", session_2)
+let assert Ok(Nil) = set.insert(into: table, key: "user:1", value: session_1)
+let assert Ok(Nil) = set.insert(into: table, key: "user:2", value: session_2)
 
 // Persist to disk when ready
 let assert Ok(Nil) = set.save(table)
@@ -35,7 +35,7 @@ In WriteBack mode, data written since the last `save()` is lost if the process c
 Use `reload()` to discard unsaved ETS changes and restore from the last DETS snapshot:
 
 ```gleam
-let assert Ok(Nil) = set.insert(table, "temp", "data")
+let assert Ok(Nil) = set.insert(into: table, key: "temp", value: "data")
 // Changed our mind — discard unsaved changes
 let assert Ok(Nil) = set.reload(table)
 // "temp" key no longer exists
@@ -57,7 +57,7 @@ let config =
 let assert Ok(table) = set.open_config(config: config, key: decode.string, value: decode.string)
 
 // This writes to both ETS and DETS
-let assert Ok(Nil) = set.insert(table, "acct:1", account)
+let assert Ok(Nil) = set.insert(into: table, key: "acct:1", value: account)
 ```
 
 **Best for**: Data that must survive crashes with no loss — financial records, user accounts, configuration.
@@ -67,7 +67,7 @@ let assert Ok(Nil) = set.insert(table, "acct:1", account)
 DETS buffers writes internally for performance. After a WriteThrough write, the data is in DETS but may still be in the OS write buffer. Use `sync()` to force the DETS buffer to the filesystem:
 
 ```gleam
-let assert Ok(Nil) = set.insert(table, "critical", value)
+let assert Ok(Nil) = set.insert(into: table, key: "critical", value: value)
 let assert Ok(Nil) = set.sync(table)
 // Data is now on disk
 ```

@@ -27,11 +27,11 @@ pub fn main() {
     set.open(name: "users", path: "data/users.dets", base_directory: "/app/data", key: decode.string, value: decode.int)
 
   // Fast writes (to ETS)
-  let assert Ok(Nil) = set.insert(table, "alice", 42)
-  let assert Ok(Nil) = set.insert(table, "bob", 99)
+  let assert Ok(Nil) = set.insert(into: table, key: "alice", value: 42)
+  let assert Ok(Nil) = set.insert(into: table, key: "bob", value: 99)
 
   // Fast reads (from ETS)
-  let assert Ok(42) = set.lookup(table, "alice")
+  let assert Ok(42) = set.lookup(from: table, key: "alice")
 
   // Persist to disk when ready
   let assert Ok(Nil) = set.save(table)
