@@ -41,4 +41,4 @@ shelf coordinates both together, using Erlang's native `ets:to_dets/2` for effic
 - **Three table types**: `set`, `bag`, `duplicate_bag`
 - **Atomic counters**: Increment integer values atomically in ETS
 - **Safe resource management**: `with_table` ensures tables are always closed
-- **Zero external dependencies**: Built entirely on OTP's ETS and DETS
+- **No native dependencies**: No NIFs or build steps; backed entirely by OTP's built-in ETS and DETS

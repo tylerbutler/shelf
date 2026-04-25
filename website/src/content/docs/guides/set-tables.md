@@ -84,7 +84,10 @@ let assert Ok(Nil) = set.insert_list(into: table, entries: [
 // Delete by key
 let assert Ok(Nil) = set.delete_key(from: table, key: "alice")
 
-// Delete a specific key-value pair (equivalent to delete_key for sets)
+// Compare-and-delete: only deletes if the stored value matches.
+// If "bob" is not currently 99, nothing is removed — useful for
+// optimistic concurrency where you want to avoid clobbering a
+// concurrent update.
 let assert Ok(Nil) = set.delete_object(from: table, key: "bob", value: 99)
 
 // Delete all entries (keeps the table open)

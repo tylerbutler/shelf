@@ -34,7 +34,7 @@ DETS is local to one Erlang node. Data is not replicated or distributed. For mul
 
 ## DETS File Paths Must Be Unique
 
-Shelf uses unnamed ETS tables internally, so table names do not need to be globally unique. However, each DETS file path can only be open by one shelf table at a time. Opening a second table with the same resolved file path returns `Error(NameConflict)`.
+shelf uses unnamed ETS tables internally, so table names do not need to be globally unique. However, each DETS file path can only be open by one shelf table at a time. Opening a second table with the same resolved file path returns `Error(NameConflict)`.
 
 Use distinct file paths for each table:
 
@@ -49,7 +49,7 @@ set.open(name: "other_sessions", path: "sessions.dets", base_directory: "/app/da
 
 ## Process Ownership
 
-ETS tables are owned by the process that calls `open()`. Shelf creates ETS tables as `protected`, which determines what each process can do:
+ETS tables are owned by the process that calls `open()`. shelf creates ETS tables as `protected`, which determines what each process can do:
 
 - **Reads** (`lookup`, `member`, `to_list`, `fold`, `size`) work from **any** process.
 - **Writes and lifecycle** (`insert`, `delete_*`, `update_counter`, `save`, `reload`, `sync`, `close`) are restricted to the **owner** process. Non-owner attempts return `Error(NotOwner)`.
