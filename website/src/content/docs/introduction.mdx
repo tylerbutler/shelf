@@ -36,6 +36,7 @@ shelf coordinates both together, using Erlang's native `ets:to_dets/2` for effic
 ## Key features
 
 - **Microsecond reads**: All reads go through ETS for consistent performance
+- **Cross-process reads**: ETS tables are created `protected`, so any process can read them concurrently while a single owner handles writes
 - **Runtime type safety**: Decoder-gated loading ensures data from disk matches your Gleam types
 - **Write modes**: Choose between WriteBack (batched) or WriteThrough (immediate persistence)
 - **Three table types**: `set`, `bag`, `duplicate_bag`

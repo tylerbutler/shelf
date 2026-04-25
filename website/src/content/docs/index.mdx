@@ -49,6 +49,12 @@ import PreReleaseNotice from '../../components/PreReleaseNotice.astro';
 		Set, bag, and duplicate bag tables — all with persistent backing. Pick the right data model for your use case.
 	</Card>
 	<Card title="Safe Resource Management" icon="setting">
-		The `with_table` callback ensures tables are always properly closed. Atomic counters for lock-free integer updates.
+		The `with_table` callback ensures tables are always properly closed, even when the body panics or returns an error.
+	</Card>
+	<Card title="Atomic Counters" icon="puzzle">
+		Lock-free integer increments via `update_counter` — increment hit counts or sequence numbers without serialising through an actor.
+	</Card>
+	<Card title="Cross-process reads" icon="seti:plan">
+		ETS tables are created `protected`, so any process can read them concurrently while a single owner process handles writes — a natural fit for actor-fronted, read-heavy services.
 	</Card>
 </CardGrid>
