@@ -84,6 +84,10 @@ export default defineConfig({
 							label: "Write Modes",
 							slug: "guides/write-modes",
 						},
+						{
+							label: "Common Patterns",
+							slug: "guides/common-patterns",
+						},
 					],
 				},
 				{
@@ -96,6 +100,10 @@ export default defineConfig({
 						{
 							label: "Limitations",
 							slug: "advanced/limitations",
+						},
+						{
+							label: "Troubleshooting",
+							slug: "advanced/troubleshooting",
 						},
 					],
 				},
