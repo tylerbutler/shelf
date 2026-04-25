@@ -232,7 +232,10 @@ let assert Ok(t) =
 
 Within a running session, Gleam's type system guarantees correctness — decoders only validate the DETS→ETS boundary at open time. The `save()` path is unaffected and still uses Erlang's efficient `ets:to_dets/2` bulk transfer.
 
-> **Performance note**: Loading from DETS (on `open` and `reload`) decodes and inserts entries one at a time via streaming (`dets:foldl`), keeping peak memory at ~1× table size. This is a one-time startup cost — all subsequent reads and writes remain at raw ETS speed.
+> **Performance note**: The DETS → ETS load streams entries through
+> `dets:foldl` and decodes them in batches, so peak extra memory during
+> open/reload is ~1× table size. See
+> [Memory cost on open and reload](https://shelf.tylerbutler.com/advanced/persistence-operations/#memory-cost-on-open-and-reload).
 
 ### Schema Migration
 
@@ -339,9 +342,9 @@ let assert Ok(entries) = set.to_list(from: t)
 - **Erlang only**: Requires the BEAM runtime (no JavaScript target)
 - **Single node**: DETS is local to one node (use Mnesia for distribution)
 - **Table names**: Names do not need to be globally unique — shelf uses unnamed ETS tables internally. However, DETS file paths must not conflict with other open tables.
-- **Process ownership**: ETS tables are owned by the process that created them. If that process exits, the ETS table is deleted and unsaved data is lost. The DETS file on disk is preserved and reloaded on the next `open()`. In long-running applications, ensure the process that opens tables is supervised.
+- **Process ownership**: ETS tables are owned by the process that called `open()` and are created `protected`, so reads work from any process but writes/lifecycle calls are owner-only. See [Process Ownership](https://shelf.tylerbutler.com/advanced/limitations/#process-ownership).
 - **DETS atoms**: DETS requires atom-based table names. Shelf uses a hash-based pool to bound the number of atoms created, so atom exhaustion is not a concern in normal usage.
-- **Opening large tables**: When opening a table, DETS entries are decoded and inserted one at a time via streaming (`dets:foldl`), reducing peak memory usage from ~3× table size to ~1×. This makes large table support practical, though startup time still scales linearly with table size.
+- **Opening large tables**: Open/reload streams DETS entries through `dets:foldl` for ~1× peak memory, but startup time still scales linearly with table size. Details and trade-offs: [Memory cost on open and reload](https://shelf.tylerbutler.com/advanced/persistence-operations/#memory-cost-on-open-and-reload).
 
 ## Security
 
@@ -349,20 +352,11 @@ All DETS file paths are validated against the provided `base_directory` to preve
 
 ## Process Ownership
 
-ETS tables are owned by the process that calls `open()`. This determines what each process can do:
+ETS tables are owned by the process that calls `open()`, and shelf creates them as `protected`. The website documents this in detail at [Process Ownership](https://shelf.tylerbutler.com/advanced/limitations/#process-ownership) — including the read/write split, `Error(NotOwner)` semantics, and recommended supervision patterns.
 
-- **Reads** (`lookup`, `member`, `to_list`, `fold`, `size`) work from **any** process — ETS tables are created as `protected`.
-- **Writes and lifecycle** (`insert`, `delete_*`, `update_counter`, `save`, `reload`, `sync`, `close`) are restricted to the **owner** process. Non-owner attempts return `Error(NotOwner)`.
-
-If you need cross-process writes, wrap the table in a supervised actor/server that owns the table and forwards mutation requests.
-
-### Crash Behavior
+In short: reads work from any process; writes and lifecycle calls (`insert`, `delete_*`, `update_counter`, `save`, `reload`, `sync`, `close`) must come from the owner.
 
 If the owning process crashes, the ETS table is deleted and unsaved data is lost. The DETS file is preserved — the next `open()` call reloads it.
-
-For long-running applications:
-- Open tables in a supervised process (e.g., an OTP GenServer or Gleam actor)
-- Consider periodic `save()` calls for WriteBack mode
 - Use WriteThrough mode for data that cannot tolerate loss
 
 ### Write Safety

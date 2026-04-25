@@ -100,6 +100,23 @@ Practical guarantees:
 | Strongest crash safety shelf can provide | `save()` (atomic rename, then no further shelf call is needed in WriteBack) |
 | `fsync(2)`-level guarantees against OS crash / power loss | Not provided. If you need this, call out to a process that opens the DETS file path with `file:open/2` and `file:sync/1`, or place the data directory on a filesystem mounted with stronger durability semantics. |
 
+## Memory cost on open and reload
+
+When a table is opened (or reloaded), shelf streams DETS entries through
+`dets:foldl/3`, validates each entry through the user-supplied decoders,
+and inserts them into ETS in batches. Peak extra memory during this
+streaming load is roughly **~1× the table size** — the previous
+materialise-then-insert approach used ~3×.
+
+This is a one-time startup cost. After the load returns, all reads and
+writes happen at raw ETS speed (no further DETS I/O on the read path).
+Startup time still scales linearly with table size, so very large tables
+(hundreds of MB+) have noticeable open latency even though peak memory is
+bounded.
+
+This is the canonical reference for shelf's load-time memory and time
+cost; other pages link here.
+
 ## close
 
 Performs a final `save()`, closes the DETS file, and deletes the ETS table. The table handle must not be used after closing.
