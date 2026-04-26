@@ -1,5 +1,5 @@
 name = "shelf"
-version = "1.0.0"
+version = "1.0.1"
 description = "Persistent ETS tables backed by DETS — fast in-memory access with automatic disk persistence for the BEAM"
 licences = ["MIT"]
 repository = { type = "github", user = "tylerbutler", repo = "shelf" }
