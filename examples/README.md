@@ -27,6 +27,7 @@ cd examples && gleam run -m key_value_cache
 | [`event_log`](src/event_log.gleam) | `PDuplicateBag` | Duplicate preservation, fold, size, to_list, delete_object |
 | [`hit_counter`](src/hit_counter.gleam) | `PSet` | Atomic counters (update_counter), increment/decrement, fold aggregation |
 | [`safe_resource`](src/safe_resource.gleam) | `PSet` | with_table auto-close, save/reload checkpoints, sync |
+| [`schema_migration`](src/schema_migration.gleam) | `PSet` | Evolving the value type between app versions: temp shelf table + atomic file rename |
 
 ### key_value_cache
 
@@ -53,3 +54,7 @@ A page hit counter using `PSet` atomic counters. Demonstrates `update_counter` f
 Demonstrates two resource management patterns:
 1. **`with_table`** — automatic open/close via callback, guaranteed cleanup
 2. **Manual save/reload** — checkpoint data with `save()`, undo unsaved changes with `reload()`, and flush to disk with `sync()`
+
+### schema_migration
+
+A worked end-to-end migration that walks through the canonical 6-step procedure: open the old DETS file with the previous decoders, transform every entry to the new value shape (`String` → `#(String, Int)`), write the result to a temporary path, atomically `rename` it over the live file, then reopen with the new decoders. Mirrors the procedure documented at [Schema Migration](https://shelf.tylerbutler.com/advanced/schema-migration/).
