@@ -16,6 +16,9 @@ export default defineConfig({
 		mermaid(),
 		starlight({
 			title: "shelf",
+			components: {
+				Head: "./src/components/Head.astro",
+			},
 			editLink: {
 				baseUrl:
 					"https://github.com/tylerbutler/shelf/edit/main/website/",
