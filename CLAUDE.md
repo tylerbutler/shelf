@@ -93,3 +93,12 @@ The `shelf_ffi.erl` module wraps raw `ets:*` and `dets:*` calls with error trans
 - Follow `gleam format` output
 - Document public functions with `///` comments
 - Test files create temporary `.dets` files in `/tmp/` and clean up after each test
+
+## Design Context
+
+The `website/` docs site (Astro/Starlight, deployed to shelf.tylerbutler.com) has captured design context:
+
+- **PRODUCT.md** (repo root) — strategy: product register, web platform, users, positioning, brand personality, anti-references
+- **DESIGN.md** (repo root) — visual system: berry/ink palette, Spline Sans + Spline Sans Mono typography, named rules
+
+Read both before any design or website work; keep changes consistent with their rules.

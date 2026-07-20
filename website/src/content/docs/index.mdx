@@ -17,44 +17,74 @@ hero:
       variant: secondary
 ---
 
-import { Card, CardGrid } from '@astrojs/starlight/components';
 import PreReleaseNotice from '../../components/PreReleaseNotice.astro';
 
 <PreReleaseNotice />
 
-## Features
+## The pattern
 
-<style lang="css">{`
-  // Add a gradient to the heading on the splash page.
-  #_top {
-    background: linear-gradient(90deg, var(--sl-color-gray-2), var(--sl-color-accent));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-`}
-</style>
+Reads come from ETS at memory speed; writes persist to DETS on disk. shelf wraps
+the classic Erlang persistence pattern in a type-safe Gleam API, with decoders
+validating every entry loaded from disk before it reaches your code.
 
-<CardGrid>
-	<Card title="ETS Speed + DETS Persistence" icon="rocket">
-		Microsecond reads from ETS with durable storage on disk via DETS. The classic Erlang persistence pattern, wrapped in a type-safe Gleam API.
-	</Card>
-	<Card title="Runtime Type Safety" icon="approve-check-circle">
-		Decoder-gated loading validates every entry from disk against your Gleam types. Catch corrupted or mistyped data at the storage boundary.
-	</Card>
-	<Card title="Write Modes" icon="document">
-		Choose WriteBack for high-throughput batched persistence, or WriteThrough for immediate durability on every write.
-	</Card>
-	<Card title="Table Types" icon="list-format">
-		Set, bag, and duplicate bag tables — all with persistent backing. Pick the right data model for your use case.
-	</Card>
-	<Card title="Safe Resource Management" icon="setting">
-		The `with_table` callback ensures tables are always properly closed, even when the body panics or returns an error.
-	</Card>
-	<Card title="Atomic Counters" icon="puzzle">
-		Lock-free integer increments via `update_counter` — increment hit counts or sequence numbers without serialising through an actor.
-	</Card>
-	<Card title="Cross-process reads" icon="seti:plan">
-		ETS tables are created `protected`, so any process can read them concurrently while a single owner process handles writes — a natural fit for actor-fronted, read-heavy services.
-	</Card>
-</CardGrid>
+```gleam
+import gleam/dynamic/decode
+import shelf/set
+
+// Open a persistent set — existing data loads from disk, through your decoders
+let assert Ok(table) =
+  set.open(
+    name: "users",
+    path: "data/users.dets",
+    base_directory: "/app/data",
+    key: decode.string,
+    value: decode.int,
+  )
+
+// Writes and reads hit ETS at memory speed
+let assert Ok(Nil) = set.insert(into: table, key: "alice", value: 42)
+let assert Ok(42) = set.lookup(from: table, key: "alice")
+
+// Persist to disk when ready; close auto-saves
+let assert Ok(Nil) = set.save(table)
+```
+
+## Built in
+
+<dl class="splash-features">
+  <div>
+    <dt>ETS speed, DETS persistence</dt>
+    <dd>Microsecond reads from memory, durable storage on disk — no database
+    process to run.</dd>
+  </div>
+  <div>
+    <dt>Runtime type safety</dt>
+    <dd>Decoder-gated loading catches corrupted or mistyped data at the storage
+    boundary, not in production.</dd>
+  </div>
+  <div>
+    <dt>Two write modes</dt>
+    <dd>WriteBack for high-throughput batching, or WriteThrough for immediate
+    durability on every write.</dd>
+  </div>
+  <div>
+    <dt>Set, bag, and duplicate bag</dt>
+    <dd>All three ETS table types, each with persistent backing — pick the data
+    model your use case needs.</dd>
+  </div>
+  <div>
+    <dt>Safe resource management</dt>
+    <dd>The <code>with_table</code> callback closes tables even when the body
+    panics or returns an error.</dd>
+  </div>
+  <div>
+    <dt>Atomic counters</dt>
+    <dd>Lock-free increments via <code>update_counter</code> — no serialising
+    through an actor.</dd>
+  </div>
+  <div>
+    <dt>Cross-process reads</dt>
+    <dd>Tables are <code>protected</code>: one owner process writes while any
+    process reads concurrently.</dd>
+  </div>
+</dl>

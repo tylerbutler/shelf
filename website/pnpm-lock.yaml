@@ -14,9 +14,12 @@ importers:
       '@astrojs/starlight':
         specifier: ^0.37.0
         version: 0.37.7(astro@5.18.1(rollup@4.60.1)(typescript@5.9.3)(yaml@2.8.2))
-      '@fontsource/metropolis':
-        specifier: ^5.2.5
-        version: 5.2.5
+      '@fontsource-variable/spline-sans':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource-variable/spline-sans-mono':
+        specifier: ^5.3.0
+        version: 5.3.0
       astro:
         specifier: ^5.18.1
         version: 5.18.1(rollup@4.60.1)(typescript@5.9.3)(yaml@2.8.2)
@@ -511,8 +514,11 @@ packages:
     resolution: {integrity: sha512-Au3jSkt66PRwTKTCYm7KzTGfMzUmn1LYPK+cyrytfzjfOPkHpohrLcGYPLsgxV8nzc4vXxt3Ay7MlBrmeIfFLg==}
     engines: {node: '>=16.0'}
 
-  '@fontsource/metropolis@5.2.5':
-    resolution: {integrity: sha512-zAz6XS1ZXVXZadcqsOnToiePAKEiEywxOwILEaE4sRl+pVOFQI/30xMiKvjQae1NRK3TbeKxJAmt+yFkPguXJw==}
+  '@fontsource-variable/spline-sans-mono@5.3.0':
+    resolution: {integrity: sha512-dH/qBj/MCE4ObiuCwlA9X1o3AftMO9dwfFgoRVYjy6VCPYkpWAlEtK/RjeyICgsR8rW763IAQARskVgShBY5JA==}
+
+  '@fontsource-variable/spline-sans@5.3.0':
+    resolution: {integrity: sha512-a0EVY1u6qvI5uk66ImOKbh3QD8y3LtMpuqMMyN4OB9eJwivKPXNTn8rJUB+YLrJ5LxS85vqSmG1xeYG/mF8MDw==}
 
   '@iconify/types@2.0.0':
     resolution: {integrity: sha512-+wluvCrRhXrhyOmRDJ3q8mux9JkKy5SJ/v8ol2tu4FVjyYvtEzkc/3pK15ET6RKg4b4w4BmTk1+gsCUhf21Ykg==}
@@ -1035,6 +1041,7 @@ packages:
 
   '@ungap/structured-clone@1.3.0':
     resolution: {integrity: sha512-WmoN8qaIAo7WTYWbAZuG8PYEhn5fkz7dZrqTBZ7dtt//lL2Gwms1IcnQ5yHqjDfX8Ft5j4YzDM23f87zBfDe9g==}
+    deprecated: Potential CWE-502 - Update to 1.3.1 or higher
 
   '@upsetjs/venn.js@2.0.0':
     resolution: {integrity: sha512-WbBhLrooyePuQ1VZxrJjtLvTc4NVfpOyKx0sKqioq9bX1C1m7Jgykkn8gLrtwumBioXIqam8DLxp88Adbue6Hw==}
@@ -2511,6 +2518,7 @@ packages:
   tsconfck@3.1.6:
     resolution: {integrity: sha512-ks6Vjr/jEw0P1gmOVwutM3B7fWxoWBL2KRDb1JfqGVawBmO5UsvmWOQFGHBPl5yxYz4eERr19E6L7NMv+Fej4w==}
     engines: {node: ^18 || >=20}
+    deprecated: unmaintained
     hasBin: true
     peerDependencies:
       typescript: ^5.0.0
@@ -3324,7 +3332,9 @@ snapshots:
       mdast-util-find-and-replace: 1.1.1
       unist-util-visit: 2.0.3
 
-  '@fontsource/metropolis@5.2.5': {}
+  '@fontsource-variable/spline-sans-mono@5.3.0': {}
+
+  '@fontsource-variable/spline-sans@5.3.0': {}
 
   '@iconify/types@2.0.0': {}
 

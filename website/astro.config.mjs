@@ -34,8 +34,8 @@ export default defineConfig({
 			},
 			favicon: "./src/assets/favicon.png",
 			customCss: [
-				"@fontsource/metropolis/400.css",
-				"@fontsource/metropolis/600.css",
+				"@fontsource-variable/spline-sans",
+				"@fontsource-variable/spline-sans-mono",
 				"./src/styles/fonts.css",
 				"./src/styles/custom.css",
 			],
