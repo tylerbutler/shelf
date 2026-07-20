@@ -127,7 +127,7 @@ The component vocabulary is Starlight's, themed — refined and restrained: quie
 - **Shadow Strategy:** None (The Tonal-Depth Rule).
 
 ### Asides / Callouts
-- Starlight `<Aside>` components carry all notices (the Pre-1.0 caution is site-wide via `PreReleaseNotice.astro`). Use semantic types (`note`, `caution`, `tip`); never hand-build a callout.
+- Starlight `<Aside>` components carry all notices. Use semantic types (`note`, `caution`, `tip`); never hand-build a callout.
 
 ### Code Blocks
 - Spline Sans Mono at 0.8125rem on a tinted berry surface with hairline border. Code blocks are the site's most-read component; they must look deliberate in both themes.

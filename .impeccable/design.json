@@ -59,8 +59,8 @@
 		{
 			"name": "Caution Aside",
 			"kind": "card",
-			"description": "Starlight-style semantic callout; carries the site-wide Pre-1.0 notice.",
-			"html": "<div class=\"ds-aside\"><p class=\"ds-aside-title\">Pre-1.0 Software</p><p class=\"ds-aside-body\">The API is unstable and features may change in minor releases.</p></div>",
+			"description": "Starlight-style semantic callout for notes, cautions, and tips.",
+			"html": "<div class=\"ds-aside\"><p class=\"ds-aside-title\">Heads up</p><p class=\"ds-aside-body\">DETS files have a 2 GB size limit; plan table growth accordingly.</p></div>",
 			"css": ".ds-aside { background: #fff3f5; border: 1px solid #f6a8bc; border-radius: 0.5rem; padding: 1rem 1.25rem; font-family: 'Spline Sans Variable', 'Spline Sans', sans-serif; } .ds-aside-title { color: #6b0031; font-weight: 650; margin: 0 0 0.375rem; font-size: 1rem; } .ds-aside-body { color: #4d0022; margin: 0; font-size: 0.9375rem; line-height: 1.65; }"
 		},
 		{
