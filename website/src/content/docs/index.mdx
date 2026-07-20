@@ -45,6 +45,20 @@ let assert Ok(42) = set.lookup(from: table, key: "alice")
 let assert Ok(Nil) = set.save(table)
 ```
 
+## Compared to the alternatives
+
+Gleam's ETS ecosystem already covers the pieces individually — shelf exists
+because most projects need both at once.
+
+- **[bravo](https://hexdocs.pm/bravo)** wraps ETS. Fast, in-memory only;
+  nothing survives a restart.
+- **[slate](https://slate.hexdocs.pm)** wraps DETS. Persistent, but every
+  read and write touches disk.
+- **Mnesia** ships with OTP and gives you both, plus distribution,
+  transactions, and a schema — more than most single-node apps need.
+- **shelf** combines ETS-speed reads with DETS-backed persistence, without a
+  distributed database to run.
+
 ## Built in
 
 <dl class="splash-features">

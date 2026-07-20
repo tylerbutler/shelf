@@ -26,7 +26,7 @@
 [data-has-hero] .sl-markdown-content h2 {
 	margin-top: clamp(3rem, 8vw, 4rem);
 }
-[data-has-hero] .sl-markdown-content p:not(.starlight-aside *) {
+[data-has-hero] .sl-markdown-content :is(p, ul, ol):not(.starlight-aside *) {
 	max-width: 70ch;
 }
 
