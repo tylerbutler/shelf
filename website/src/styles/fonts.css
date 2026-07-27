@@ -1,3 +1,16 @@
 :root {
-	--sl-font: "Metropolis", sans-serif;
+	--sl-font: "Spline Sans Variable", "Spline Sans", sans-serif;
+	--sl-font-mono: "Spline Sans Mono Variable", "Spline Sans Mono",
+		ui-monospace, monospace;
+}
+
+/* Spline Sans sits slightly compact; give long-form prose a touch more air. */
+.sl-markdown-content {
+	line-height: 1.65;
+}
+
+/* Confident headings: use the variable range instead of a flat 600. */
+.sl-markdown-content :is(h1, h2, h3),
+.hero h1 {
+	font-weight: 650;
 }

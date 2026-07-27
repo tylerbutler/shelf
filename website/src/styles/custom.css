@@ -12,6 +12,45 @@
 	--sl-color-gray-6: #4d0022;
 	--sl-color-black: #340014;
 }
+/* Site-wide reading refinements. */
+.sl-markdown-content :is(h1, h2, h3),
+.hero .tagline {
+	text-wrap: balance;
+}
+.sl-markdown-content p {
+	text-wrap: pretty;
+}
+
+/* Splash page: landing rhythm — generous section separation, capped prose measure.
+   Guides keep Starlight's 65ch column; only the hero page runs full-bleed. */
+[data-has-hero] .sl-markdown-content h2 {
+	margin-top: clamp(3rem, 8vw, 4rem);
+}
+[data-has-hero] .sl-markdown-content :is(p, ul, ol):not(.starlight-aside *) {
+	max-width: 70ch;
+}
+
+/* Splash feature list — quiet definition grid, no card chrome. */
+.splash-features {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+	gap: 1.75rem 2.5rem;
+	margin-top: 1.5rem;
+}
+.splash-features > div {
+	margin: 0;
+}
+.splash-features dt {
+	font-weight: 650;
+	color: var(--sl-color-white);
+}
+.splash-features dd {
+	margin: 0.375rem 0 0;
+	padding: 0;
+	font-size: var(--sl-text-sm);
+	line-height: 1.6;
+}
+
 /* Light mode colors. */
 :root[data-theme='light'] {
 	--sl-color-accent-low: #eeccd9;
