@@ -30,6 +30,25 @@
 	max-width: 70ch;
 }
 
+/* Splash release badge — a quiet trust signal under the hero. Hairline pill on
+   the mid-ramp, no fill and no shadow (The Tonal-Depth Rule). */
+.release-badge {
+	display: inline-block;
+	margin: 0;
+	padding: 0.25rem 0.75rem;
+	border: 1px solid var(--sl-color-gray-5);
+	border-radius: 999rem;
+	font-family: var(--sl-font-mono);
+	font-size: var(--sl-text-xs);
+}
+.release-badge a {
+	color: var(--sl-color-gray-2);
+	text-decoration: none;
+}
+.release-badge a:hover {
+	color: var(--sl-color-white);
+}
+
 /* Splash feature list — quiet definition grid, no card chrome. */
 .splash-features {
 	display: grid;
