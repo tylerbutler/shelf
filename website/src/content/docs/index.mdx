@@ -17,6 +17,10 @@ hero:
       variant: secondary
 ---
 
+import { version } from "../../version.mjs";
+
+<p class="release-badge"><a href="https://hex.pm/packages/shelf">v{version} on Hex</a></p>
+
 ## The pattern
 
 Reads come from ETS at memory speed; writes persist to DETS on disk. shelf wraps
