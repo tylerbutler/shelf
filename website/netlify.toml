@@ -1,5 +1,7 @@
 [build]
   command = "pnpm build:site"
   publish = "dist"
-  # Only trigger builds when files in website/ change.
-  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- website/"
+  # Only build when files in website/ change. Deploy previews compare against
+  # the PR's merge base; production compares against the last built commit.
+  # See netlify-ignore.sh — the logic has enough edge cases to be worth reading.
+  ignore = "bash ./netlify-ignore.sh"
