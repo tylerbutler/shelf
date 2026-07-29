@@ -4,6 +4,7 @@ import { defineConfig } from "astro/config";
 import mermaid from "astro-mermaid";
 import starlightLinksValidator from "starlight-links-validator";
 import starlightLlmsTxt from "starlight-llms-txt";
+import { berryDark, berryLight } from "./src/styles/berry-code-themes.mjs";
 
 // https://astro.build/config
 export default defineConfig({
@@ -33,6 +34,12 @@ export default defineConfig({
 				alt: "shelf logo",
 			},
 			favicon: "./src/assets/favicon.png",
+			// Starlight's default Night Owl is built from neutral grays and
+			// blue-slates, which DESIGN.md's No-Gray Rule forbids. Dark is listed
+			// first because it is the site's default theme.
+			expressiveCode: {
+				themes: [berryDark, berryLight],
+			},
 			customCss: [
 				"@fontsource-variable/spline-sans",
 				"@fontsource-variable/spline-sans-mono",

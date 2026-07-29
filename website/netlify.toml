@@ -1,7 +1,7 @@
 [build]
   command = "pnpm build:site"
   publish = "dist"
-  # Only build when files in website/ change. Deploy previews compare against
+  # Only build when files in this directory change. Deploy previews compare against
   # the PR's merge base; production compares against the last built commit.
-  # See netlify-ignore.sh — the logic has enough edge cases to be worth reading.
-  ignore = "bash ./netlify-ignore.sh"
+  # See the script for why the pathspec must be `.` rather than `website/`.
+  ignore = "bash netlify-ignore.sh"

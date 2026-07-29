@@ -1,6 +1,14 @@
 ---
 import Default from "@astrojs/starlight/components/Head.astro";
 import { Script } from "astro-tinylytics";
+
+// Starlight emits no og:image of its own. Absolute URL is required by the
+// Open Graph spec — relative paths are silently dropped by most scrapers.
+const ogImage = new URL("/og.png", Astro.site);
 ---
 <Default><slot /></Default>
+<meta property="og:image" content={ogImage} />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta name="twitter:image" content={ogImage} />
 <Script embedCode="wXGZLnsAyo6G8pHXx_uT" min hits events beacon />
