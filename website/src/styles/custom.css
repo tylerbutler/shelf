@@ -11,6 +11,74 @@
 	--sl-color-gray-5: #6b0031;
 	--sl-color-gray-6: #4d0022;
 	--sl-color-black: #340014;
+
+	/* Asides, dark. Starlight keys its four aside types to stock orange/blue/
+	   purple/red, which read as another site's palette. They are remapped onto
+	   the berry ramp and differentiated by ramp position — quietest for note,
+	   deepest for danger — rather than by hue. Every -high value is verified
+	   ≥4.5:1 on its own -low surface. */
+	--sl-color-blue-low: #3a1020;
+	--sl-color-blue: #6b0031;
+	--sl-color-blue-high: #f8aabe;
+	--sl-color-purple-low: #45142a;
+	--sl-color-purple: #8f195a;
+	--sl-color-purple-high: #ffc0d3;
+	--sl-color-orange-low: #571630;
+	--sl-color-orange: #ab3772;
+	--sl-color-orange-high: #ff9dbd;
+	--sl-color-red-low: #6b0d33;
+	--sl-color-red: #ff729e;
+	--sl-color-red-high: #ffd0dd;
+	--sl-color-green-low: #3a1020;
+	--sl-color-green: #6b0031;
+	--sl-color-green-high: #f8aabe;
+
+	/* Diagram surfaces, dark. Consumed by the mermaid themeCSS in
+	   astro.config.mjs; defined here so a theme switch is a repaint rather
+	   than a re-render. The panel takes the code-block ramp step — diagrams
+	   and code are the same class of artifact — and nodes step once further
+	   so they read as raised on it. Clusters are outline only. */
+	--shelf-diagram-panel: #4d0022;
+	--shelf-diagram-surface: #6b0031;
+	--shelf-diagram-border: #a2004e;
+	--shelf-diagram-text: #f8aabe;
+	--shelf-diagram-cluster-border: #a2004e;
+	--shelf-diagram-line: #ff729e;
+}
+
+/* The Tonal-Depth Rule: elevation steps along the berry ramp, never a shadow.
+   Starlight applies -md to pagination, the mobile menu button, and the theme
+   dropdown; all three already carry a hairline border or a full-contrast fill.
+   -lg is left intact for the search modal, the one surface DESIGN.md exempts. */
+:root,
+:root[data-theme='light'] {
+	--sl-shadow-sm: none;
+	--sl-shadow-md: none;
+}
+
+/* Asides: a hairline on all four sides instead of the 4px side tab, with the
+   fill carrying the type. Radius matches the card corner style. */
+.starlight-aside {
+	border: 1px solid var(--sl-color-asides-border);
+	border-radius: 0.5rem;
+}
+
+/* The mobile menu button floats over content and loses its shadow above; a
+   hairline restores the edge it needs to read as a control. */
+starlight-menu-button button {
+	border: 1px solid var(--sl-color-gray-5);
+}
+
+/* Diagrams sit on the code-block ramp step, with the same hairline and radius —
+   they are the same class of artifact and should read as a matched pair. The
+   :root prefix is needed to outrank astro-mermaid's own
+   `[data-theme="…"] pre.mermaid[data-processed]` translucent-black default. */
+:root .sl-markdown-content pre.mermaid,
+:root .sl-markdown-content pre.mermaid[data-processed] {
+	padding: 1.5rem 1.25rem;
+	border: 1px solid var(--sl-color-gray-5);
+	border-radius: 0.5rem;
+	background-color: var(--shelf-diagram-panel);
 }
 /* Site-wide reading refinements. */
 .sl-markdown-content :is(h1, h2, h3),
@@ -84,4 +152,30 @@
 	--sl-color-gray-6: #ffe7ec;
 	--sl-color-gray-7: #fff3f5;
 	--sl-color-black: #ffffff;
+
+	/* Asides, light — the same ramp read from the other end (The Two-Ends
+	   Rule). Ordering holds: note quietest, danger deepest. */
+	--sl-color-blue-low: #ffe9ef;
+	--sl-color-blue: #f6a8bc;
+	--sl-color-blue-high: #6b0031;
+	--sl-color-purple-low: #ffdfe8;
+	--sl-color-purple: #ee8fab;
+	--sl-color-purple-high: #8f195a;
+	--sl-color-orange-low: #ffd4e0;
+	--sl-color-orange: #e24d80;
+	--sl-color-orange-high: #a2004e;
+	--sl-color-red-low: #ffc6d6;
+	--sl-color-red: #8f195a;
+	--sl-color-red-high: #6b0031;
+	--sl-color-green-low: #ffe9ef;
+	--sl-color-green: #f6a8bc;
+	--sl-color-green-high: #6b0031;
+
+	/* Diagram surfaces, light. */
+	--shelf-diagram-panel: #fff3f5;
+	--shelf-diagram-surface: #ffe7ec;
+	--shelf-diagram-border: #e24d80;
+	--shelf-diagram-text: #6b0031;
+	--shelf-diagram-cluster-border: #e24d80;
+	--shelf-diagram-line: #a2004e;
 }
