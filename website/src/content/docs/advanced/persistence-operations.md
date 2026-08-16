@@ -138,17 +138,20 @@ let assert Ok(Nil) = {
 ## Persistence Flow
 
 ```mermaid
+%% Mermaid stacks subgraphs in reverse declaration order, so WriteThrough is
+%% declared first to render WriteBack on top — matching the WriteBack-first
+%% ordering every other page uses. Swapping these reverses the diagram.
 flowchart LR
-  subgraph wb["WriteBack mode"]
-    direction LR
-    I1[insert] -->|write| E1[ETS]
-    E1 -->|"save()"| D1[DETS]
-    D1 -->|"sync()"| F1[filesystem]
-  end
   subgraph wt["WriteThrough mode"]
     direction LR
     I2[insert] -->|"dets:insert"| D2[DETS]
     I2 -->|"ets:insert"| E2[ETS]
     D2 -->|"sync()"| F2[filesystem]
+  end
+  subgraph wb["WriteBack mode"]
+    direction LR
+    I1[insert] -->|write| E1[ETS]
+    E1 -->|"save()"| D1[DETS]
+    D1 -->|"sync()"| F1[filesystem]
   end
 ```
