@@ -105,7 +105,7 @@ export default defineConfig({
 				replacesTitle: true,
 				alt: "shelf logo",
 			},
-			favicon: "./src/assets/favicon.png",
+			favicon: "/favicon.png",
 			// Starlight's default Night Owl is built from neutral grays and
 			// blue-slates, which DESIGN.md's No-Gray Rule forbids. Dark is listed
 			// first because it is the site's default theme.
