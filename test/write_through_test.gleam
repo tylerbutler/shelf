@@ -5,11 +5,11 @@ import shelf
 import shelf/bag
 import shelf/duplicate_bag
 import shelf/set
-import test_helpers
+import test_helper
 
-pub fn writes_persist_immediately_without_explicit_save_test() {
+pub fn writes_persist_immediately_without_explicit_save_test() -> Nil {
   let path = "/tmp/shelf_wt_persist.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
 
   // Open in WriteThrough mode
   let config =
@@ -33,13 +33,13 @@ pub fn writes_persist_immediately_without_explicit_save_test() {
     )
   let assert Ok("value") = set.lookup(table, "key")
   let assert Ok(Nil) = set.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn deletes_persist_immediately_in_write_through_mode_test() {
+pub fn deletes_persist_immediately_in_write_through_mode_test() -> Nil {
   let path = "/tmp/shelf_wt_delete.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
 
   let config =
     shelf.config(name: "wt_delete_1", path: path, base_directory: "/tmp")
@@ -63,13 +63,13 @@ pub fn deletes_persist_immediately_in_write_through_mode_test() {
   assert set.lookup(table, "a") == Error(shelf.NotFound)
   let assert Ok(2) = set.lookup(table, "b")
   let assert Ok(Nil) = set.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn counter_updates_persist_in_write_through_mode_test() {
+pub fn counter_updates_persist_in_write_through_mode_test() -> Nil {
   let path = "/tmp/shelf_wt_counter.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
 
   let config =
     shelf.config(name: "wt_counter_1", path: path, base_directory: "/tmp")
@@ -91,13 +91,13 @@ pub fn counter_updates_persist_in_write_through_mode_test() {
     )
   let assert Ok(5) = set.lookup(table, "count")
   let assert Ok(Nil) = set.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn delete_object_persists_in_write_through_mode_test() {
+pub fn delete_object_persists_in_write_through_mode_test() -> Nil {
   let path = "/tmp/shelf_wt_delobj.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
 
   let config =
     shelf.config(name: "wt_delobj_1", path: path, base_directory: "/tmp")
@@ -120,13 +120,13 @@ pub fn delete_object_persists_in_write_through_mode_test() {
   assert set.lookup(table, "x") == Error(shelf.NotFound)
   let assert Ok(20) = set.lookup(table, "y")
   let assert Ok(Nil) = set.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn delete_all_persists_in_write_through_mode_test() {
+pub fn delete_all_persists_in_write_through_mode_test() -> Nil {
   let path = "/tmp/shelf_wt_delall.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
 
   let config =
     shelf.config(name: "wt_delall_1", path: path, base_directory: "/tmp")
@@ -148,13 +148,13 @@ pub fn delete_all_persists_in_write_through_mode_test() {
     )
   let assert Ok(0) = set.size(table)
   let assert Ok(Nil) = set.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn insert_list_persists_in_write_through_mode_test() {
+pub fn insert_list_persists_in_write_through_mode_test() -> Nil {
   let path = "/tmp/shelf_wt_inslist.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
 
   let config =
     shelf.config(name: "wt_inslist_1", path: path, base_directory: "/tmp")
@@ -176,13 +176,13 @@ pub fn insert_list_persists_in_write_through_mode_test() {
   let assert Ok(2) = set.lookup(table, "b")
   let assert Ok(3) = set.lookup(table, "c")
   let assert Ok(Nil) = set.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn bag_write_through_persists_inserts_immediately_test() {
+pub fn bag_write_through_persists_inserts_immediately_test() -> Nil {
   let path = "/tmp/shelf_wt_bag.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
 
   let config =
     shelf.config(name: "wt_bag_1", path: path, base_directory: "/tmp")
@@ -206,13 +206,13 @@ pub fn bag_write_through_persists_inserts_immediately_test() {
   let sorted = list.sort(values, string.compare)
   assert sorted == ["blue", "red"]
   let assert Ok(Nil) = bag.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn bag_write_through_delete_key_persists_immediately_test() {
+pub fn bag_write_through_delete_key_persists_immediately_test() -> Nil {
   let path = "/tmp/shelf_wt_bag_del.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
 
   let config =
     shelf.config(name: "wt_bag_del_1", path: path, base_directory: "/tmp")
@@ -234,13 +234,13 @@ pub fn bag_write_through_delete_key_persists_immediately_test() {
     )
   assert bag.lookup(table, "k") == Error(shelf.NotFound)
   let assert Ok(Nil) = bag.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn duplicate_bag_write_through_persists_inserts_immediately_test() {
+pub fn duplicate_bag_write_through_persists_inserts_immediately_test() -> Nil {
   let path = "/tmp/shelf_wt_dbag.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
 
   let config =
     shelf.config(name: "wt_dbag_1", path: path, base_directory: "/tmp")
@@ -267,13 +267,13 @@ pub fn duplicate_bag_write_through_persists_inserts_immediately_test() {
   let assert Ok(values) = duplicate_bag.lookup(table, "event")
   assert values == ["click", "click"]
   let assert Ok(Nil) = duplicate_bag.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn duplicate_bag_write_through_delete_object_persists_immediately_test() {
+pub fn duplicate_bag_write_through_delete_object_persists_immediately_test() -> Nil {
   let path = "/tmp/shelf_wt_dbag_delobj.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
 
   let config =
     shelf.config(name: "wt_dbag_delobj_1", path: path, base_directory: "/tmp")
@@ -300,6 +300,6 @@ pub fn duplicate_bag_write_through_delete_object_persists_immediately_test() {
   let assert Ok(values) = duplicate_bag.lookup(table, "x")
   assert values == ["b"]
   let assert Ok(Nil) = duplicate_bag.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }

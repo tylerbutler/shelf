@@ -12,7 +12,7 @@ import gleam/io
 import gleam/string
 import shelf/set
 
-pub fn main() {
+pub fn main() -> Nil {
   pattern_1_with_table()
   io.println("")
   pattern_2_save_reload()
@@ -20,7 +20,7 @@ pub fn main() {
 
 // ── Pattern 1: with_table (auto-close) ─────────────────────────────────
 
-fn pattern_1_with_table() {
+fn pattern_1_with_table() -> Nil {
   io.println("=== Pattern 1: with_table (auto-close) ===")
   io.println("")
 
@@ -43,9 +43,9 @@ fn pattern_1_with_table() {
         io.println("  Inserted 'language' and 'runtime'")
 
         // Look up a value and build a result to return.
-        let assert Ok(lang) = set.lookup(from: table, key: "language")
-        let message = "Hello from " <> lang <> "!"
-        io.println("  Looked up language → " <> lang)
+        let assert Ok(language) = set.lookup(from: table, key: "language")
+        let message = "Hello from " <> language <> "!"
+        io.println("  Looked up language → " <> language)
 
         // The callback's Ok value becomes with_table's Ok value.
         Ok(message)
@@ -59,7 +59,7 @@ fn pattern_1_with_table() {
 
 // ── Pattern 2: Manual save/reload cycle (checkpoint & undo) ─────────────
 
-fn pattern_2_save_reload() {
+fn pattern_2_save_reload() -> Nil {
   io.println("=== Pattern 2: save/reload (checkpoint & undo) ===")
   io.println("")
 
@@ -131,6 +131,6 @@ fn format_entries(entries: List(#(String, String))) -> String {
 fn do_format_entries(entries: List(#(String, String))) -> List(String) {
   case entries {
     [] -> []
-    [#(k, v), ..rest] -> [k <> "=" <> v, ..do_format_entries(rest)]
+    [#(key, value), ..rest] -> [key <> "=" <> value, ..do_format_entries(rest)]
   }
 }

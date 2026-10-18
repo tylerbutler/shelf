@@ -4,11 +4,11 @@ import shelf
 import shelf/bag
 import shelf/duplicate_bag
 import shelf/set
-import test_helpers
+import test_helper
 
-pub fn set_insert_from_non_owner_returns_not_owner_test() {
+pub fn set_insert_from_non_owner_returns_not_owner_test() -> Nil {
   let path = "/tmp/shelf_own_insert.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     set.open(
       name: "own_insert",
@@ -28,13 +28,13 @@ pub fn set_insert_from_non_owner_returns_not_owner_test() {
   assert result == Error(shelf.NotOwner)
 
   let assert Ok(Nil) = set.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn set_insert_list_from_non_owner_returns_not_owner_test() {
+pub fn set_insert_list_from_non_owner_returns_not_owner_test() -> Nil {
   let path = "/tmp/shelf_own_insert_list.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     set.open(
       name: "own_insert_list",
@@ -54,13 +54,13 @@ pub fn set_insert_list_from_non_owner_returns_not_owner_test() {
   assert result == Error(shelf.NotOwner)
 
   let assert Ok(Nil) = set.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn set_insert_new_from_non_owner_returns_not_owner_test() {
+pub fn set_insert_new_from_non_owner_returns_not_owner_test() -> Nil {
   let path = "/tmp/shelf_own_insert_new.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     set.open(
       name: "own_insert_new",
@@ -80,13 +80,13 @@ pub fn set_insert_new_from_non_owner_returns_not_owner_test() {
   assert result == Error(shelf.NotOwner)
 
   let assert Ok(Nil) = set.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn set_delete_key_from_non_owner_returns_not_owner_test() {
+pub fn set_delete_key_from_non_owner_returns_not_owner_test() -> Nil {
   let path = "/tmp/shelf_own_delete_key.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     set.open(
       name: "own_delete_key",
@@ -110,13 +110,13 @@ pub fn set_delete_key_from_non_owner_returns_not_owner_test() {
   assert set.lookup(table, "key") == Ok(1)
 
   let assert Ok(Nil) = set.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn set_delete_object_from_non_owner_returns_not_owner_test() {
+pub fn set_delete_object_from_non_owner_returns_not_owner_test() -> Nil {
   let path = "/tmp/shelf_own_delete_obj.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     set.open(
       name: "own_delete_obj",
@@ -137,13 +137,13 @@ pub fn set_delete_object_from_non_owner_returns_not_owner_test() {
   assert result == Error(shelf.NotOwner)
 
   let assert Ok(Nil) = set.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn set_delete_all_from_non_owner_returns_not_owner_test() {
+pub fn set_delete_all_from_non_owner_returns_not_owner_test() -> Nil {
   let path = "/tmp/shelf_own_delete_all.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     set.open(
       name: "own_delete_all",
@@ -167,13 +167,13 @@ pub fn set_delete_all_from_non_owner_returns_not_owner_test() {
   assert set.lookup(table, "key") == Ok(1)
 
   let assert Ok(Nil) = set.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn set_update_counter_from_non_owner_returns_not_owner_test() {
+pub fn set_update_counter_from_non_owner_returns_not_owner_test() -> Nil {
   let path = "/tmp/shelf_own_counter.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     set.open(
       name: "own_counter",
@@ -197,13 +197,13 @@ pub fn set_update_counter_from_non_owner_returns_not_owner_test() {
   assert set.lookup(table, "hits") == Ok(0)
 
   let assert Ok(Nil) = set.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn set_save_from_non_owner_returns_not_owner_test() {
+pub fn set_save_from_non_owner_returns_not_owner_test() -> Nil {
   let path = "/tmp/shelf_own_save.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     set.open(
       name: "own_save",
@@ -223,13 +223,13 @@ pub fn set_save_from_non_owner_returns_not_owner_test() {
   assert result == Error(shelf.NotOwner)
 
   let assert Ok(Nil) = set.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn set_sync_from_non_owner_returns_not_owner_test() {
+pub fn set_sync_from_non_owner_returns_not_owner_test() -> Nil {
   let path = "/tmp/shelf_own_sync.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     set.open(
       name: "own_sync",
@@ -249,13 +249,13 @@ pub fn set_sync_from_non_owner_returns_not_owner_test() {
   assert result == Error(shelf.NotOwner)
 
   let assert Ok(Nil) = set.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn set_close_from_non_owner_returns_not_owner_test() {
+pub fn set_close_from_non_owner_returns_not_owner_test() -> Nil {
   let path = "/tmp/shelf_own_close.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     set.open(
       name: "own_close",
@@ -276,13 +276,13 @@ pub fn set_close_from_non_owner_returns_not_owner_test() {
 
   // Owner can still close
   let assert Ok(Nil) = set.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn set_reload_from_non_owner_returns_not_owner_test() {
+pub fn set_reload_from_non_owner_returns_not_owner_test() -> Nil {
   let path = "/tmp/shelf_own_reload.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     set.open(
       name: "own_reload",
@@ -302,13 +302,13 @@ pub fn set_reload_from_non_owner_returns_not_owner_test() {
   assert result == Error(shelf.NotOwner)
 
   let assert Ok(Nil) = set.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn set_lookup_from_non_owner_succeeds_test() {
+pub fn set_lookup_from_non_owner_succeeds_test() -> Nil {
   let path = "/tmp/shelf_own_read.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     set.open(
       name: "own_read",
@@ -322,19 +322,25 @@ pub fn set_lookup_from_non_owner_succeeds_test() {
 
   let subject = process.new_subject()
   process.spawn(fn() {
-    let r1 = set.lookup(table, "a")
-    let r2 = set.member(table, "b")
-    let r3 = set.size(table)
-    let r4 = set.to_list(table)
-    process.send(subject, #(r1, r2, r3, r4))
+    let lookup_result = set.lookup(table, "a")
+    let member_result = set.member(table, "b")
+    let size_result = set.size(table)
+    let entries_result = set.to_list(table)
+    process.send(subject, #(
+      lookup_result,
+      member_result,
+      size_result,
+      entries_result,
+    ))
   })
 
-  let assert Ok(#(r1, r2, r3, r4)) = process.receive(subject, 5000)
-  assert r1 == Ok(1)
-  assert r2 == Ok(True)
-  assert r3 == Ok(2)
+  let assert Ok(#(lookup_result, member_result, size_result, entries_result)) =
+    process.receive(subject, 5000)
+  assert lookup_result == Ok(1)
+  assert member_result == Ok(True)
+  assert size_result == Ok(2)
   // to_list returns unspecified order, just check it has 2 entries
-  let assert Ok(entries) = r4
+  let assert Ok(entries) = entries_result
   assert {
       entries
       |> list_length
@@ -342,13 +348,13 @@ pub fn set_lookup_from_non_owner_succeeds_test() {
     == 2
 
   let assert Ok(Nil) = set.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn set_fold_from_non_owner_succeeds_test() {
+pub fn set_fold_from_non_owner_succeeds_test() -> Nil {
   let path = "/tmp/shelf_own_fold.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     set.open(
       name: "own_fold",
@@ -370,13 +376,13 @@ pub fn set_fold_from_non_owner_succeeds_test() {
   assert result == Ok(30)
 
   let assert Ok(Nil) = set.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn bag_insert_from_non_owner_returns_not_owner_test() {
+pub fn bag_insert_from_non_owner_returns_not_owner_test() -> Nil {
   let path = "/tmp/shelf_own_bag_insert.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     bag.open(
       name: "own_bag_insert",
@@ -396,13 +402,13 @@ pub fn bag_insert_from_non_owner_returns_not_owner_test() {
   assert result == Error(shelf.NotOwner)
 
   let assert Ok(Nil) = bag.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn duplicate_bag_insert_from_non_owner_returns_not_owner_test() {
+pub fn duplicate_bag_insert_from_non_owner_returns_not_owner_test() -> Nil {
   let path = "/tmp/shelf_own_dbag_insert.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     duplicate_bag.open(
       name: "own_dbag_insert",
@@ -422,13 +428,13 @@ pub fn duplicate_bag_insert_from_non_owner_returns_not_owner_test() {
   assert result == Error(shelf.NotOwner)
 
   let assert Ok(Nil) = duplicate_bag.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn operations_on_closed_table_return_table_closed_test() {
+pub fn operations_on_closed_table_return_table_closed_test() -> Nil {
   let path = "/tmp/shelf_own_after_close.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     set.open(
       name: "own_after_close",
@@ -443,12 +449,12 @@ pub fn operations_on_closed_table_return_table_closed_test() {
   assert set.insert(table, "key", 1) == Error(shelf.TableClosed)
   assert set.lookup(table, "key") == Error(shelf.TableClosed)
 
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
 import gleam/list
 
-fn list_length(l: List(a)) -> Int {
-  list.length(l)
+fn list_length(items: List(a)) -> Int {
+  list.length(items)
 }

@@ -1,22 +1,25 @@
 import gleam/dynamic/decode
 import shelf
 import shelf/set
-import test_helpers
+import test_helper
 
 @external(erlang, "writethrough_consistency_test_ffi", "close_dets_by_path")
 fn close_dets_by_path(path: String) -> Nil
 
-fn wt_open(name: String, path: String) {
+fn open_write_through(
+  name: String,
+  path: String,
+) -> Result(set.PersistentSet(String, Int), shelf.ShelfError) {
   let config =
     shelf.config(name: name, path: path, base_directory: "/tmp")
     |> shelf.write_mode(shelf.WriteThrough)
   set.open_config(config, key: decode.string, value: decode.int)
 }
 
-pub fn insert_dets_failure_leaves_ets_unchanged_test() {
+pub fn insert_dets_failure_leaves_ets_unchanged_test() -> Nil {
   let path = "/tmp/shelf_wt_ins.dets"
-  test_helpers.cleanup(path)
-  let assert Ok(table) = wt_open("wt_ins", path)
+  test_helper.cleanup(path)
+  let assert Ok(table) = open_write_through("wt_ins", path)
   let assert Ok(Nil) = set.insert(table, "existing", 100)
 
   close_dets_by_path(path)
@@ -27,14 +30,14 @@ pub fn insert_dets_failure_leaves_ets_unchanged_test() {
   // Original entry still present
   let assert Ok(100) = set.lookup(table, "existing")
 
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn insert_list_dets_failure_leaves_ets_unchanged_test() {
+pub fn insert_list_dets_failure_leaves_ets_unchanged_test() -> Nil {
   let path = "/tmp/shelf_wt_insl.dets"
-  test_helpers.cleanup(path)
-  let assert Ok(table) = wt_open("wt_insl", path)
+  test_helper.cleanup(path)
+  let assert Ok(table) = open_write_through("wt_insl", path)
   let assert Ok(Nil) = set.insert(table, "pre", 1)
 
   close_dets_by_path(path)
@@ -43,14 +46,14 @@ pub fn insert_list_dets_failure_leaves_ets_unchanged_test() {
   let assert Error(_) = set.lookup(table, "a")
   let assert Ok(1) = set.lookup(table, "pre")
 
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn delete_key_dets_failure_leaves_ets_unchanged_test() {
+pub fn delete_key_dets_failure_leaves_ets_unchanged_test() -> Nil {
   let path = "/tmp/shelf_wt_delk.dets"
-  test_helpers.cleanup(path)
-  let assert Ok(table) = wt_open("wt_delk", path)
+  test_helper.cleanup(path)
+  let assert Ok(table) = open_write_through("wt_delk", path)
   let assert Ok(Nil) = set.insert(table, "keep", 42)
 
   close_dets_by_path(path)
@@ -59,14 +62,14 @@ pub fn delete_key_dets_failure_leaves_ets_unchanged_test() {
   // ETS must still have the entry
   let assert Ok(42) = set.lookup(table, "keep")
 
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn delete_object_dets_failure_leaves_ets_unchanged_test() {
+pub fn delete_object_dets_failure_leaves_ets_unchanged_test() -> Nil {
   let path = "/tmp/shelf_wt_delo.dets"
-  test_helpers.cleanup(path)
-  let assert Ok(table) = wt_open("wt_delo", path)
+  test_helper.cleanup(path)
+  let assert Ok(table) = open_write_through("wt_delo", path)
   let assert Ok(Nil) = set.insert(table, "stay", 99)
 
   close_dets_by_path(path)
@@ -74,14 +77,14 @@ pub fn delete_object_dets_failure_leaves_ets_unchanged_test() {
   let assert Error(_) = set.delete_object(table, "stay", 99)
   let assert Ok(99) = set.lookup(table, "stay")
 
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn delete_all_dets_failure_leaves_ets_unchanged_test() {
+pub fn delete_all_dets_failure_leaves_ets_unchanged_test() -> Nil {
   let path = "/tmp/shelf_wt_dela.dets"
-  test_helpers.cleanup(path)
-  let assert Ok(table) = wt_open("wt_dela", path)
+  test_helper.cleanup(path)
+  let assert Ok(table) = open_write_through("wt_dela", path)
   let assert Ok(Nil) = set.insert(table, "a", 1)
   let assert Ok(Nil) = set.insert(table, "b", 2)
 
@@ -90,28 +93,28 @@ pub fn delete_all_dets_failure_leaves_ets_unchanged_test() {
   let assert Error(_) = set.delete_all(table)
   let assert Ok(2) = set.size(table)
 
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn insert_new_dets_failure_leaves_ets_unchanged_test() {
+pub fn insert_new_dets_failure_leaves_ets_unchanged_test() -> Nil {
   let path = "/tmp/shelf_wt_insn.dets"
-  test_helpers.cleanup(path)
-  let assert Ok(table) = wt_open("wt_insn", path)
+  test_helper.cleanup(path)
+  let assert Ok(table) = open_write_through("wt_insn", path)
 
   close_dets_by_path(path)
 
   let assert Error(_) = set.insert_new(table, "fresh", 777)
   let assert Error(_) = set.lookup(table, "fresh")
 
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn update_counter_rolls_back_ets_on_dets_failure_test() {
+pub fn update_counter_rolls_back_ets_on_dets_failure_test() -> Nil {
   let path = "/tmp/shelf_wt_ctr.dets"
-  test_helpers.cleanup(path)
-  let assert Ok(table) = wt_open("wt_ctr", path)
+  test_helper.cleanup(path)
+  let assert Ok(table) = open_write_through("wt_ctr", path)
   let assert Ok(Nil) = set.insert(table, "counter", 10)
 
   close_dets_by_path(path)
@@ -120,6 +123,6 @@ pub fn update_counter_rolls_back_ets_on_dets_failure_test() {
   // ETS must still have original value (10, not 15)
   let assert Ok(10) = set.lookup(table, "counter")
 
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }

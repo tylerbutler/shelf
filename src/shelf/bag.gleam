@@ -30,18 +30,24 @@
 import gleam/dynamic/decode.{type Decoder}
 import gleam/result
 import shelf.{type Config, type ShelfError}
-import shelf/internal.{type DetsRef, type EtsRef, type GuardianRef}
+import shelf/internal.{
+  type DetsReference, type EtsReference, type GuardianReference,
+}
 
 /// An open persistent bag table with typed keys and values.
-pub opaque type PBag(k, v) {
-  PBag(
-    ets: EtsRef,
-    dets: DetsRef,
-    guardian: GuardianRef,
+pub opaque type PersistentBag(k, v) {
+  PersistentBag(
+    ets: EtsReference,
+    dets: DetsReference,
+    guardian: GuardianReference,
     write_mode: shelf.WriteMode,
     entry_decoder: Decoder(#(k, v)),
   )
 }
+
+/// Compatibility alias for `PersistentBag`.
+pub type PBag(k, v) =
+  PersistentBag(k, v)
 
 // ── Lifecycle ───────────────────────────────────────────────────────────
 
@@ -66,14 +72,14 @@ pub fn open_config(
   config config: Config,
   key key_decoder: Decoder(k),
   value value_decoder: Decoder(v),
-) -> Result(PBag(k, v), ShelfError) {
+) -> Result(PersistentBag(k, v), ShelfError) {
   use result <- result.try(internal.generic_open(
     config,
-    "bag",
+    internal.Bag,
     key_decoder,
     value_decoder,
   ))
-  Ok(PBag(
+  Ok(PersistentBag(
     ets: result.0,
     dets: result.1,
     guardian: result.2,
@@ -97,7 +103,7 @@ pub fn open(
   base_directory base_directory: String,
   key key_decoder: Decoder(k),
   value value_decoder: Decoder(v),
-) -> Result(PBag(k, v), ShelfError) {
+) -> Result(PersistentBag(k, v), ShelfError) {
   open_config(
     config: shelf.config(name:, path:, base_directory:),
     key: key_decoder,
@@ -113,7 +119,7 @@ pub fn open(
 /// If close fails terminally, shelf still releases resources and future
 /// operations on the handle return `Error(TableClosed)`.
 ///
-pub fn close(table: PBag(k, v)) -> Result(Nil, ShelfError) {
+pub fn close(table: PersistentBag(k, v)) -> Result(Nil, ShelfError) {
   internal.close(table.ets, table.dets, table.guardian)
 }
 
@@ -137,7 +143,7 @@ pub fn with_table(
   base_directory base_directory: String,
   key key_decoder: Decoder(k),
   value value_decoder: Decoder(v),
-  fun fun: fn(PBag(k, v)) -> Result(a, ShelfError),
+  fun fun: fn(PersistentBag(k, v)) -> Result(a, ShelfError),
 ) -> Result(a, ShelfError) {
   internal.generic_with_table(
     fn() {
@@ -150,6 +156,7 @@ pub fn with_table(
       )
     },
     close,
+    fn(table) { internal.cleanup(table.ets, table.dets, table.guardian) },
     fun,
   )
 }
@@ -160,13 +167,19 @@ pub fn with_table(
 ///
 /// Returns `Error(NotFound)` if the key does not exist.
 ///
-pub fn lookup(from table: PBag(k, v), key key: k) -> Result(List(v), ShelfError) {
+pub fn lookup(
+  from table: PersistentBag(k, v),
+  key key: k,
+) -> Result(List(v), ShelfError) {
   ffi_lookup_bag(table.ets, key)
 }
 
 /// Check if a key exists without returning the values.
 ///
-pub fn member(of table: PBag(k, v), key key: k) -> Result(Bool, ShelfError) {
+pub fn member(
+  of table: PersistentBag(k, v),
+  key key: k,
+) -> Result(Bool, ShelfError) {
   internal.member(table.ets, key)
 }
 
@@ -174,14 +187,16 @@ pub fn member(of table: PBag(k, v), key key: k) -> Result(Bool, ShelfError) {
 ///
 /// **Warning**: loads entire table into memory.
 ///
-pub fn to_list(from table: PBag(k, v)) -> Result(List(#(k, v)), ShelfError) {
+pub fn to_list(
+  from table: PersistentBag(k, v),
+) -> Result(List(#(k, v)), ShelfError) {
   internal.to_list(table.ets)
 }
 
 /// Fold over all entries. Order is unspecified.
 ///
 pub fn fold(
-  over table: PBag(k, v),
+  over table: PersistentBag(k, v),
   from initial: acc,
   with fun: fn(acc, k, v) -> acc,
 ) -> Result(acc, ShelfError) {
@@ -190,7 +205,7 @@ pub fn fold(
 
 /// Return the number of entries in the table.
 ///
-pub fn size(of table: PBag(k, v)) -> Result(Int, ShelfError) {
+pub fn size(of table: PersistentBag(k, v)) -> Result(Int, ShelfError) {
   internal.size(table.ets)
 }
 
@@ -199,7 +214,7 @@ pub fn size(of table: PBag(k, v)) -> Result(Int, ShelfError) {
 /// Insert a key-value pair. Duplicate key-value pairs are ignored.
 ///
 pub fn insert(
-  into table: PBag(k, v),
+  into table: PersistentBag(k, v),
   key key: k,
   value value: v,
 ) -> Result(Nil, ShelfError) {
@@ -209,7 +224,7 @@ pub fn insert(
 /// Insert multiple key-value pairs.
 ///
 pub fn insert_list(
-  into table: PBag(k, v),
+  into table: PersistentBag(k, v),
   entries entries: List(#(k, v)),
 ) -> Result(Nil, ShelfError) {
   internal.generic_insert_list(table.ets, table.dets, table.write_mode, entries)
@@ -219,7 +234,10 @@ pub fn insert_list(
 
 /// Delete all values for the given key.
 ///
-pub fn delete_key(from table: PBag(k, v), key key: k) -> Result(Nil, ShelfError) {
+pub fn delete_key(
+  from table: PersistentBag(k, v),
+  key key: k,
+) -> Result(Nil, ShelfError) {
   internal.generic_delete_key(table.ets, table.dets, table.write_mode, key)
 }
 
@@ -229,7 +247,7 @@ pub fn delete_key(from table: PBag(k, v), key key: k) -> Result(Nil, ShelfError)
 /// key are preserved.
 ///
 pub fn delete_object(
-  from table: PBag(k, v),
+  from table: PersistentBag(k, v),
   key key: k,
   value value: v,
 ) -> Result(Nil, ShelfError) {
@@ -247,7 +265,7 @@ pub fn delete_object(
 /// The table remains open and usable after this call — only the data
 /// is removed. To release the table entirely, use `close`.
 ///
-pub fn delete_all(from table: PBag(k, v)) -> Result(Nil, ShelfError) {
+pub fn delete_all(from table: PersistentBag(k, v)) -> Result(Nil, ShelfError) {
   internal.generic_delete_all(table.ets, table.dets, table.write_mode)
 }
 
@@ -264,7 +282,7 @@ pub fn delete_all(from table: PBag(k, v)) -> Result(Nil, ShelfError) {
 /// [Durability story](https://shelf.tylerbutler.com/advanced/persistence-operations/#durability-story)
 /// for the full layer-by-layer breakdown of which crashes this protects against.
 ///
-pub fn save(table: PBag(k, v)) -> Result(Nil, ShelfError) {
+pub fn save(table: PersistentBag(k, v)) -> Result(Nil, ShelfError) {
   internal.save(table.ets, table.dets)
 }
 
@@ -275,7 +293,7 @@ pub fn save(table: PBag(k, v)) -> Result(Nil, ShelfError) {
 /// Only useful in WriteBack mode — in WriteThrough mode, ETS and
 /// DETS are always in sync.
 ///
-pub fn reload(table: PBag(k, v)) -> Result(Nil, ShelfError) {
+pub fn reload(table: PersistentBag(k, v)) -> Result(Nil, ShelfError) {
   internal.generic_reload(table.ets, table.dets, table.entry_decoder)
 }
 
@@ -287,11 +305,11 @@ pub fn reload(table: PBag(k, v)) -> Result(Nil, ShelfError) {
 /// the [Durability story](https://shelf.tylerbutler.com/advanced/persistence-operations/#durability-story)
 /// for what `sync()` does and does not guarantee.
 ///
-pub fn sync(table: PBag(k, v)) -> Result(Nil, ShelfError) {
+pub fn sync(table: PersistentBag(k, v)) -> Result(Nil, ShelfError) {
   internal.sync_dets(table.ets, table.dets)
 }
 
 // ── FFI bindings (bag-specific) ─────────────────────────────────────────
 
 @external(erlang, "shelf_ffi", "lookup_bag")
-fn ffi_lookup_bag(ets: EtsRef, key: k) -> Result(List(v), ShelfError)
+fn ffi_lookup_bag(ets: EtsReference, key: k) -> Result(List(v), ShelfError)

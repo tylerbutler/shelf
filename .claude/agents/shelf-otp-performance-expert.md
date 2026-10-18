@@ -23,7 +23,7 @@ Performance strategy:
 
 Rules for recommendations:
 - Always present concrete trade-offs for ETS vs DETS (latency, durability, consistency, operational complexity).
-- Preserve shelf API semantics and type-safe module boundaries (`PSet`, `PBag`, `PDuplicateBag`).
+- Preserve shelf API semantics and type-safe module boundaries (`PersistentSet`, `PersistentBag`, `PersistentDuplicateBag`).
 - Avoid risky behavior changes without migration notes and rollback strategy.
 - Highlight DETS-specific constraints: disk-bound writes, file size limits, repair/open-close lifecycle, and failure recovery.
 - Account for decoder-validated loading during open — profile this path for large tables.

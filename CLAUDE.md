@@ -72,7 +72,7 @@ The `shelf_ffi.erl` module wraps raw `ets:*` and `dets:*` calls with error trans
 ### Design Decisions
 
 - **Direct Erlang wrapping** (not built on bravo/slate) to use efficient `ets:to_dets` bulk transfers and decoder-validated loading
-- **Opaque table handles**: `PSet(k, v)`, `PBag(k, v)`, `PDuplicateBag(k, v)` enforce type safety
+- **Opaque table handles**: `PersistentSet(k, v)`, `PersistentBag(k, v)`, `PersistentDuplicateBag(k, v)` enforce type safety
 - **No ordered set**: DETS doesn't support `ordered_set`
 - **ETS table name**: Always `shelf_ets` (unnamed tables via `ets:new/2`); user-provided name is a diagnostic label only
 - **DETS table name**: Mapped through a bounded atom registry (`path_to_dets_name`) to avoid unbounded atom creation

@@ -1,25 +1,29 @@
 import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode
-import gleam/list
 import shelf
 import shelf/bag
 import shelf/duplicate_bag
+import shelf/internal
 import shelf/set
-import test_helpers
+import test_helper
+
+type RawDetsError {
+  RawDetsError(String)
+}
 
 @external(erlang, "type_safety_test_ffi", "write_raw_dets")
 fn write_raw_dets(
   path: String,
-  table_type: String,
+  table_type: internal.TableKind,
   entries: List(#(Dynamic, Dynamic)),
-) -> Result(Nil, Dynamic)
+) -> Result(Nil, RawDetsError)
 
-pub fn rejects_dets_data_with_wrong_value_type_test() {
+pub fn rejects_dets_data_with_wrong_value_type_test() -> Nil {
   let path = "/tmp/shelf_ts_wrong_value.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
 
-  // Write String values using the correct API
-  let assert Ok(t) =
+  // Write String values using the correct API.
+  let assert Ok(table) =
     set.open(
       name: "ts_wrong_value_1",
       path: path,
@@ -27,11 +31,11 @@ pub fn rejects_dets_data_with_wrong_value_type_test() {
       key: decode.string,
       value: decode.string,
     )
-  let assert Ok(Nil) = set.insert(t, "key", "hello")
-  let assert Ok(Nil) = set.close(t)
+  let assert Ok(Nil) = set.insert(table, "key", "hello")
+  let assert Ok(Nil) = set.close(table)
 
-  // Reopen expecting Int values — should fail with TypeMismatch
-  let result =
+  // Reopen expecting Int values — should fail with TypeMismatch.
+  let assert Error(shelf.TypeMismatch(_)) =
     set.open(
       name: "ts_wrong_value_2",
       path: path,
@@ -39,23 +43,14 @@ pub fn rejects_dets_data_with_wrong_value_type_test() {
       key: decode.string,
       value: decode.int,
     )
-  case result {
-    Error(shelf.TypeMismatch(_)) -> Nil
-    _ -> {
-      assert result == Error(shelf.TypeMismatch([]))
-      Nil
-    }
-  }
-  test_helpers.cleanup(path)
-  Nil
+  test_helper.cleanup(path)
 }
 
-pub fn rejects_dets_data_with_wrong_key_type_test() {
+pub fn rejects_dets_data_with_wrong_key_type_test() -> Nil {
   let path = "/tmp/shelf_ts_wrong_key.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
 
-  // Write Int keys
-  let assert Ok(t) =
+  let assert Ok(table) =
     set.open(
       name: "ts_wrong_key_1",
       path: path,
@@ -63,11 +58,10 @@ pub fn rejects_dets_data_with_wrong_key_type_test() {
       key: decode.int,
       value: decode.string,
     )
-  let assert Ok(Nil) = set.insert(t, 1, "hello")
-  let assert Ok(Nil) = set.close(t)
+  let assert Ok(Nil) = set.insert(table, 1, "hello")
+  let assert Ok(Nil) = set.close(table)
 
-  // Reopen expecting String keys — should fail
-  let result =
+  let assert Error(shelf.TypeMismatch(_)) =
     set.open(
       name: "ts_wrong_key_2",
       path: path,
@@ -75,22 +69,14 @@ pub fn rejects_dets_data_with_wrong_key_type_test() {
       key: decode.string,
       value: decode.string,
     )
-  case result {
-    Error(shelf.TypeMismatch(_)) -> Nil
-    _ -> {
-      assert result == Error(shelf.TypeMismatch([]))
-      Nil
-    }
-  }
-  test_helpers.cleanup(path)
-  Nil
+  test_helper.cleanup(path)
 }
 
-pub fn accepts_dets_data_with_correct_types_test() {
+pub fn accepts_dets_data_with_correct_types_test() -> Nil {
   let path = "/tmp/shelf_ts_correct.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
 
-  let assert Ok(t) =
+  let assert Ok(table) =
     set.open(
       name: "ts_correct_1",
       path: path,
@@ -98,11 +84,11 @@ pub fn accepts_dets_data_with_correct_types_test() {
       key: decode.string,
       value: decode.int,
     )
-  let assert Ok(Nil) = set.insert(t, "count", 42)
-  let assert Ok(Nil) = set.close(t)
+  let assert Ok(Nil) = set.insert(table, "count", 42)
+  let assert Ok(Nil) = set.close(table)
 
-  // Reopen with the same types — should succeed
-  let assert Ok(t) =
+  // Reopen with the same types — should succeed.
+  let assert Ok(table) =
     set.open(
       name: "ts_correct_2",
       path: path,
@@ -110,18 +96,16 @@ pub fn accepts_dets_data_with_correct_types_test() {
       key: decode.string,
       value: decode.int,
     )
-  let assert Ok(42) = set.lookup(t, "count")
-  let assert Ok(Nil) = set.close(t)
-  test_helpers.cleanup(path)
-  Nil
+  let assert Ok(42) = set.lookup(table, "count")
+  let assert Ok(Nil) = set.close(table)
+  test_helper.cleanup(path)
 }
 
-pub fn opens_empty_dets_file_with_any_decoder_test() {
+pub fn opens_empty_dets_file_with_any_decoder_test() -> Nil {
   let path = "/tmp/shelf_ts_empty.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
 
-  // Open with one type, close (creates empty DETS)
-  let assert Ok(t) =
+  let assert Ok(table) =
     set.open(
       name: "ts_empty_1",
       path: path,
@@ -129,10 +113,10 @@ pub fn opens_empty_dets_file_with_any_decoder_test() {
       key: decode.string,
       value: decode.string,
     )
-  let assert Ok(Nil) = set.close(t)
+  let assert Ok(Nil) = set.close(table)
 
-  // Reopen with different types — should succeed (no data to validate)
-  let assert Ok(t) =
+  // Reopen with different types — no data to validate.
+  let assert Ok(table) =
     set.open(
       name: "ts_empty_2",
       path: path,
@@ -140,25 +124,22 @@ pub fn opens_empty_dets_file_with_any_decoder_test() {
       key: decode.int,
       value: decode.float,
     )
-  let assert Ok(0) = set.size(t)
-  let assert Ok(Nil) = set.close(t)
-  test_helpers.cleanup(path)
-  Nil
+  let assert Ok(0) = set.size(table)
+  let assert Ok(Nil) = set.close(table)
+  test_helper.cleanup(path)
 }
 
-pub fn rejects_if_any_entry_is_invalid_test() {
+pub fn rejects_if_any_entry_is_invalid_test() -> Nil {
   let path = "/tmp/shelf_ts_strict_reject.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
 
-  // Write mixed data
   let assert Ok(Nil) =
-    write_raw_dets(path, "set", [
+    write_raw_dets(path, internal.Set, [
       #(dynamic.string("good"), dynamic.int(1)),
       #(dynamic.int(999), dynamic.string("bad")),
     ])
 
-  // Open should fail with TypeMismatch
-  let result =
+  let assert Error(shelf.TypeMismatch(_)) =
     set.open(
       name: "ts_strict_reject",
       path: path,
@@ -166,22 +147,14 @@ pub fn rejects_if_any_entry_is_invalid_test() {
       key: decode.string,
       value: decode.int,
     )
-  case result {
-    Error(shelf.TypeMismatch(_)) -> Nil
-    _ -> {
-      assert result == Error(shelf.TypeMismatch([]))
-      Nil
-    }
-  }
-  test_helpers.cleanup(path)
-  Nil
+  test_helper.cleanup(path)
 }
 
-pub fn rejects_bag_dets_data_with_wrong_types_test() {
+pub fn rejects_bag_dets_data_with_wrong_types_test() -> Nil {
   let path = "/tmp/shelf_ts_bag_wrong.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
 
-  let assert Ok(t) =
+  let assert Ok(table) =
     bag.open(
       name: "ts_bag_wrong_1",
       path: path,
@@ -189,11 +162,10 @@ pub fn rejects_bag_dets_data_with_wrong_types_test() {
       key: decode.string,
       value: decode.string,
     )
-  let assert Ok(Nil) = bag.insert(t, "tag", "gleam")
-  let assert Ok(Nil) = bag.close(t)
+  let assert Ok(Nil) = bag.insert(table, "tag", "gleam")
+  let assert Ok(Nil) = bag.close(table)
 
-  // Reopen expecting Int values
-  let result =
+  let assert Error(shelf.TypeMismatch(_)) =
     bag.open(
       name: "ts_bag_wrong_2",
       path: path,
@@ -201,22 +173,14 @@ pub fn rejects_bag_dets_data_with_wrong_types_test() {
       key: decode.string,
       value: decode.int,
     )
-  case result {
-    Error(shelf.TypeMismatch(_)) -> Nil
-    _ -> {
-      assert result == Error(shelf.TypeMismatch([]))
-      Nil
-    }
-  }
-  test_helpers.cleanup(path)
-  Nil
+  test_helper.cleanup(path)
 }
 
-pub fn rejects_duplicate_bag_dets_data_with_wrong_types_test() {
+pub fn rejects_duplicate_bag_dets_data_with_wrong_types_test() -> Nil {
   let path = "/tmp/shelf_ts_dbag_wrong.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
 
-  let assert Ok(t) =
+  let assert Ok(table) =
     duplicate_bag.open(
       name: "ts_dbag_wrong_1",
       path: path,
@@ -224,11 +188,10 @@ pub fn rejects_duplicate_bag_dets_data_with_wrong_types_test() {
       key: decode.string,
       value: decode.string,
     )
-  let assert Ok(Nil) = duplicate_bag.insert(t, "event", "click")
-  let assert Ok(Nil) = duplicate_bag.close(t)
+  let assert Ok(Nil) = duplicate_bag.insert(table, "event", "click")
+  let assert Ok(Nil) = duplicate_bag.close(table)
 
-  // Reopen expecting Int values
-  let result =
+  let assert Error(shelf.TypeMismatch(_)) =
     duplicate_bag.open(
       name: "ts_dbag_wrong_2",
       path: path,
@@ -236,31 +199,21 @@ pub fn rejects_duplicate_bag_dets_data_with_wrong_types_test() {
       key: decode.string,
       value: decode.int,
     )
-  case result {
-    Error(shelf.TypeMismatch(_)) -> Nil
-    _ -> {
-      assert result == Error(shelf.TypeMismatch([]))
-      Nil
-    }
-  }
-  test_helpers.cleanup(path)
-  Nil
+  test_helper.cleanup(path)
 }
 
-pub fn bag_preserves_value_order_after_save_and_reload_test() {
+pub fn bag_preserves_value_order_after_save_and_reload_test() -> Nil {
   let path = "/tmp/shelf_ts_bag_order.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
 
-  // Write entries with distinct values in a known order
   let assert Ok(Nil) =
-    write_raw_dets(path, "bag", [
+    write_raw_dets(path, internal.Bag, [
       #(dynamic.string("color"), dynamic.string("red")),
       #(dynamic.string("color"), dynamic.string("green")),
       #(dynamic.string("color"), dynamic.string("blue")),
     ])
 
-  // Open with strict decoding — order should be preserved
-  let assert Ok(t) =
+  let assert Ok(table) =
     bag.open(
       name: "ts_bag_order",
       path: path,
@@ -268,34 +221,25 @@ pub fn bag_preserves_value_order_after_save_and_reload_test() {
       key: decode.string,
       value: decode.string,
     )
-  let assert Ok(values) = bag.lookup(t, "color")
-  // The values should contain all three entries
-  assert list.length(values) == 3
-  // Order is preserved: dets:foldl accumulates entries in reverse,
-  // and flush_batch calls lists:reverse before each ets:insert.
-  // Verify by checking first and last elements are not swapped.
-  let assert Ok(first) = list.first(values)
-  let assert Ok(last) = list.last(values)
+  let assert Ok(values) = bag.lookup(table, "color")
+  let assert [first, _, last] = values
   assert first != last
-  let assert Ok(Nil) = bag.close(t)
-  test_helpers.cleanup(path)
-  Nil
+  let assert Ok(Nil) = bag.close(table)
+  test_helper.cleanup(path)
 }
 
-pub fn duplicate_bag_preserves_value_order_after_save_and_reload_test() {
+pub fn duplicate_bag_preserves_value_order_after_save_and_reload_test() -> Nil {
   let path = "/tmp/shelf_ts_dbag_order.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
 
-  // Write ordered entries with duplicates
   let assert Ok(Nil) =
-    write_raw_dets(path, "duplicate_bag", [
+    write_raw_dets(path, internal.DuplicateBag, [
       #(dynamic.string("log"), dynamic.string("first")),
       #(dynamic.string("log"), dynamic.string("second")),
       #(dynamic.string("log"), dynamic.string("third")),
     ])
 
-  // Open with strict decoding
-  let assert Ok(t) =
+  let assert Ok(table) =
     duplicate_bag.open(
       name: "ts_dbag_order",
       path: path,
@@ -303,51 +247,50 @@ pub fn duplicate_bag_preserves_value_order_after_save_and_reload_test() {
       key: decode.string,
       value: decode.string,
     )
-  let assert Ok(values) = duplicate_bag.lookup(t, "log")
-  assert list.length(values) == 3
-  let assert Ok(first) = list.first(values)
-  let assert Ok(last) = list.last(values)
+  let assert Ok(values) = duplicate_bag.lookup(table, "log")
+  let assert [first, _, last] = values
   assert first != last
-  let assert Ok(Nil) = duplicate_bag.close(t)
-  test_helpers.cleanup(path)
-  Nil
+  let assert Ok(Nil) = duplicate_bag.close(table)
+  test_helper.cleanup(path)
 }
 
-pub fn multiple_tables_with_same_name_can_coexist_test() {
-  let path1 = "/tmp/shelf_ts_dets_leak1.dets"
-  let path2 = "/tmp/shelf_ts_dets_leak2.dets"
-  test_helpers.cleanup(path1)
-  test_helpers.cleanup(path2)
+pub fn multiple_tables_with_same_name_can_coexist_test() -> Nil {
+  let first_path = "/tmp/shelf_ts_dets_leak1.dets"
+  let second_path = "/tmp/shelf_ts_dets_leak2.dets"
+  test_helper.cleanup(first_path)
+  test_helper.cleanup(second_path)
 
-  // Open two tables with the same ETS name but different DETS paths
-  // This should work because ETS tables are unnamed (no named_table)
-  let assert Ok(t1) =
+  // ETS tables are unnamed, so a diagnostic name can be shared.
+  let assert Ok(first_table) =
     set.open(
       name: "ts_same_name",
-      path: path1,
+      path: first_path,
       base_directory: "/tmp",
       key: decode.string,
       value: decode.string,
     )
-
-  let assert Ok(t2) =
+  let assert Ok(second_table) =
     set.open(
       name: "ts_same_name",
-      path: path2,
+      path: second_path,
       base_directory: "/tmp",
       key: decode.string,
       value: decode.string,
     )
+  let assert Ok(Nil) = set.insert(first_table, "key", "val1")
+  let assert Ok(Nil) = set.insert(second_table, "key", "val2")
+  let assert Ok("val1") = set.lookup(first_table, "key")
+  let assert Ok("val2") = set.lookup(second_table, "key")
+  let assert Ok(Nil) = set.close(first_table)
+  let assert Ok(Nil) = set.close(second_table)
+  test_helper.cleanup(first_path)
+  test_helper.cleanup(second_path)
+}
 
-  // Both tables are independent
-  let assert Ok(Nil) = set.insert(t1, "key", "val1")
-  let assert Ok(Nil) = set.insert(t2, "key", "val2")
-  let assert Ok("val1") = set.lookup(t1, "key")
-  let assert Ok("val2") = set.lookup(t2, "key")
-
-  let assert Ok(Nil) = set.close(t1)
-  let assert Ok(Nil) = set.close(t2)
-  test_helpers.cleanup(path1)
-  test_helpers.cleanup(path2)
-  Nil
+pub fn raw_dets_open_failure_has_typed_detail_test() -> Nil {
+  let path = "/tmp/shelf_ts_raw_missing"
+  test_helper.delete_directory(path)
+  let assert Error(RawDetsError(detail)) =
+    write_raw_dets(path <> "/table.dets", internal.Set, [])
+  assert detail != ""
 }

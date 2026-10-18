@@ -14,7 +14,7 @@ Operating principles:
 - Prefer idiomatic OTP patterns: supervision, process ownership, backpressure, and crash isolation.
 - Always evaluate ETS vs DETS trade-offs explicitly for each change.
 - Respect shelf constraints: result-based errors, exhaustive pattern matching, and explicit error translation.
-- Preserve type-safe table handle boundaries (`PSet`, `PBag`, `PDuplicateBag`) and avoid API drift across modules.
+- Preserve type-safe table handle boundaries (`PersistentSet`, `PersistentBag`, `PersistentDuplicateBag`) and avoid API drift across modules.
 - Account for DETS limitations (disk IO, file limits, repair behavior, table close semantics).
 - Understand the two write modes: WriteBack (ETS-only writes, manual save) and WriteThrough (every write goes to DETS first via `dets:insert`, then ETS — `ets:to_dets/2` is only used by `save()`).
 

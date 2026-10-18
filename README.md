@@ -25,7 +25,7 @@ import gleam/dynamic/decode
 import shelf
 import shelf/set
 
-pub fn main() {
+pub fn main() -> Nil {
   // Open a persistent set — loads existing data from disk
   // Decoders validate data loaded from the DETS file
   let assert Ok(table) =
@@ -122,20 +122,21 @@ let assert Ok(Nil) = set.insert(into: table, key: "acct:789", value: account)
 
 ### Set — unique keys
 
-Each table type uses an opaque handle — `PSet(k, v)`, `PBag(k, v)`, or `PDuplicateBag(k, v)` — where "P" stands for "Persistent".
+Each table type uses an opaque handle: `PersistentSet(k, v)`,
+`PersistentBag(k, v)`, or `PersistentDuplicateBag(k, v)`.
 
 ```gleam
 import shelf
 import shelf/set
 
-let assert Ok(t) =
+let assert Ok(table) =
   set.open(name: "cache", path: "cache.dets",
     base_directory: "/app/data",
     key: decode.string, value: decode.string)
-let assert Ok(Nil) = set.insert(into: t, key: "key", value: "value")       // overwrites if exists
-let assert Error(shelf.KeyAlreadyPresent) = set.insert_new(into: t, key: "key", value: "value2")
-let assert Ok("value") = set.lookup(from: t, key: "key")
-let assert Ok(True) = set.member(of: t, key: "key")      // check existence
+let assert Ok(Nil) = set.insert(into: table, key: "key", value: "value")       // overwrites if exists
+let assert Error(shelf.KeyAlreadyPresent) = set.insert_new(into: table, key: "key", value: "value2")
+let assert Ok("value") = set.lookup(from: table, key: "key")
+let assert Ok(True) = set.member(of: table, key: "key")      // check existence
 ```
 
 ### Bag — multiple distinct values per key
@@ -143,14 +144,14 @@ let assert Ok(True) = set.member(of: t, key: "key")      // check existence
 ```gleam
 import shelf/bag
 
-let assert Ok(t) =
+let assert Ok(table) =
   bag.open(name: "tags", path: "tags.dets",
     base_directory: "/app/data",
     key: decode.string, value: decode.string)
-let assert Ok(Nil) = bag.insert(into: t, key: "color", value: "red")
-let assert Ok(Nil) = bag.insert(into: t, key: "color", value: "blue")
-let assert Ok(Nil) = bag.insert(into: t, key: "color", value: "red")    // ignored (duplicate)
-let assert Ok(["red", "blue"]) = bag.lookup(from: t, key: "color")
+let assert Ok(Nil) = bag.insert(into: table, key: "color", value: "red")
+let assert Ok(Nil) = bag.insert(into: table, key: "color", value: "blue")
+let assert Ok(Nil) = bag.insert(into: table, key: "color", value: "red")    // ignored (duplicate)
+let assert Ok(["red", "blue"]) = bag.lookup(from: table, key: "color")
 ```
 
 ### Duplicate Bag — duplicates allowed
@@ -158,13 +159,13 @@ let assert Ok(["red", "blue"]) = bag.lookup(from: t, key: "color")
 ```gleam
 import shelf/duplicate_bag
 
-let assert Ok(t) =
+let assert Ok(table) =
   duplicate_bag.open(name: "events", path: "events.dets",
     base_directory: "/app/data",
     key: decode.string, value: decode.string)
-let assert Ok(Nil) = duplicate_bag.insert(into: t, key: "click", value: "btn")
-let assert Ok(Nil) = duplicate_bag.insert(into: t, key: "click", value: "btn")  // kept!
-let assert Ok(["btn", "btn"]) = duplicate_bag.lookup(from: t, key: "click")
+let assert Ok(Nil) = duplicate_bag.insert(into: table, key: "click", value: "btn")
+let assert Ok(Nil) = duplicate_bag.insert(into: table, key: "click", value: "btn")  // kept!
+let assert Ok(["btn", "btn"]) = duplicate_bag.lookup(from: table, key: "click")
 ```
 
 ### API Comparison
@@ -198,6 +199,11 @@ set.insert(into: table, key: "key", value: "value")
 // table is auto-closed when the callback returns
 ```
 
+If the final save fails, `with_table` releases the table and returns an error.
+Unsaved changes are lost. A callback error takes precedence over a close
+error. Use explicit `close()` when you need to retain the handle and retry
+a failed save.
+
 ## Persistence Operations
 
 | Function | Behavior |
@@ -224,7 +230,7 @@ All data loaded from DETS is validated through `gleam/dynamic/decode` decoders w
 import gleam/dynamic/decode
 
 // Decoders are required when opening any table
-let assert Ok(t) =
+let assert Ok(table) =
   set.open(name: "users", path: "users.dets",
     base_directory: "/app/data",
     key: decode.string, value: decode.int)
@@ -245,7 +251,8 @@ Strategies for handling schema changes:
 1. **Delete and rebuild**: Delete the DETS file and repopulate from your source of truth.
 2. **Run a migration**: Open the old DETS file with the *old* decoders as a temporary shelf table, transform the entries, write them to a temporary path with the *new* decoders, then atomically `rename` the new file over the old one and reopen.
 
-The website documents the procedure step-by-step at [Schema Migration](https://shelf.tylerbutler.com/advanced/schema-migration/), and a runnable end-to-end version lives at [`examples/src/schema_migration.gleam`](examples/src/schema_migration.gleam).
+The website documents the procedure at [Schema Migration](https://shelf.tylerbutler.com/advanced/schema-migration/).
+Run the example in [`examples/src/shelf_examples/schema_migration.gleam`](examples/src/shelf_examples/schema_migration.gleam).
 
 ## Error Handling
 
@@ -272,22 +279,22 @@ case set.open(name: "cache", path: "data/cache.dets",
   Ok(table) -> use_table(table)
   Error(shelf.TypeMismatch(_errors)) -> io.println("DETS data doesn't match expected types!")
   Error(shelf.NameConflict) -> io.println("DETS file already open!")
-  Error(shelf.InvalidPath(msg)) -> io.println("Invalid path: " <> msg)
-  Error(shelf.FileError(msg)) -> io.println("File error: " <> msg)
-  Error(err) -> io.println("Unexpected: " <> string.inspect(err))
+  Error(shelf.InvalidPath(message)) -> io.println("Invalid path: " <> message)
+  Error(shelf.FileError(message)) -> io.println("File error: " <> message)
+  Error(error) -> io.println("Unexpected: " <> string.inspect(error))
 }
 ```
 
 ## Atomic Counters
 
 ```gleam
-let assert Ok(t) =
+let assert Ok(table) =
   set.open(name: "stats", path: "stats.dets",
     base_directory: "/app/data",
     key: decode.string, value: decode.int)
-set.insert(into: t, key: "page_views", value: 0)
-set.update_counter(in: t, key: "page_views", increment: 1)   // Ok(1)
-set.update_counter(in: t, key: "page_views", increment: 10)  // Ok(11)
+set.insert(into: table, key: "page_views", value: 0)
+set.update_counter(in: table, key: "page_views", increment: 1)   // Ok(1)
+set.update_counter(in: table, key: "page_views", increment: 10)  // Ok(11)
 ```
 
 ## Common Operations
@@ -295,7 +302,7 @@ set.update_counter(in: t, key: "page_views", increment: 10)  // Ok(11)
 ### Batch Insert
 
 ```gleam
-let assert Ok(Nil) = set.insert_list(into: t, entries: [
+let assert Ok(Nil) = set.insert_list(into: table, entries: [
   #("alice", 42),
   #("bob", 99),
   #("charlie", 7),
@@ -305,8 +312,8 @@ let assert Ok(Nil) = set.insert_list(into: t, entries: [
 ### Delete
 
 ```gleam
-let assert Ok(Nil) = set.delete_key(from: t, key: "alice")
-let assert Ok(Nil) = set.delete_all(from: t)
+let assert Ok(Nil) = set.delete_key(from: table, key: "alice")
+let assert Ok(Nil) = set.delete_all(from: table)
 ```
 
 `delete_object` behaves differently depending on the table type:
@@ -316,25 +323,25 @@ let assert Ok(Nil) = set.delete_all(from: t)
 
 ```gleam
 // Bag: removes only "red", keeps other values for "color"
-let assert Ok(Nil) = bag.delete_object(from: t, key: "color", value: "red")
+let assert Ok(Nil) = bag.delete_object(from: table, key: "color", value: "red")
 
 // Set: only deletes if the stored value for "key" matches "value"
-let assert Ok(Nil) = set.delete_object(from: t, key: "key", value: "value")
+let assert Ok(Nil) = set.delete_object(from: table, key: "key", value: "value")
 ```
 
 ### Fold, Size, and Export
 
 ```gleam
 // Count entries
-let assert Ok(n) = set.size(of: t)
+let assert Ok(count) = set.size(of: table)
 
 // Fold to compute aggregates
-let assert Ok(total) = set.fold(over: t, from: 0, with: fn(sum, _key, val) {
-  sum + val
+let assert Ok(total) = set.fold(over: table, from: 0, with: fn(sum, _key, value) {
+  sum + value
 })
 
 // Export all data (careful — loads entire table into memory)
-let assert Ok(entries) = set.to_list(from: t)
+let assert Ok(entries) = set.to_list(from: table)
 ```
 
 ## Limitations

@@ -1,10 +1,10 @@
 import gleam/dynamic/decode
 import shelf/set
-import test_helpers
+import test_helper
 
-pub fn data_survives_close_and_reopen_test() {
+pub fn data_survives_close_and_reopen_test() -> Nil {
   let path = "/tmp/shelf_persist_survive.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
 
   // Open, insert, close (auto-saves)
   let assert Ok(table) =
@@ -29,13 +29,13 @@ pub fn data_survives_close_and_reopen_test() {
     )
   let assert Ok("value") = set.lookup(table, "key")
   let assert Ok(Nil) = set.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn save_persists_current_state_test() {
+pub fn save_persists_current_state_test() -> Nil {
   let path = "/tmp/shelf_persist_save.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
 
   let assert Ok(table) =
     set.open(
@@ -67,13 +67,13 @@ pub fn save_persists_current_state_test() {
   let assert Ok(2) = set.lookup(table, "b")
   let assert Ok(3) = set.lookup(table, "c")
   let assert Ok(Nil) = set.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn reload_discards_unsaved_changes_test() {
+pub fn reload_discards_unsaved_changes_test() -> Nil {
   let path = "/tmp/shelf_persist_reload.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
 
   let assert Ok(table) =
     set.open(
@@ -98,13 +98,13 @@ pub fn reload_discards_unsaved_changes_test() {
   let assert Ok(False) = set.member(table, "unsaved")
 
   let assert Ok(Nil) = set.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn multiple_save_reload_cycles_work_test() {
+pub fn multiple_save_reload_cycles_work_test() -> Nil {
   let path = "/tmp/shelf_persist_cycles.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
 
   let assert Ok(table) =
     set.open(
@@ -128,13 +128,13 @@ pub fn multiple_save_reload_cycles_work_test() {
   let assert Ok(2) = set.lookup(table, "round")
 
   let assert Ok(Nil) = set.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn dets_path_conflict_returns_error_test() {
+pub fn dets_path_conflict_returns_error_test() -> Nil {
   let path = "/tmp/shelf_persist_conflict.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
 
   let assert Ok(table1) =
     set.open(
@@ -166,6 +166,6 @@ pub fn dets_path_conflict_returns_error_test() {
   }
 
   let assert Ok(Nil) = set.close(table1)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }

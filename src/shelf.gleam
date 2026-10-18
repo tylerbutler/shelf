@@ -141,7 +141,7 @@ pub opaque type Config {
 /// traversal attacks. The `path` is resolved relative to `base_directory`.
 ///
 /// ```gleam
-/// let conf = shelf.config(name: "users", path: "users.dets",
+/// let config = shelf.config(name: "users", path: "users.dets",
 ///   base_directory: "/app/data")
 /// ```
 ///
@@ -156,7 +156,7 @@ pub fn config(
 /// Set the write mode on a config.
 ///
 /// ```gleam
-/// let conf =
+/// let config =
 ///   shelf.config(name: "users", path: "users.dets",
 ///     base_directory: "/app/data")
 ///   |> shelf.write_mode(shelf.WriteThrough)
