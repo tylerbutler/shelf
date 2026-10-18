@@ -16,7 +16,7 @@ pub fn size_returns_table_closed_after_close_test() {
     )
   let assert Ok(Nil) = set.close(table)
   let result = set.size(of: table)
-  let assert True = result == Error(shelf.TableClosed)
+  assert result == Error(shelf.TableClosed)
   test_helpers.cleanup(path)
   Nil
 }
@@ -34,7 +34,7 @@ pub fn member_returns_table_closed_after_close_test() {
     )
   let assert Ok(Nil) = set.close(table)
   let result = set.member(table, "any_key")
-  let assert True = result == Error(shelf.TableClosed)
+  assert result == Error(shelf.TableClosed)
   test_helpers.cleanup(path)
   Nil
 }
@@ -52,7 +52,7 @@ pub fn lookup_returns_table_closed_after_close_test() {
     )
   let assert Ok(Nil) = set.close(table)
   let result = set.lookup(table, "any_key")
-  let assert True = result == Error(shelf.TableClosed)
+  assert result == Error(shelf.TableClosed)
   test_helpers.cleanup(path)
   Nil
 }

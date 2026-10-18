@@ -24,8 +24,8 @@ pub fn returns_table_closed_and_tears_down_state_for_terminal_failures_test() {
 
   simulate_external_dets_close(path)
 
-  let assert True = set.close(table) == Error(shelf.TableClosed)
-  let assert True = set.lookup(table, "k") == Error(shelf.TableClosed)
+  assert set.close(table) == Error(shelf.TableClosed)
+  assert set.lookup(table, "k") == Error(shelf.TableClosed)
 
   cleanup_after_failed_close(path, "close_err")
   Nil

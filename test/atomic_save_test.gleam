@@ -61,8 +61,8 @@ pub fn data_survives_save_close_reopen_cycle_test() {
       key: decode.string,
       value: decode.int,
     )
-  let assert True = set.lookup(table2, "x") == Ok(100)
-  let assert True = set.lookup(table2, "y") == Ok(200)
+  assert set.lookup(table2, "x") == Ok(100)
+  assert set.lookup(table2, "y") == Ok(200)
 
   let assert Ok(Nil) = set.close(table2)
   test_helpers.cleanup(path)
@@ -104,12 +104,12 @@ pub fn save_preserves_data_integrity_with_many_entries_test() {
       value: decode.int,
     )
   let assert Ok(size) = set.size(table2)
-  let assert True = size == count
+  assert size == count
 
   // Spot-check some values
-  let assert True = set.lookup(table2, "entry_1") == Ok(1)
-  let assert True = set.lookup(table2, "entry_50") == Ok(50)
-  let assert True = set.lookup(table2, "entry_100") == Ok(100)
+  assert set.lookup(table2, "entry_1") == Ok(1)
+  assert set.lookup(table2, "entry_50") == Ok(50)
+  assert set.lookup(table2, "entry_100") == Ok(100)
 
   let assert Ok(Nil) = set.close(table2)
   test_helpers.cleanup(path)

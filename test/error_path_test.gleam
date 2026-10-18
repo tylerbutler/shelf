@@ -17,7 +17,7 @@ pub fn update_counter_on_non_existent_key_returns_not_found_test() {
       value: decode.int,
     )
   let result = set.update_counter(table, "no_such_key", 1)
-  let assert True = result == Error(shelf.NotFound)
+  assert result == Error(shelf.NotFound)
   let assert Ok(Nil) = set.close(table)
   test_helpers.cleanup(path)
   Nil
@@ -110,7 +110,7 @@ pub fn bag_with_table_returns_callback_error_test() {
       value: decode.string,
       fun: fn(_table) { Error(shelf.NotFound) },
     )
-  let assert True = result == Error(shelf.NotFound)
+  assert result == Error(shelf.NotFound)
   test_helpers.cleanup(path)
   Nil
 }
@@ -127,7 +127,7 @@ pub fn duplicate_bag_with_table_returns_callback_error_test() {
       value: decode.string,
       fun: fn(_table) { Error(shelf.NotFound) },
     )
-  let assert True = result == Error(shelf.NotFound)
+  assert result == Error(shelf.NotFound)
   test_helpers.cleanup(path)
   Nil
 }

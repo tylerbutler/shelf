@@ -67,7 +67,7 @@ pub fn returns_callback_error_over_close_error_test() {
       value: decode.string,
       fun: fn(_table) { Error(shelf.NotFound) },
     )
-  let assert True = result == Error(shelf.NotFound)
+  assert result == Error(shelf.NotFound)
   test_helpers.cleanup(path)
   Nil
 }
@@ -102,7 +102,7 @@ pub fn force_cleans_up_after_a_close_error_test() {
       key: decode.string,
       value: decode.string,
     )
-  let assert True = set.lookup(table, "key") == Error(shelf.NotFound)
+  assert set.lookup(table, "key") == Error(shelf.NotFound)
   let assert Ok(Nil) = set.close(table)
 
   test_helpers.cleanup_retry_directory(dir, path)
@@ -135,12 +135,12 @@ pub fn type_mismatch_contains_decode_error_details_test() {
   case result {
     Error(shelf.TypeMismatch(errors)) -> {
       // Should have non-empty decode errors
-      let assert True = errors != []
+      assert errors != []
       Nil
     }
     other -> {
       // Force fail if not TypeMismatch
-      let assert True = other == Error(shelf.TypeMismatch([]))
+      assert other == Error(shelf.TypeMismatch([]))
       Nil
     }
   }

@@ -376,6 +376,8 @@ For set tables, concurrent reads from other processes while the owner writes to 
 
 ## Development
 
+Use Gleam 1.14 or later.
+
 ```sh
 gleam test    # Run the test suite
 gleam build   # Build the package

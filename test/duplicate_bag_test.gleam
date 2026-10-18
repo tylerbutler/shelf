@@ -37,7 +37,7 @@ pub fn with_table_opens_and_auto_closes_test() {
     let assert Ok(Nil) = duplicate_bag.insert(table, "key", "hello")
     duplicate_bag.lookup(table, "key")
   }
-  let assert True = values == ["hello", "hello"]
+  assert values == ["hello", "hello"]
   test_helpers.cleanup(path)
   Nil
 }
@@ -60,8 +60,8 @@ pub fn preserves_duplicate_key_value_pairs_test() {
   // Should have 2 "click" and 1 "scroll"
   let click_count = list.filter(values, fn(v) { v == "click" }) |> list.length
   let scroll_count = list.filter(values, fn(v) { v == "scroll" }) |> list.length
-  let assert True = click_count == 2
-  let assert True = scroll_count == 1
+  assert click_count == 2
+  assert scroll_count == 1
   let assert Ok(Nil) = duplicate_bag.close(table)
   test_helpers.cleanup(path)
   Nil
@@ -78,8 +78,7 @@ pub fn returns_not_found_for_missing_key_test() {
       key: decode.string,
       value: decode.string,
     )
-  let assert True =
-    duplicate_bag.lookup(table, "missing") == Error(shelf.NotFound)
+  assert duplicate_bag.lookup(table, "missing") == Error(shelf.NotFound)
   let assert Ok(Nil) = duplicate_bag.close(table)
   test_helpers.cleanup(path)
   Nil
@@ -127,7 +126,7 @@ pub fn to_list_returns_all_entries_test() {
         _ -> key_cmp
       }
     })
-  let assert True = sorted == [#("a", 1), #("a", 1), #("b", 2)]
+  assert sorted == [#("a", 1), #("a", 1), #("b", 2)]
   let assert Ok(Nil) = duplicate_bag.close(table)
   test_helpers.cleanup(path)
   Nil
@@ -149,7 +148,7 @@ pub fn fold_accumulates_over_entries_test() {
   let assert Ok(Nil) = duplicate_bag.insert(table, "b", 3)
   let assert Ok(sum) =
     duplicate_bag.fold(table, from: 0, with: fn(acc, _key, val) { acc + val })
-  let assert True = sum == 5
+  assert sum == 5
   let assert Ok(Nil) = duplicate_bag.close(table)
   test_helpers.cleanup(path)
   Nil
@@ -194,9 +193,9 @@ pub fn insert_list_inserts_multiple_entries_test() {
       #("b", 2),
     ])
   let assert Ok(values_a) = duplicate_bag.lookup(table, "a")
-  let assert True = values_a == [1, 1]
+  assert values_a == [1, 1]
   let assert Ok(values_b) = duplicate_bag.lookup(table, "b")
-  let assert True = values_b == [2]
+  assert values_b == [2]
   let assert Ok(Nil) = duplicate_bag.close(table)
   test_helpers.cleanup(path)
   Nil
@@ -217,8 +216,7 @@ pub fn delete_key_removes_all_values_for_a_key_test() {
   let assert Ok(Nil) = duplicate_bag.insert(table, "color", "red")
   let assert Ok(Nil) = duplicate_bag.insert(table, "color", "blue")
   let assert Ok(Nil) = duplicate_bag.delete_key(table, "color")
-  let assert True =
-    duplicate_bag.lookup(table, "color") == Error(shelf.NotFound)
+  assert duplicate_bag.lookup(table, "color") == Error(shelf.NotFound)
   let assert Ok(Nil) = duplicate_bag.close(table)
   test_helpers.cleanup(path)
   Nil
@@ -240,7 +238,7 @@ pub fn delete_object_removes_matching_entries_test() {
   let assert Ok(Nil) = duplicate_bag.insert(table, "color", "blue")
   let assert Ok(Nil) = duplicate_bag.delete_object(table, "color", "red")
   let assert Ok(values) = duplicate_bag.lookup(table, "color")
-  let assert True = values == ["blue"]
+  assert values == ["blue"]
   let assert Ok(Nil) = duplicate_bag.close(table)
   test_helpers.cleanup(path)
   Nil
@@ -291,7 +289,7 @@ pub fn save_persists_data_test() {
       value: decode.string,
     )
   let assert Ok(values) = duplicate_bag.lookup(table, "x")
-  let assert True = values == ["a", "a"]
+  assert values == ["a", "a"]
   let assert Ok(Nil) = duplicate_bag.close(table)
   test_helpers.cleanup(path)
   Nil

@@ -25,7 +25,7 @@ pub fn set_insert_from_non_owner_returns_not_owner_test() {
   })
 
   let assert Ok(result) = process.receive(subject, 5000)
-  let assert True = result == Error(shelf.NotOwner)
+  assert result == Error(shelf.NotOwner)
 
   let assert Ok(Nil) = set.close(table)
   test_helpers.cleanup(path)
@@ -51,7 +51,7 @@ pub fn set_insert_list_from_non_owner_returns_not_owner_test() {
   })
 
   let assert Ok(result) = process.receive(subject, 5000)
-  let assert True = result == Error(shelf.NotOwner)
+  assert result == Error(shelf.NotOwner)
 
   let assert Ok(Nil) = set.close(table)
   test_helpers.cleanup(path)
@@ -77,7 +77,7 @@ pub fn set_insert_new_from_non_owner_returns_not_owner_test() {
   })
 
   let assert Ok(result) = process.receive(subject, 5000)
-  let assert True = result == Error(shelf.NotOwner)
+  assert result == Error(shelf.NotOwner)
 
   let assert Ok(Nil) = set.close(table)
   test_helpers.cleanup(path)
@@ -104,10 +104,10 @@ pub fn set_delete_key_from_non_owner_returns_not_owner_test() {
   })
 
   let assert Ok(result) = process.receive(subject, 5000)
-  let assert True = result == Error(shelf.NotOwner)
+  assert result == Error(shelf.NotOwner)
 
   // Verify data is untouched
-  let assert True = set.lookup(table, "key") == Ok(1)
+  assert set.lookup(table, "key") == Ok(1)
 
   let assert Ok(Nil) = set.close(table)
   test_helpers.cleanup(path)
@@ -134,7 +134,7 @@ pub fn set_delete_object_from_non_owner_returns_not_owner_test() {
   })
 
   let assert Ok(result) = process.receive(subject, 5000)
-  let assert True = result == Error(shelf.NotOwner)
+  assert result == Error(shelf.NotOwner)
 
   let assert Ok(Nil) = set.close(table)
   test_helpers.cleanup(path)
@@ -161,10 +161,10 @@ pub fn set_delete_all_from_non_owner_returns_not_owner_test() {
   })
 
   let assert Ok(result) = process.receive(subject, 5000)
-  let assert True = result == Error(shelf.NotOwner)
+  assert result == Error(shelf.NotOwner)
 
   // Verify data is untouched
-  let assert True = set.lookup(table, "key") == Ok(1)
+  assert set.lookup(table, "key") == Ok(1)
 
   let assert Ok(Nil) = set.close(table)
   test_helpers.cleanup(path)
@@ -191,10 +191,10 @@ pub fn set_update_counter_from_non_owner_returns_not_owner_test() {
   })
 
   let assert Ok(result) = process.receive(subject, 5000)
-  let assert True = result == Error(shelf.NotOwner)
+  assert result == Error(shelf.NotOwner)
 
   // Verify counter is untouched
-  let assert True = set.lookup(table, "hits") == Ok(0)
+  assert set.lookup(table, "hits") == Ok(0)
 
   let assert Ok(Nil) = set.close(table)
   test_helpers.cleanup(path)
@@ -220,7 +220,7 @@ pub fn set_save_from_non_owner_returns_not_owner_test() {
   })
 
   let assert Ok(result) = process.receive(subject, 5000)
-  let assert True = result == Error(shelf.NotOwner)
+  assert result == Error(shelf.NotOwner)
 
   let assert Ok(Nil) = set.close(table)
   test_helpers.cleanup(path)
@@ -246,7 +246,7 @@ pub fn set_sync_from_non_owner_returns_not_owner_test() {
   })
 
   let assert Ok(result) = process.receive(subject, 5000)
-  let assert True = result == Error(shelf.NotOwner)
+  assert result == Error(shelf.NotOwner)
 
   let assert Ok(Nil) = set.close(table)
   test_helpers.cleanup(path)
@@ -272,7 +272,7 @@ pub fn set_close_from_non_owner_returns_not_owner_test() {
   })
 
   let assert Ok(result) = process.receive(subject, 5000)
-  let assert True = result == Error(shelf.NotOwner)
+  assert result == Error(shelf.NotOwner)
 
   // Owner can still close
   let assert Ok(Nil) = set.close(table)
@@ -299,7 +299,7 @@ pub fn set_reload_from_non_owner_returns_not_owner_test() {
   })
 
   let assert Ok(result) = process.receive(subject, 5000)
-  let assert True = result == Error(shelf.NotOwner)
+  assert result == Error(shelf.NotOwner)
 
   let assert Ok(Nil) = set.close(table)
   test_helpers.cleanup(path)
@@ -330,13 +330,12 @@ pub fn set_lookup_from_non_owner_succeeds_test() {
   })
 
   let assert Ok(#(r1, r2, r3, r4)) = process.receive(subject, 5000)
-  let assert True = r1 == Ok(1)
-  let assert True = r2 == Ok(True)
-  let assert True = r3 == Ok(2)
+  assert r1 == Ok(1)
+  assert r2 == Ok(True)
+  assert r3 == Ok(2)
   // to_list returns unspecified order, just check it has 2 entries
   let assert Ok(entries) = r4
-  let assert True =
-    {
+  assert {
       entries
       |> list_length
     }
@@ -368,7 +367,7 @@ pub fn set_fold_from_non_owner_succeeds_test() {
   })
 
   let assert Ok(result) = process.receive(subject, 5000)
-  let assert True = result == Ok(30)
+  assert result == Ok(30)
 
   let assert Ok(Nil) = set.close(table)
   test_helpers.cleanup(path)
@@ -394,7 +393,7 @@ pub fn bag_insert_from_non_owner_returns_not_owner_test() {
   })
 
   let assert Ok(result) = process.receive(subject, 5000)
-  let assert True = result == Error(shelf.NotOwner)
+  assert result == Error(shelf.NotOwner)
 
   let assert Ok(Nil) = bag.close(table)
   test_helpers.cleanup(path)
@@ -420,7 +419,7 @@ pub fn duplicate_bag_insert_from_non_owner_returns_not_owner_test() {
   })
 
   let assert Ok(result) = process.receive(subject, 5000)
-  let assert True = result == Error(shelf.NotOwner)
+  assert result == Error(shelf.NotOwner)
 
   let assert Ok(Nil) = duplicate_bag.close(table)
   test_helpers.cleanup(path)
@@ -441,8 +440,8 @@ pub fn operations_on_closed_table_return_table_closed_test() {
   let assert Ok(Nil) = set.close(table)
 
   // After close, operations should return TableClosed
-  let assert True = set.insert(table, "key", 1) == Error(shelf.TableClosed)
-  let assert True = set.lookup(table, "key") == Error(shelf.TableClosed)
+  assert set.insert(table, "key", 1) == Error(shelf.TableClosed)
+  assert set.lookup(table, "key") == Error(shelf.TableClosed)
 
   test_helpers.cleanup(path)
   Nil

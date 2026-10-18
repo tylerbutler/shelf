@@ -92,7 +92,7 @@ pub fn returns_not_found_for_missing_key_test() {
       value: decode.string,
     )
   let result = set.lookup(table, "missing")
-  let assert True = result == Error(shelf.NotFound)
+  assert result == Error(shelf.NotFound)
   let assert Ok(Nil) = set.close(table)
   test_helpers.cleanup(path)
   Nil
@@ -130,7 +130,7 @@ pub fn insert_new_fails_on_existing_key_test() {
     )
   let assert Ok(Nil) = set.insert_new(table, "key", "first")
   let result = set.insert_new(table, "key", "second")
-  let assert True = result == Error(shelf.KeyAlreadyPresent)
+  assert result == Error(shelf.KeyAlreadyPresent)
   let assert Ok("first") = set.lookup(table, "key")
   let assert Ok(Nil) = set.close(table)
   test_helpers.cleanup(path)
@@ -170,7 +170,7 @@ pub fn delete_key_removes_an_entry_test() {
     )
   let assert Ok(Nil) = set.insert(table, "key", "val")
   let assert Ok(Nil) = set.delete_key(table, "key")
-  let assert True = set.lookup(table, "key") == Error(shelf.NotFound)
+  assert set.lookup(table, "key") == Error(shelf.NotFound)
   let assert Ok(Nil) = set.close(table)
   test_helpers.cleanup(path)
   Nil
@@ -209,7 +209,7 @@ pub fn to_list_returns_all_entries_test() {
   let assert Ok(Nil) = set.insert_list(table, [#("a", 1), #("b", 2)])
   let assert Ok(entries) = set.to_list(table)
   let sorted = list.sort(entries, fn(a, b) { string.compare(a.0, b.0) })
-  let assert True = sorted == [#("a", 1), #("b", 2)]
+  assert sorted == [#("a", 1), #("b", 2)]
   let assert Ok(Nil) = set.close(table)
   test_helpers.cleanup(path)
   Nil
@@ -248,7 +248,7 @@ pub fn fold_accumulates_over_entries_test() {
   let assert Ok(Nil) = set.insert_list(table, [#("a", 1), #("b", 2), #("c", 3)])
   let assert Ok(sum) =
     set.fold(table, from: 0, with: fn(acc, _key, val) { acc + val })
-  let assert True = sum == 6
+  assert sum == 6
   let assert Ok(Nil) = set.close(table)
   test_helpers.cleanup(path)
   Nil

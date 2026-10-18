@@ -55,7 +55,7 @@ pub fn stores_multiple_values_per_key_test() {
   let assert Ok(Nil) = bag.insert(table, "color", "blue")
   let assert Ok(values) = bag.lookup(table, "color")
   let sorted = list.sort(values, string.compare)
-  let assert True = sorted == ["blue", "red"]
+  assert sorted == ["blue", "red"]
   let assert Ok(Nil) = bag.close(table)
   test_helpers.cleanup(path)
   Nil
@@ -75,7 +75,7 @@ pub fn deduplicates_identical_key_value_pairs_test() {
   let assert Ok(Nil) = bag.insert(table, "tag", "gleam")
   let assert Ok(Nil) = bag.insert(table, "tag", "gleam")
   let assert Ok(values) = bag.lookup(table, "tag")
-  let assert True = values == ["gleam"]
+  assert values == ["gleam"]
   let assert Ok(Nil) = bag.close(table)
   test_helpers.cleanup(path)
   Nil
@@ -92,7 +92,7 @@ pub fn returns_not_found_for_missing_key_test() {
       key: decode.string,
       value: decode.string,
     )
-  let assert True = bag.lookup(table, "missing") == Error(shelf.NotFound)
+  assert bag.lookup(table, "missing") == Error(shelf.NotFound)
   let assert Ok(Nil) = bag.close(table)
   test_helpers.cleanup(path)
   Nil
@@ -140,7 +140,7 @@ pub fn to_list_returns_all_entries_test() {
         _ -> key_cmp
       }
     })
-  let assert True = sorted == [#("a", 1), #("a", 3), #("b", 2)]
+  assert sorted == [#("a", 1), #("a", 3), #("b", 2)]
   let assert Ok(Nil) = bag.close(table)
   test_helpers.cleanup(path)
   Nil
@@ -162,7 +162,7 @@ pub fn fold_accumulates_over_entries_test() {
   let assert Ok(Nil) = bag.insert(table, "a", 3)
   let assert Ok(sum) =
     bag.fold(table, from: 0, with: fn(acc, _key, val) { acc + val })
-  let assert True = sum == 6
+  assert sum == 6
   let assert Ok(Nil) = bag.close(table)
   test_helpers.cleanup(path)
   Nil
@@ -203,9 +203,9 @@ pub fn insert_list_inserts_multiple_entries_test() {
   let assert Ok(Nil) = bag.insert_list(table, [#("a", 1), #("b", 2), #("a", 3)])
   let assert Ok(values_a) = bag.lookup(table, "a")
   let sorted_a = list.sort(values_a, int_compare)
-  let assert True = sorted_a == [1, 3]
+  assert sorted_a == [1, 3]
   let assert Ok(values_b) = bag.lookup(table, "b")
-  let assert True = values_b == [2]
+  assert values_b == [2]
   let assert Ok(Nil) = bag.close(table)
   test_helpers.cleanup(path)
   Nil
@@ -226,7 +226,7 @@ pub fn delete_object_removes_one_value_for_a_key_test() {
   let assert Ok(Nil) = bag.insert(table, "color", "blue")
   let assert Ok(Nil) = bag.delete_object(table, "color", "red")
   let assert Ok(values) = bag.lookup(table, "color")
-  let assert True = values == ["blue"]
+  assert values == ["blue"]
   let assert Ok(Nil) = bag.close(table)
   test_helpers.cleanup(path)
   Nil
@@ -246,7 +246,7 @@ pub fn delete_key_removes_all_values_for_a_key_test() {
   let assert Ok(Nil) = bag.insert(table, "color", "red")
   let assert Ok(Nil) = bag.insert(table, "color", "blue")
   let assert Ok(Nil) = bag.delete_key(table, "color")
-  let assert True = bag.lookup(table, "color") == Error(shelf.NotFound)
+  assert bag.lookup(table, "color") == Error(shelf.NotFound)
   let assert Ok(Nil) = bag.close(table)
   test_helpers.cleanup(path)
   Nil
@@ -298,7 +298,7 @@ pub fn save_persists_data_test() {
     )
   let assert Ok(values) = bag.lookup(table, "x")
   let sorted = list.sort(values, int_compare)
-  let assert True = sorted == [1, 2]
+  assert sorted == [1, 2]
   let assert Ok(Nil) = bag.close(table)
   test_helpers.cleanup(path)
   Nil

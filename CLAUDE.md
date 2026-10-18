@@ -93,6 +93,7 @@ The `shelf_ffi.erl` module wraps raw `ets:*` and `dets:*` calls with error trans
 - Follow `gleam format` output
 - Document public functions with `///` comments
 - Tests are public `*_test` functions that use Gleam assertions
+- Use `assert` for boolean test checks and `let assert` for pattern matching
 - Test files create temporary `.dets` files in `/tmp/` and clean up after each test
 
 ## Design Context

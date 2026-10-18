@@ -60,7 +60,7 @@ pub fn deletes_persist_immediately_in_write_through_mode_test() {
       key: decode.string,
       value: decode.int,
     )
-  let assert True = set.lookup(table, "a") == Error(shelf.NotFound)
+  assert set.lookup(table, "a") == Error(shelf.NotFound)
   let assert Ok(2) = set.lookup(table, "b")
   let assert Ok(Nil) = set.close(table)
   test_helpers.cleanup(path)
@@ -117,7 +117,7 @@ pub fn delete_object_persists_in_write_through_mode_test() {
       key: decode.string,
       value: decode.int,
     )
-  let assert True = set.lookup(table, "x") == Error(shelf.NotFound)
+  assert set.lookup(table, "x") == Error(shelf.NotFound)
   let assert Ok(20) = set.lookup(table, "y")
   let assert Ok(Nil) = set.close(table)
   test_helpers.cleanup(path)
@@ -204,7 +204,7 @@ pub fn bag_write_through_persists_inserts_immediately_test() {
     )
   let assert Ok(values) = bag.lookup(table, "color")
   let sorted = list.sort(values, string.compare)
-  let assert True = sorted == ["blue", "red"]
+  assert sorted == ["blue", "red"]
   let assert Ok(Nil) = bag.close(table)
   test_helpers.cleanup(path)
   Nil
@@ -232,7 +232,7 @@ pub fn bag_write_through_delete_key_persists_immediately_test() {
       key: decode.string,
       value: decode.int,
     )
-  let assert True = bag.lookup(table, "k") == Error(shelf.NotFound)
+  assert bag.lookup(table, "k") == Error(shelf.NotFound)
   let assert Ok(Nil) = bag.close(table)
   test_helpers.cleanup(path)
   Nil
@@ -265,7 +265,7 @@ pub fn duplicate_bag_write_through_persists_inserts_immediately_test() {
       value: decode.string,
     )
   let assert Ok(values) = duplicate_bag.lookup(table, "event")
-  let assert True = values == ["click", "click"]
+  assert values == ["click", "click"]
   let assert Ok(Nil) = duplicate_bag.close(table)
   test_helpers.cleanup(path)
   Nil
@@ -298,7 +298,7 @@ pub fn duplicate_bag_write_through_delete_object_persists_immediately_test() {
       value: decode.string,
     )
   let assert Ok(values) = duplicate_bag.lookup(table, "x")
-  let assert True = values == ["b"]
+  assert values == ["b"]
   let assert Ok(Nil) = duplicate_bag.close(table)
   test_helpers.cleanup(path)
   Nil

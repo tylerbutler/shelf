@@ -15,8 +15,7 @@ pub fn missing_key_returns_not_found_test() {
       value: decode.int,
     )
 
-  let assert True =
-    set.update_counter(table, "nonexistent", 1) == Error(shelf.NotFound)
+  assert set.update_counter(table, "nonexistent", 1) == Error(shelf.NotFound)
 
   let assert Ok(Nil) = set.close(table)
   test_helpers.cleanup(path)
@@ -41,7 +40,7 @@ pub fn multiple_increments_accumulate_correctly_test() {
   let assert Ok(6) = set.update_counter(table, "hits", 3)
   let assert Ok(10) = set.update_counter(table, "hits", 4)
 
-  let assert True = set.lookup(table, "hits") == Ok(10)
+  assert set.lookup(table, "hits") == Ok(10)
 
   let assert Ok(Nil) = set.close(table)
   test_helpers.cleanup(path)
@@ -62,9 +61,9 @@ pub fn negative_increment_decrements_value_test() {
 
   let assert Ok(Nil) = set.insert(table, "counter", 10)
   let assert Ok(new_val) = set.update_counter(table, "counter", -3)
-  let assert True = new_val == 7
+  assert new_val == 7
 
-  let assert True = set.lookup(table, "counter") == Ok(7)
+  assert set.lookup(table, "counter") == Ok(7)
 
   let assert Ok(Nil) = set.close(table)
   test_helpers.cleanup(path)
@@ -85,9 +84,9 @@ pub fn zero_increment_returns_current_value_test() {
 
   let assert Ok(Nil) = set.insert(table, "counter", 42)
   let assert Ok(new_val) = set.update_counter(table, "counter", 0)
-  let assert True = new_val == 42
+  assert new_val == 42
 
-  let assert True = set.lookup(table, "counter") == Ok(42)
+  assert set.lookup(table, "counter") == Ok(42)
 
   let assert Ok(Nil) = set.close(table)
   test_helpers.cleanup(path)

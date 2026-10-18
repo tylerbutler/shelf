@@ -37,7 +37,7 @@ pub fn guardian_is_alive_while_table_is_open_test() {
       value: decode.int,
     )
   let guardian = extract_guardian_set(table)
-  let assert True = process.is_alive(guardian) == True
+  assert process.is_alive(guardian) == True
 
   let assert Ok(Nil) = set.close(table)
   cleanup(path)
@@ -61,7 +61,7 @@ pub fn guardian_is_stopped_after_set_close_test() {
 
   // Small delay to allow the guardian to process the stop message
   process.sleep(10)
-  let assert True = process.is_alive(guardian) == False
+  assert process.is_alive(guardian) == False
 
   cleanup(path)
   Nil
@@ -83,7 +83,7 @@ pub fn guardian_is_stopped_after_bag_close_test() {
   let assert Ok(Nil) = bag.close(table)
 
   process.sleep(10)
-  let assert True = process.is_alive(guardian) == False
+  assert process.is_alive(guardian) == False
 
   cleanup(path)
   Nil
@@ -105,7 +105,7 @@ pub fn guardian_is_stopped_after_duplicate_bag_close_test() {
   let assert Ok(Nil) = duplicate_bag.close(table)
 
   process.sleep(10)
-  let assert True = process.is_alive(guardian) == False
+  assert process.is_alive(guardian) == False
 
   cleanup(path)
   Nil
@@ -127,7 +127,7 @@ pub fn guardian_is_stopped_after_with_table_completes_test() {
     )
 
   process.sleep(10)
-  let assert True = process.is_alive(guardian) == False
+  assert process.is_alive(guardian) == False
 
   cleanup(path)
   Nil
@@ -145,7 +145,7 @@ pub fn opening_and_closing_many_tables_does_not_leak_guardians_test() {
   let all_dead =
     guardians
     |> list_all(fn(pid) { !process.is_alive(pid) })
-  let assert True = all_dead == True
+  assert all_dead == True
 
   cleanup(path)
   Nil

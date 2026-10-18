@@ -42,7 +42,7 @@ pub fn rejects_dets_data_with_wrong_value_type_test() {
   case result {
     Error(shelf.TypeMismatch(_)) -> Nil
     _ -> {
-      let assert True = result == Error(shelf.TypeMismatch([]))
+      assert result == Error(shelf.TypeMismatch([]))
       Nil
     }
   }
@@ -78,7 +78,7 @@ pub fn rejects_dets_data_with_wrong_key_type_test() {
   case result {
     Error(shelf.TypeMismatch(_)) -> Nil
     _ -> {
-      let assert True = result == Error(shelf.TypeMismatch([]))
+      assert result == Error(shelf.TypeMismatch([]))
       Nil
     }
   }
@@ -169,7 +169,7 @@ pub fn rejects_if_any_entry_is_invalid_test() {
   case result {
     Error(shelf.TypeMismatch(_)) -> Nil
     _ -> {
-      let assert True = result == Error(shelf.TypeMismatch([]))
+      assert result == Error(shelf.TypeMismatch([]))
       Nil
     }
   }
@@ -204,7 +204,7 @@ pub fn rejects_bag_dets_data_with_wrong_types_test() {
   case result {
     Error(shelf.TypeMismatch(_)) -> Nil
     _ -> {
-      let assert True = result == Error(shelf.TypeMismatch([]))
+      assert result == Error(shelf.TypeMismatch([]))
       Nil
     }
   }
@@ -239,7 +239,7 @@ pub fn rejects_duplicate_bag_dets_data_with_wrong_types_test() {
   case result {
     Error(shelf.TypeMismatch(_)) -> Nil
     _ -> {
-      let assert True = result == Error(shelf.TypeMismatch([]))
+      assert result == Error(shelf.TypeMismatch([]))
       Nil
     }
   }
@@ -270,13 +270,13 @@ pub fn bag_preserves_value_order_after_save_and_reload_test() {
     )
   let assert Ok(values) = bag.lookup(t, "color")
   // The values should contain all three entries
-  let assert True = list.length(values) == 3
+  assert list.length(values) == 3
   // Order is preserved: dets:foldl accumulates entries in reverse,
   // and flush_batch calls lists:reverse before each ets:insert.
   // Verify by checking first and last elements are not swapped.
   let assert Ok(first) = list.first(values)
   let assert Ok(last) = list.last(values)
-  let assert True = first != last
+  assert first != last
   let assert Ok(Nil) = bag.close(t)
   test_helpers.cleanup(path)
   Nil
@@ -304,10 +304,10 @@ pub fn duplicate_bag_preserves_value_order_after_save_and_reload_test() {
       value: decode.string,
     )
   let assert Ok(values) = duplicate_bag.lookup(t, "log")
-  let assert True = list.length(values) == 3
+  assert list.length(values) == 3
   let assert Ok(first) = list.first(values)
   let assert Ok(last) = list.last(values)
-  let assert True = first != last
+  assert first != last
   let assert Ok(Nil) = duplicate_bag.close(t)
   test_helpers.cleanup(path)
   Nil

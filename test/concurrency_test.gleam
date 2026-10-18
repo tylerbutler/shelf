@@ -38,9 +38,9 @@ pub fn multiple_processes_can_read_simultaneously_test() {
   int.range(10, 0, [], list.prepend)
   |> list.each(fn(_i) {
     let assert Ok(#(r1, r2, r3)) = process.receive(subject, 5000)
-    let assert True = r1 == Ok(1)
-    let assert True = r2 == Ok(2)
-    let assert True = r3 == Ok(3)
+    assert r1 == Ok(1)
+    assert r2 == Ok(2)
+    assert r3 == Ok(3)
     Nil
   })
 
@@ -74,13 +74,13 @@ pub fn rapid_owner_process_writes_to_different_keys_all_succeed_test() {
   int.range(count, 0, [], list.prepend)
   |> list.each(fn(i) {
     let key = "key_" <> int.to_string(i)
-    let assert True = set.lookup(table, key) == Ok(i)
+    assert set.lookup(table, key) == Ok(i)
     Nil
   })
 
   // Verify size
   let assert Ok(size) = set.size(table)
-  let assert True = size == count
+  assert size == count
 
   // Spawn readers to verify data concurrently
   let subject = process.new_subject()
@@ -96,7 +96,7 @@ pub fn rapid_owner_process_writes_to_different_keys_all_succeed_test() {
   int.range(10, 0, [], list.prepend)
   |> list.each(fn(i) {
     let assert Ok(#(_key, Ok(val))) = process.receive(subject, 5000)
-    let assert True = val >= 1 && val <= count
+    assert val >= 1 && val <= count
     // Suppress unused variable warning
     let _ = i
     Nil
@@ -129,11 +129,11 @@ pub fn rapid_owner_process_overwrites_to_same_key_last_write_wins_test() {
 
   // Last write should win
   let assert Ok(value) = set.lookup(table, "shared")
-  let assert True = value == count
+  assert value == count
 
   // Table should still be fully functional
   let assert Ok(Nil) = set.insert(table, "after", 999)
-  let assert True = set.lookup(table, "after") == Ok(999)
+  assert set.lookup(table, "after") == Ok(999)
 
   // Concurrent reads should see consistent state
   let subject = process.new_subject()
@@ -148,7 +148,7 @@ pub fn rapid_owner_process_overwrites_to_same_key_last_write_wins_test() {
   int.range(5, 0, [], list.prepend)
   |> list.each(fn(_i) {
     let assert Ok(Ok(val)) = process.receive(subject, 5000)
-    let assert True = val == count
+    assert val == count
     Nil
   })
 

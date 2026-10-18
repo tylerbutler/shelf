@@ -16,7 +16,7 @@ pub fn path_traversal_is_rejected_test() {
   case result {
     Error(shelf.InvalidPath(_)) -> Nil
     other -> {
-      let assert True = other == Error(shelf.InvalidPath("expected"))
+      assert other == Error(shelf.InvalidPath("expected"))
       Nil
     }
   }
@@ -27,7 +27,7 @@ pub fn null_bytes_in_path_are_rejected_test() {
   case result {
     Error(shelf.InvalidPath(_)) -> Nil
     other -> {
-      let assert True = other == Error(shelf.InvalidPath("expected"))
+      assert other == Error(shelf.InvalidPath("expected"))
       Nil
     }
   }
@@ -45,7 +45,7 @@ pub fn sibling_directory_with_shared_prefix_is_rejected_test() {
   case result {
     Error(shelf.InvalidPath(_)) -> Nil
     other -> {
-      let assert True = other == Error(shelf.InvalidPath("expected"))
+      assert other == Error(shelf.InvalidPath("expected"))
       Nil
     }
   }
