@@ -2,10 +2,9 @@ name: shelf
 version: 1.0.0
 description: APM project for shelf
 author: Tyler Butler
-# Which agent platforms to deploy to (uncomment to pin):
-# targets:
-#   - copilot
-#   - claude
+targets:
+  - claude
+  - copilot
 
 dependencies:
   apm: []
@@ -15,3 +14,4 @@ scripts: {}
 devDependencies:
   apm:
     - tylerbutler/apm-base
+    - tylerbutler/agent-marketplace/plugins/gleam

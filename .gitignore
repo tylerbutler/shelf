@@ -24,3 +24,17 @@ Thumbs.db
 
 # APM dependencies
 apm_modules/
+
+# APM-generated agent files
+/.claude/agents/beam-vm-reviewer.md
+/.claude/agents/erlang-specialist.md
+/.claude/agents/shelf-otp-expert.md
+/.claude/agents/shelf-otp-performance-expert.md
+/.claude/skills/add-changelog-entry/
+/.claude/skills/gleam-reference-docs/
+/.claude/skills/gleam-review/
+/.agents/skills/
+/.github/agents/
+/.github/hooks/ponytail-copilot-hooks.json
+/.github/instructions/
+/.github/prompts/

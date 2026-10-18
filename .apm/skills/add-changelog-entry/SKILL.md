@@ -4,7 +4,7 @@ description: Use when you've made code changes and need to add a changelog entry
 ---
 
 <required>
-*CRITICAL* Add the following steps to your Todo list using TodoWrite:
+Add the following steps to your task list using the agent's task-tracking tool, if available:
 
 1. Analyze recent code changes using git diff
 2. Determine the appropriate changelog kind(s) and draft entry body text
