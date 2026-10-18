@@ -374,6 +374,36 @@ Within the owner process, all shelf operations are individual ETS/DETS calls —
 
 For set tables, concurrent reads from other processes while the owner writes to *different* keys are safe. Writes to the *same* key result in last-writer-wins (no corruption, but potential data loss from the reader's perspective). Bag and duplicate bag tables follow the same model.
 
+## Development and Releases
+
+Use [mise](https://mise.jdx.dev/) to install the pinned tools with `mise install`.
+Keep using Just for builds, tests, and other project tasks: run `just --list`
+to see the commands.
+
+Use [trellis](https://trellis.tylerbutler.com/docs/changelog/) for changelogs
+and releases. Add an entry for a user-facing change:
+
+```sh
+just change Fixed "Fix the user-facing problem"
+just changelog-preview
+```
+
+Trellis stores TOML fragments in `.changes/unreleased/` and released sections
+in `.changes/shelf/`. Do not edit the generated `CHANGELOG.md`.
+The `[tools.trellis.changelog]` table in `gleam.toml` defines the change kinds
+and version bumps. Development-only changes need no entry; the PR check
+warns about missing entries and fails on invalid fragments.
+
+On a push to `main`, trellis creates or updates a release PR on
+`release/next`. Merging that PR creates the `v<version>` tag and GitHub
+release. The tag starts the Hex publish workflow. The workflows use the
+existing `RELEASE_APP_ID`, `RELEASE_APP_PRIVATE_KEY`, and `HEXPM_API_KEY`
+secrets. The examples remain workspace members but do not release.
+
+For a manual release, `just changelog` applies the version bump, consumes
+the pending fragments, and updates the changelog and internal lockfile versions.
+Use `just changelog-preview` first; it does not change files.
+
 ## See Also
 
 - **[bravo](https://hex.pm/packages/bravo)** — Use ETS directly when you don't need disk persistence

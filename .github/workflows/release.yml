@@ -1,9 +1,16 @@
-name: Changie Release
+name: Trellis Release
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trellis-release
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -19,31 +26,15 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
           token: ${{ steps.app-token.outputs.token }}
+          ref: main
+          fetch-depth: 0
 
-      - uses: tylerbutler/actions/changie-release@c697a813534c6364a835de8e2ed2c4e0c3638bbe # ratchet:tylerbutler/actions/changie-release@main
-        id: release
+      - name: Install trellis
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # ratchet:jdx/mise-action@v3
         with:
-          token: ${{ steps.app-token.outputs.token }}
-          pr-title-template: "chore(release): {version}"
-          version-files: |
-            gleam.toml:version
+          install_args: github:tylerbutler/trellis
 
-      - name: Summary
-        if: steps.release.outputs.skipped != 'true'
+      - name: Create or update release PR
         env:
-          VERSION: ${{ steps.release.outputs.version }}
-          PR_URL: ${{ steps.release.outputs.pr-url }}
-          PR_OP: ${{ steps.release.outputs.pr-operation }}
-        run: |
-          echo "### Release PR Created" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Version:** $VERSION" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **PR:** $PR_URL" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Operation:** $PR_OP" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Skipped
-        if: steps.release.outputs.skipped == 'true'
-        run: |
-          echo "### Release Skipped" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "No unreleased change fragments found." >> "$GITHUB_STEP_SUMMARY"
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: trellis release pr --branch release/next

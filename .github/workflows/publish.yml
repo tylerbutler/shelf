@@ -4,6 +4,9 @@ on:
   push:
     tags: ['v*']
 
+permissions:
+  contents: read
+
 jobs:
   test:
     uses: ./.github/workflows/ci.yml
@@ -17,7 +20,12 @@ jobs:
       - name: Setup environment
         uses: ./.github/actions/setup
 
+      - name: Install trellis
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # ratchet:jdx/mise-action@v3
+        with:
+          install_args: github:tylerbutler/trellis
+
       - name: Publish to Hex.pm
-        run: gleam publish --yes
+        run: trellis publish --tag "$GITHUB_REF_NAME"
         env:
           HEXPM_API_KEY: ${{ secrets.HEXPM_API_KEY }}

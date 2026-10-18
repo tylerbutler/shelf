@@ -14,6 +14,21 @@ gleam format src test examples/src    # Format code
 gleam docs build         # Generate documentation
 ```
 
+## Changelogs and Releases
+
+Keep Just as the task interface. Trellis manages changelogs, version bumps,
+release PRs, tags, and Hex publishing. Mise pins trellis in `.mise.toml`;
+the `[tools.trellis]` tables in `gleam.toml` hold the release configuration.
+
+- Add entries only for user-facing changes, not development-only changes.
+- Run `just change <kind> "<body>"` to create a TOML fragment for `shelf`.
+- Run `just changelog-preview` to inspect the version plan without changing files.
+- Run `trellis doctor` to check release configuration and fragments.
+- Keep released sections in `.changes/shelf/`; do not edit `CHANGELOG.md`.
+- `just changelog` applies the version bump and consumes fragments.
+- Release PRs use `release/next`; tags keep the `v<version>` format.
+- Do not release `shelf_examples`.
+
 ## Project Structure
 
 ```

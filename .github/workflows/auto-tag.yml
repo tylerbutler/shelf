@@ -5,9 +5,15 @@ on:
     types: [closed]
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   auto-tag:
-    if: github.event.pull_request.merged && contains(github.event.pull_request.labels.*.name, 'release')
+    if: >-
+      github.event.pull_request.merged
+      && github.event.pull_request.head.ref == 'release/next'
+      && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - name: Generate app token
@@ -20,9 +26,15 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
           token: ${{ steps.app-token.outputs.token }}
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          fetch-depth: 0
 
-      - uses: tylerbutler/actions/changie-auto-tag@c697a813534c6364a835de8e2ed2c4e0c3638bbe # ratchet:tylerbutler/actions/changie-auto-tag@main
-        id: auto-tag
+      - name: Install trellis
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # ratchet:jdx/mise-action@v3
         with:
-          create-release: true
-          token: ${{ steps.app-token.outputs.token }}
+          install_args: github:tylerbutler/trellis
+
+      - name: Create release tag and GitHub release
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: trellis tag create --github-release

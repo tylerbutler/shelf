@@ -1,0 +1,5 @@
+package = "shelf"
+kind = "Added"
+body = """
+Require Gleam 1.14 or later
+Upgrade to Gleam 1.14 or later to use this release."""

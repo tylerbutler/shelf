@@ -1,5 +1,5 @@
 [tools]
-changie = "latest"
+"github:tylerbutler/trellis" = "1.0.0"
 "github:tylerbutler/licence_audit" = "0.13.0"
 
 [env]

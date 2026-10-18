@@ -55,17 +55,18 @@ docs:
 
 # === CHANGELOG ===
 
-# Create a new changelog entry
-change:
-    changie new
+# Create a changelog entry: just change Fixed "Describe the user-facing change"
+[positional-arguments]
+change kind body:
+    trellis changelog new --package shelf --kind "$1" --body "$2"
 
 # Preview unreleased changelog
 changelog-preview:
-    changie batch auto --dry-run
+    trellis version plan
 
-# Generate CHANGELOG.md
+# Apply the version bump and generate CHANGELOG.md
 changelog:
-    changie merge
+    trellis version apply
 
 # === MAINTENANCE ===
 
