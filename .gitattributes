@@ -1,0 +1,8 @@
+.claude/** linguist-vendored
+.impeccable/** linguist-vendored
+.serena/** linguist-vendored
+CLAUDE.md linguist-vendored
+apm.yml linguist-vendored
+apm.lock.yaml linguist-vendored
+
+website/** linguist-documentation

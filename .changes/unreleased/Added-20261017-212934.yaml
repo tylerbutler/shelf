@@ -1,0 +1,5 @@
+kind: Added
+body: |-
+    Require Gleam 1.14 or later
+    Upgrade to Gleam 1.14 or later to use this release.
+time: 2026-10-17T21:29:34-07:00

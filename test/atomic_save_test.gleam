@@ -2,124 +2,116 @@ import gleam/dynamic/decode
 import gleam/int
 import gleam/list
 import shelf/set
-import startest.{describe, it}
-import startest/expect
 import test_helpers
 
-pub fn atomic_save_tests() {
-  describe("atomic save", [
-    it("save cleans up temp file", fn() {
-      let path = "/tmp/shelf_as_temp.dets"
-      let tmp_path = path <> ".tmp"
-      test_helpers.cleanup(path)
-      test_helpers.cleanup(tmp_path)
+pub fn save_cleans_up_temp_file_test() {
+  let path = "/tmp/shelf_as_temp.dets"
+  let tmp_path = path <> ".tmp"
+  test_helpers.cleanup(path)
+  test_helpers.cleanup(tmp_path)
 
-      let assert Ok(table) =
-        set.open(
-          name: "as_temp",
-          path: path,
-          base_directory: "/tmp",
-          key: decode.string,
-          value: decode.int,
-        )
+  let assert Ok(table) =
+    set.open(
+      name: "as_temp",
+      path: path,
+      base_directory: "/tmp",
+      key: decode.string,
+      value: decode.int,
+    )
 
-      let assert Ok(Nil) = set.insert(table, "key", 1)
-      let assert Ok(Nil) = set.save(table)
+  let assert Ok(Nil) = set.insert(table, "key", 1)
+  let assert Ok(Nil) = set.save(table)
 
-      // The .tmp file should not remain after save
-      let tmp_exists = test_helpers.delete_file(tmp_path)
-      case tmp_exists {
-        Error(_) -> Nil
-        Ok(Nil) -> {
-          // If delete succeeded, the tmp file existed — that's a failure
-          expect.to_be_true(False)
-          Nil
-        }
-      }
+  // The .tmp file should not remain after save
+  let tmp_exists = test_helpers.delete_file(tmp_path)
+  case tmp_exists {
+    Error(_) -> Nil
+    Ok(Nil) -> panic as "Temporary save file still exists"
+  }
 
-      let assert Ok(Nil) = set.close(table)
-      test_helpers.cleanup(path)
-      Nil
-    }),
-    it("data survives save-close-reopen cycle", fn() {
-      let path = "/tmp/shelf_as_reopen.dets"
-      test_helpers.cleanup(path)
+  let assert Ok(Nil) = set.close(table)
+  test_helpers.cleanup(path)
+  Nil
+}
 
-      // Open, insert, save, close
-      let assert Ok(table) =
-        set.open(
-          name: "as_reopen",
-          path: path,
-          base_directory: "/tmp",
-          key: decode.string,
-          value: decode.int,
-        )
-      let assert Ok(Nil) = set.insert(table, "x", 100)
-      let assert Ok(Nil) = set.insert(table, "y", 200)
-      let assert Ok(Nil) = set.save(table)
-      let assert Ok(Nil) = set.close(table)
+pub fn data_survives_save_close_reopen_cycle_test() {
+  let path = "/tmp/shelf_as_reopen.dets"
+  test_helpers.cleanup(path)
 
-      // Reopen and verify data is present
-      let assert Ok(table2) =
-        set.open(
-          name: "as_reopen2",
-          path: path,
-          base_directory: "/tmp",
-          key: decode.string,
-          value: decode.int,
-        )
-      expect.to_equal(set.lookup(table2, "x"), Ok(100))
-      expect.to_equal(set.lookup(table2, "y"), Ok(200))
+  // Open, insert, save, close
+  let assert Ok(table) =
+    set.open(
+      name: "as_reopen",
+      path: path,
+      base_directory: "/tmp",
+      key: decode.string,
+      value: decode.int,
+    )
+  let assert Ok(Nil) = set.insert(table, "x", 100)
+  let assert Ok(Nil) = set.insert(table, "y", 200)
+  let assert Ok(Nil) = set.save(table)
+  let assert Ok(Nil) = set.close(table)
 
-      let assert Ok(Nil) = set.close(table2)
-      test_helpers.cleanup(path)
-      Nil
-    }),
-    it("save preserves data integrity with many entries", fn() {
-      let path = "/tmp/shelf_as_integrity.dets"
-      test_helpers.cleanup(path)
+  // Reopen and verify data is present
+  let assert Ok(table2) =
+    set.open(
+      name: "as_reopen2",
+      path: path,
+      base_directory: "/tmp",
+      key: decode.string,
+      value: decode.int,
+    )
+  assert set.lookup(table2, "x") == Ok(100)
+  assert set.lookup(table2, "y") == Ok(200)
 
-      let assert Ok(table) =
-        set.open(
-          name: "as_integrity",
-          path: path,
-          base_directory: "/tmp",
-          key: decode.string,
-          value: decode.int,
-        )
+  let assert Ok(Nil) = set.close(table2)
+  test_helpers.cleanup(path)
+  Nil
+}
 
-      let count = 100
-      // Insert many entries
-      int.range(count, 0, [], list.prepend)
-      |> list.each(fn(i) {
-        let key = "entry_" <> int.to_string(i)
-        let assert Ok(Nil) = set.insert(table, key, i)
-        Nil
-      })
+pub fn save_preserves_data_integrity_with_many_entries_test() {
+  let path = "/tmp/shelf_as_integrity.dets"
+  test_helpers.cleanup(path)
 
-      let assert Ok(Nil) = set.save(table)
-      let assert Ok(Nil) = set.close(table)
+  let assert Ok(table) =
+    set.open(
+      name: "as_integrity",
+      path: path,
+      base_directory: "/tmp",
+      key: decode.string,
+      value: decode.int,
+    )
 
-      // Reopen and verify count
-      let assert Ok(table2) =
-        set.open(
-          name: "as_integrity2",
-          path: path,
-          base_directory: "/tmp",
-          key: decode.string,
-          value: decode.int,
-        )
-      let assert Ok(size) = set.size(table2)
-      expect.to_equal(size, count)
+  let count = 100
+  // Insert many entries
+  int.range(count, 0, [], list.prepend)
+  |> list.each(fn(i) {
+    let key = "entry_" <> int.to_string(i)
+    let assert Ok(Nil) = set.insert(table, key, i)
+    Nil
+  })
 
-      // Spot-check some values
-      expect.to_equal(set.lookup(table2, "entry_1"), Ok(1))
-      expect.to_equal(set.lookup(table2, "entry_50"), Ok(50))
-      expect.to_equal(set.lookup(table2, "entry_100"), Ok(100))
+  let assert Ok(Nil) = set.save(table)
+  let assert Ok(Nil) = set.close(table)
 
-      let assert Ok(Nil) = set.close(table2)
-      test_helpers.cleanup(path)
-      Nil
-    }),
-  ])
+  // Reopen and verify count
+  let assert Ok(table2) =
+    set.open(
+      name: "as_integrity2",
+      path: path,
+      base_directory: "/tmp",
+      key: decode.string,
+      value: decode.int,
+    )
+  let assert Ok(size) = set.size(table2)
+  assert size == count
+
+  // Spot-check some values
+  assert set.lookup(table2, "entry_1") == Ok(1)
+  assert set.lookup(table2, "entry_50") == Ok(50)
+  assert set.lookup(table2, "entry_100") == Ok(100)
+
+  let assert Ok(Nil) = set.close(table2)
+  test_helpers.cleanup(path)
+  Nil
 }

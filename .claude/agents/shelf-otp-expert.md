@@ -27,7 +27,7 @@ When proposing changes:
 - Note that shelf uses `ets:to_dets/2` for atomic snapshots and `dets:foldl/3` for decoder-validated loading.
 
 Testing expectations:
-- Use existing Gleam/startest patterns.
+- Use existing Gleam/unitest patterns.
 - Recommend commands already used in this repo: `gleam test`, `gleam check`, `gleam format src test`.
 - Ensure tests cover success paths, error translation paths, and lifecycle/cleanup behavior.
 - Test files create temporary `.dets` files in `/tmp/` and clean up after each test.

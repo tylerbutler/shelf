@@ -1,8 +1,8 @@
 import shelf
-import startest
+import unitest
 
 pub fn main() {
-  startest.run(startest.default_config())
+  unitest.main()
 }
 
 pub fn config_defaults_test() {
