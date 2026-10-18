@@ -393,8 +393,8 @@ Run the command again after changes to `.apm/` or `apm.yml`.
 Edit local skills in `.apm/skills/` and local agent definitions in
 `.apm/agents/`. APM generates the skill copies in `.claude/skills/` and
 `.agents/skills/`, and agent definitions in `.claude/agents/` and
-`.github/agents/`. Do not edit these generated copies. Local agents inherit
-the tools available in each platform.
+`.github/agents/`. Do not edit these generated copies; commit them with the
+source changes. Local agents inherit the tools available in each platform.
 
 Dependency skills and agents remain managed by `apm.yml` and `apm.lock.yaml`;
 do not copy them into `.apm/`.
