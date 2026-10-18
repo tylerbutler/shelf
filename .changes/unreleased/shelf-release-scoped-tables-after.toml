@@ -1,0 +1,7 @@
+package = "shelf"
+kind = "Fixed"
+body = """
+Release scoped tables after a failed final save
+`with_table` releases remaining table resources when close fails and preserves
+callback-error precedence. Explicit `close` still supports retrying a failed
+save. Save recovery no longer leaves an extra DETS open reference."""

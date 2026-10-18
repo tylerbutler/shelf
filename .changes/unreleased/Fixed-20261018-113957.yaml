@@ -1,7 +1,0 @@
-kind: Fixed
-body: |-
-    Release scoped tables after a failed final save
-    `with_table` releases remaining table resources when close fails and preserves
-    callback-error precedence. Explicit `close` still supports retrying a failed
-    save. Save recovery no longer leaves an extra DETS open reference.
-time: 2026-10-18T11:39:57-07:00

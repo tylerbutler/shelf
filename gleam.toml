@@ -12,6 +12,34 @@ gleam_erlang = ">= 1.0.0 and < 2.0.0"
 
 [dev-dependencies]
 unitest = ">= 1.6.1 and < 2.0.0"
+
 [tools.licence_audit]
 allow = ["Apache-2.0", "MIT"]
 deny = []
+
+[tools.trellis]
+members = [".", "examples"]
+
+[tools.trellis.publish]
+exact_tag_format = "v{version}"
+
+[tools.trellis.publish.lifecycle]
+packages = { "." = "hex", examples = "workspace" }
+
+[tools.trellis.changelog]
+strictness = "warn"
+header_format = "# Changelog"
+kind_format = "#### {{ kind }}"
+change_format = "##### {{ body }}"
+kinds = [
+  { label = "Breaking", bump = "major" },
+  { label = "Added", bump = "minor" },
+  { label = "Changed", bump = "patch" },
+  { label = "Deprecated", bump = "patch" },
+  { label = "Fixed", bump = "patch" },
+  { label = "Performance", bump = "patch" },
+  { label = "Removed", bump = "patch" },
+  { label = "Reverted", bump = "patch" },
+  { label = "Dependencies", bump = "patch" },
+  { label = "Security", bump = "patch" },
+]

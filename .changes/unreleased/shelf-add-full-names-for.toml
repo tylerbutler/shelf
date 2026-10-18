@@ -1,0 +1,6 @@
+package = "shelf"
+kind = "Added"
+body = """
+Add full names for persistent table types
+Use `PersistentSet`, `PersistentBag`, and `PersistentDuplicateBag`. Existing
+`PSet`, `PBag`, and `PDuplicateBag` names remain supported as library type aliases."""
