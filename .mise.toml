@@ -1,5 +1,6 @@
 [tools]
 changie = "latest"
+"github:tylerbutler/licence_audit" = "0.13.0"
 
 [env]
 LC_ALL = "en_US.UTF-8"
