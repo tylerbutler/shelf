@@ -3,11 +3,11 @@ import gleam/erlang/process
 import gleam/int
 import gleam/list
 import shelf/set
-import test_helpers
+import test_helper
 
-pub fn multiple_processes_can_read_simultaneously_test() {
+pub fn multiple_processes_can_read_simultaneously_test() -> Nil {
   let path = "/tmp/shelf_conc_read.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     set.open(
       name: "conc_read",
@@ -27,31 +27,32 @@ pub fn multiple_processes_can_read_simultaneously_test() {
   int.range(10, 0, [], list.prepend)
   |> list.each(fn(_i) {
     process.spawn(fn() {
-      let r1 = set.lookup(table, "a")
-      let r2 = set.lookup(table, "b")
-      let r3 = set.lookup(table, "c")
-      process.send(subject, #(r1, r2, r3))
+      let first_lookup = set.lookup(table, "a")
+      let second_lookup = set.lookup(table, "b")
+      let third_lookup = set.lookup(table, "c")
+      process.send(subject, #(first_lookup, second_lookup, third_lookup))
     })
   })
 
   // Collect all results
   int.range(10, 0, [], list.prepend)
   |> list.each(fn(_i) {
-    let assert Ok(#(r1, r2, r3)) = process.receive(subject, 5000)
-    assert r1 == Ok(1)
-    assert r2 == Ok(2)
-    assert r3 == Ok(3)
+    let assert Ok(#(first_lookup, second_lookup, third_lookup)) =
+      process.receive(subject, 5000)
+    assert first_lookup == Ok(1)
+    assert second_lookup == Ok(2)
+    assert third_lookup == Ok(3)
     Nil
   })
 
   let assert Ok(Nil) = set.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn rapid_owner_process_writes_to_different_keys_all_succeed_test() {
+pub fn rapid_owner_process_writes_to_different_keys_all_succeed_test() -> Nil {
   let path = "/tmp/shelf_conc_write_diff.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     set.open(
       name: "conc_write_diff",
@@ -95,21 +96,21 @@ pub fn rapid_owner_process_writes_to_different_keys_all_succeed_test() {
 
   int.range(10, 0, [], list.prepend)
   |> list.each(fn(i) {
-    let assert Ok(#(_key, Ok(val))) = process.receive(subject, 5000)
-    assert val >= 1 && val <= count
+    let assert Ok(#(_key, Ok(value))) = process.receive(subject, 5000)
+    assert value >= 1 && value <= count
     // Suppress unused variable warning
     let _ = i
     Nil
   })
 
   let assert Ok(Nil) = set.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn rapid_owner_process_overwrites_to_same_key_last_write_wins_test() {
+pub fn rapid_owner_process_overwrites_to_same_key_last_write_wins_test() -> Nil {
   let path = "/tmp/shelf_conc_write_same.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     set.open(
       name: "conc_write_same",
@@ -147,12 +148,12 @@ pub fn rapid_owner_process_overwrites_to_same_key_last_write_wins_test() {
 
   int.range(5, 0, [], list.prepend)
   |> list.each(fn(_i) {
-    let assert Ok(Ok(val)) = process.receive(subject, 5000)
-    assert val == count
+    let assert Ok(Ok(value)) = process.receive(subject, 5000)
+    assert value == count
     Nil
   })
 
   let assert Ok(Nil) = set.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }

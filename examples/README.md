@@ -14,40 +14,43 @@ cd examples && gleam check
 cd examples && gleam build
 
 # Run a specific example
-cd examples && gleam run -m key_value_cache
+cd examples && gleam run -m shelf_examples/key_value_cache
 ```
 
 ## Examples
 
 | Module | Table Type | Key Concepts |
 |--------|-----------|--------------|
-| [`key_value_cache`](src/key_value_cache.gleam) | `PSet` | Open, insert, lookup, batch insert, delete, size, to_list, save, close |
-| [`user_sessions`](src/user_sessions.gleam) | `PSet` | WriteThrough mode, config builder, insert_new, member, error handling |
-| [`tag_index`](src/tag_index.gleam) | `PBag` | Multiple values per key, deduplication, delete_object, delete_key |
-| [`event_log`](src/event_log.gleam) | `PDuplicateBag` | Duplicate preservation, fold, size, to_list, delete_object |
-| [`hit_counter`](src/hit_counter.gleam) | `PSet` | Atomic counters (update_counter), increment/decrement, fold aggregation |
-| [`safe_resource`](src/safe_resource.gleam) | `PSet` | with_table auto-close, save/reload checkpoints, sync |
-| [`schema_migration`](src/schema_migration.gleam) | `PSet` | Evolving the value type between app versions: temp shelf table + atomic file rename |
+| [`key_value_cache`](src/shelf_examples/key_value_cache.gleam) | `PersistentSet` | Open, insert, lookup, batch insert, delete, size, to_list, save, close |
+| [`user_session`](src/shelf_examples/user_session.gleam) | `PersistentSet` | WriteThrough mode, config builder, insert_new, member, error handling |
+| [`tag_index`](src/shelf_examples/tag_index.gleam) | `PersistentBag` | Multiple values per key, deduplication, delete_object, delete_key |
+| [`event_log`](src/shelf_examples/event_log.gleam) | `PersistentDuplicateBag` | Duplicate preservation, fold, size, to_list, delete_object |
+| [`hit_counter`](src/shelf_examples/hit_counter.gleam) | `PersistentSet` | Atomic counters (update_counter), increment/decrement, fold aggregation |
+| [`safe_resource`](src/shelf_examples/safe_resource.gleam) | `PersistentSet` | with_table auto-close, save/reload checkpoints, sync |
+| [`schema_migration`](src/shelf_examples/schema_migration.gleam) | `PersistentSet` | Evolving the value type between app versions: temp shelf table + atomic file rename |
 
 ### key_value_cache
 
-A simple string key-value cache using `PSet`. Demonstrates the core CRUD workflow: open a table, insert entries individually and in batches, look up values, delete keys, and persist with save/close.
+A simple string key-value cache using `PersistentSet`. Demonstrates the core CRUD workflow: open a table, insert entries individually and in batches, look up values, delete keys, and persist with save/close.
 
-### user_sessions
+### user_session
 
-A user session store using `PSet` with **WriteThrough** mode for immediate persistence. Shows the config builder pattern, `insert_new` for conflict detection (`KeyAlreadyPresent` error), `member` checks, and pattern matching on `ShelfError` variants.
+A user session store using `PersistentSet` with **WriteThrough** mode for immediate persistence. Shows the config builder pattern, `insert_new` for conflict detection (`KeyAlreadyPresent` error), `member` checks, and pattern matching on `ShelfError` variants.
+
+Each run resets only the `session_abc123` demo key. Other stored entries remain.
+Run it with `cd examples && gleam run -m shelf_examples/user_session`.
 
 ### tag_index
 
-A tag-to-article index using `PBag` where each tag maps to multiple article IDs. Demonstrates bag-specific behavior: multiple distinct values per key, automatic deduplication of identical pairs, and selective deletion with `delete_object` vs `delete_key`.
+A tag-to-article index using `PersistentBag` where each tag maps to multiple article IDs. Demonstrates bag-specific behavior: multiple distinct values per key, automatic deduplication of identical pairs, and selective deletion with `delete_object` vs `delete_key`.
 
 ### event_log
 
-A page view event log using `PDuplicateBag` where duplicate entries are meaningful. Shows how duplicate bags preserve identical key-value pairs (unlike bags), plus `fold` for per-page aggregation and `size` for total event counts.
+A page view event log using `PersistentDuplicateBag` where duplicate entries are meaningful. Shows how duplicate bags preserve identical key-value pairs (unlike bags), plus `fold` for per-page aggregation and `size` for total event counts.
 
 ### hit_counter
 
-A page hit counter using `PSet` atomic counters. Demonstrates `update_counter` for lock-free increments/decrements, counter initialization, and `fold` to compute totals across all counters.
+A page hit counter using `PersistentSet` atomic counters. Demonstrates `update_counter` for lock-free increments/decrements, counter initialization, and `fold` to compute totals across all counters.
 
 ### safe_resource
 

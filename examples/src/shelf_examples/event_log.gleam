@@ -1,4 +1,4 @@
-/// Page view event log — demonstrates shelf's PDuplicateBag table type.
+/// Page view event log — demonstrates shelf's PersistentDuplicateBag table type.
 ///
 /// A duplicate bag preserves *all* inserted key-value pairs, even exact
 /// duplicates (same key AND same value). This makes it perfect for event
@@ -14,9 +14,9 @@ import gleam/io
 import gleam/list
 import shelf/duplicate_bag
 
-pub fn main() {
+pub fn main() -> Nil {
   // ── 1. Open a duplicate_bag table ─────────────────────────────────────
-  io.println("=== Page View Event Log (PDuplicateBag) ===\n")
+  io.println("=== Page View Event Log (PersistentDuplicateBag) ===\n")
 
   let assert Ok(table) =
     duplicate_bag.open(
@@ -65,13 +65,17 @@ pub fn main() {
     <> int.to_string(list.length(home_views))
     <> " events, including duplicates):",
   )
-  list.each(home_views, fn(ts) { io.println("  " <> int.to_string(ts)) })
+  list.each(home_views, fn(timestamp) {
+    io.println("  " <> int.to_string(timestamp))
+  })
 
   let assert Ok(blog_views) = duplicate_bag.lookup(from: table, key: "/blog/1")
   io.println(
     "\n/blog/1 views (" <> int.to_string(list.length(blog_views)) <> " events):",
   )
-  list.each(blog_views, fn(ts) { io.println("  " <> int.to_string(ts)) })
+  list.each(blog_views, fn(timestamp) {
+    io.println("  " <> int.to_string(timestamp))
+  })
 
   // ── 4. Count total events with size ───────────────────────────────────
   let assert Ok(total) = duplicate_bag.size(of: table)
@@ -135,7 +139,10 @@ fn increment_count(
 ) -> List(#(String, Int)) {
   case counts {
     [] -> [#(page, 1)]
-    [#(p, n), ..rest] if p == page -> [#(p, n + 1), ..rest]
+    [#(stored_page, count), ..rest] if stored_page == page -> [
+      #(stored_page, count + 1),
+      ..rest
+    ]
     [first, ..rest] -> [first, ..increment_count(rest, page)]
   }
 }

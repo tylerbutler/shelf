@@ -2,13 +2,13 @@ import gleam/dynamic/decode
 import gleam/int
 import gleam/list
 import shelf/set
-import test_helpers
+import test_helper
 
-pub fn save_cleans_up_temp_file_test() {
+pub fn save_cleans_up_temporary_file_test() -> Nil {
   let path = "/tmp/shelf_as_temp.dets"
-  let tmp_path = path <> ".tmp"
-  test_helpers.cleanup(path)
-  test_helpers.cleanup(tmp_path)
+  let temporary_path = path <> ".tmp"
+  test_helper.cleanup(path)
+  test_helper.cleanup(temporary_path)
 
   let assert Ok(table) =
     set.open(
@@ -23,20 +23,17 @@ pub fn save_cleans_up_temp_file_test() {
   let assert Ok(Nil) = set.save(table)
 
   // The .tmp file should not remain after save
-  let tmp_exists = test_helpers.delete_file(tmp_path)
-  case tmp_exists {
-    Error(_) -> Nil
-    Ok(Nil) -> panic as "Temporary save file still exists"
-  }
+  let assert Error(test_helper.FileNotFound) =
+    test_helper.delete_file(temporary_path)
 
   let assert Ok(Nil) = set.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn data_survives_save_close_reopen_cycle_test() {
+pub fn data_survives_save_close_reopen_cycle_test() -> Nil {
   let path = "/tmp/shelf_as_reopen.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
 
   // Open, insert, save, close
   let assert Ok(table) =
@@ -65,13 +62,13 @@ pub fn data_survives_save_close_reopen_cycle_test() {
   assert set.lookup(table2, "y") == Ok(200)
 
   let assert Ok(Nil) = set.close(table2)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn save_preserves_data_integrity_with_many_entries_test() {
+pub fn save_preserves_data_integrity_with_many_entries_test() -> Nil {
   let path = "/tmp/shelf_as_integrity.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
 
   let assert Ok(table) =
     set.open(
@@ -112,6 +109,6 @@ pub fn save_preserves_data_integrity_with_many_entries_test() {
   assert set.lookup(table2, "entry_100") == Ok(100)
 
   let assert Ok(Nil) = set.close(table2)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }

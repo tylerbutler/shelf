@@ -1,4 +1,4 @@
-/// Hit Counter — a shelf example demonstrating atomic counters with PSet.
+/// Hit Counter — a shelf example demonstrating atomic counters with PersistentSet.
 ///
 /// Uses `update_counter` to atomically increment integer values in an
 /// ETS-backed persistent set table. This is the recommended pattern for
@@ -9,7 +9,7 @@ import gleam/io
 import gleam/string
 import shelf/set
 
-pub fn main() {
+pub fn main() -> Nil {
   // ── 1. Open a persistent set table ────────────────────────────────
   // Keys are page paths (String), values are hit counts (Int).
   let assert Ok(counter) =

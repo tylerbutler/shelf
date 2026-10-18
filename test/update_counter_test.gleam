@@ -1,11 +1,11 @@
 import gleam/dynamic/decode
 import shelf
 import shelf/set
-import test_helpers
+import test_helper
 
-pub fn missing_key_returns_not_found_test() {
+pub fn missing_key_returns_not_found_test() -> Nil {
   let path = "/tmp/shelf_uc_missing.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     set.open(
       name: "uc_missing",
@@ -18,13 +18,13 @@ pub fn missing_key_returns_not_found_test() {
   assert set.update_counter(table, "nonexistent", 1) == Error(shelf.NotFound)
 
   let assert Ok(Nil) = set.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn multiple_increments_accumulate_correctly_test() {
+pub fn multiple_increments_accumulate_correctly_test() -> Nil {
   let path = "/tmp/shelf_uc_multi.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     set.open(
       name: "uc_multi",
@@ -43,13 +43,13 @@ pub fn multiple_increments_accumulate_correctly_test() {
   assert set.lookup(table, "hits") == Ok(10)
 
   let assert Ok(Nil) = set.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn negative_increment_decrements_value_test() {
+pub fn negative_increment_decrements_value_test() -> Nil {
   let path = "/tmp/shelf_uc_neg.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     set.open(
       name: "uc_neg",
@@ -60,19 +60,19 @@ pub fn negative_increment_decrements_value_test() {
     )
 
   let assert Ok(Nil) = set.insert(table, "counter", 10)
-  let assert Ok(new_val) = set.update_counter(table, "counter", -3)
-  assert new_val == 7
+  let assert Ok(new_value) = set.update_counter(table, "counter", -3)
+  assert new_value == 7
 
   assert set.lookup(table, "counter") == Ok(7)
 
   let assert Ok(Nil) = set.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn zero_increment_returns_current_value_test() {
+pub fn zero_increment_returns_current_value_test() -> Nil {
   let path = "/tmp/shelf_uc_zero.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     set.open(
       name: "uc_zero",
@@ -83,12 +83,12 @@ pub fn zero_increment_returns_current_value_test() {
     )
 
   let assert Ok(Nil) = set.insert(table, "counter", 42)
-  let assert Ok(new_val) = set.update_counter(table, "counter", 0)
-  assert new_val == 42
+  let assert Ok(new_value) = set.update_counter(table, "counter", 0)
+  assert new_value == 42
 
   assert set.lookup(table, "counter") == Ok(42)
 
   let assert Ok(Nil) = set.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }

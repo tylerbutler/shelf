@@ -29,7 +29,9 @@
 import gleam/dynamic/decode.{type Decoder}
 import gleam/result
 import shelf.{type Config, type ShelfError}
-import shelf/internal.{type DetsRef, type EtsRef, type GuardianRef}
+import shelf/internal.{
+  type DetsReference, type EtsReference, type GuardianReference,
+}
 
 /// An open persistent set table with typed keys and values.
 ///
@@ -38,15 +40,19 @@ import shelf/internal.{type DetsRef, type EtsRef, type GuardianRef}
 ///
 /// The table stores decoders used to validate data loaded from DETS,
 /// ensuring type safety at the persistence boundary.
-pub opaque type PSet(k, v) {
-  PSet(
-    ets: EtsRef,
-    dets: DetsRef,
-    guardian: GuardianRef,
+pub opaque type PersistentSet(k, v) {
+  PersistentSet(
+    ets: EtsReference,
+    dets: DetsReference,
+    guardian: GuardianReference,
     write_mode: shelf.WriteMode,
     entry_decoder: Decoder(#(k, v)),
   )
 }
+
+/// Compatibility alias for `PersistentSet`.
+pub type PSet(k, v) =
+  PersistentSet(k, v)
 
 // ── Lifecycle ───────────────────────────────────────────────────────────
 
@@ -71,14 +77,14 @@ pub fn open_config(
   config config: Config,
   key key_decoder: Decoder(k),
   value value_decoder: Decoder(v),
-) -> Result(PSet(k, v), ShelfError) {
+) -> Result(PersistentSet(k, v), ShelfError) {
   use result <- result.try(internal.generic_open(
     config,
-    "set",
+    internal.Set,
     key_decoder,
     value_decoder,
   ))
-  Ok(PSet(
+  Ok(PersistentSet(
     ets: result.0,
     dets: result.1,
     guardian: result.2,
@@ -102,7 +108,7 @@ pub fn open(
   base_directory base_directory: String,
   key key_decoder: Decoder(k),
   value value_decoder: Decoder(v),
-) -> Result(PSet(k, v), ShelfError) {
+) -> Result(PersistentSet(k, v), ShelfError) {
   open_config(
     config: shelf.config(name:, path:, base_directory:),
     key: key_decoder,
@@ -121,7 +127,7 @@ pub fn open(
 /// If close fails terminally, shelf still releases resources and future
 /// operations on the handle return `Error(TableClosed)`.
 ///
-pub fn close(table: PSet(k, v)) -> Result(Nil, ShelfError) {
+pub fn close(table: PersistentSet(k, v)) -> Result(Nil, ShelfError) {
   internal.close(table.ets, table.dets, table.guardian)
 }
 
@@ -146,7 +152,7 @@ pub fn with_table(
   base_directory base_directory: String,
   key key_decoder: Decoder(k),
   value value_decoder: Decoder(v),
-  fun fun: fn(PSet(k, v)) -> Result(a, ShelfError),
+  fun fun: fn(PersistentSet(k, v)) -> Result(a, ShelfError),
 ) -> Result(a, ShelfError) {
   internal.generic_with_table(
     fn() {
@@ -159,6 +165,7 @@ pub fn with_table(
       )
     },
     close,
+    fn(table) { internal.cleanup(table.ets, table.dets, table.guardian) },
     fun,
   )
 }
@@ -172,13 +179,19 @@ pub fn with_table(
 ///
 /// Returns `Error(NotFound)` if the key does not exist.
 ///
-pub fn lookup(from table: PSet(k, v), key key: k) -> Result(v, ShelfError) {
+pub fn lookup(
+  from table: PersistentSet(k, v),
+  key key: k,
+) -> Result(v, ShelfError) {
   ffi_lookup_set(table.ets, key)
 }
 
 /// Check if a key exists without returning the value.
 ///
-pub fn member(of table: PSet(k, v), key key: k) -> Result(Bool, ShelfError) {
+pub fn member(
+  of table: PersistentSet(k, v),
+  key key: k,
+) -> Result(Bool, ShelfError) {
   internal.member(table.ets, key)
 }
 
@@ -186,14 +199,16 @@ pub fn member(of table: PSet(k, v), key key: k) -> Result(Bool, ShelfError) {
 ///
 /// **Warning**: loads entire table into memory.
 ///
-pub fn to_list(from table: PSet(k, v)) -> Result(List(#(k, v)), ShelfError) {
+pub fn to_list(
+  from table: PersistentSet(k, v),
+) -> Result(List(#(k, v)), ShelfError) {
   internal.to_list(table.ets)
 }
 
 /// Fold over all entries. Order is unspecified.
 ///
 pub fn fold(
-  over table: PSet(k, v),
+  over table: PersistentSet(k, v),
   from initial: acc,
   with fun: fn(acc, k, v) -> acc,
 ) -> Result(acc, ShelfError) {
@@ -202,7 +217,7 @@ pub fn fold(
 
 /// Return the number of entries in the table.
 ///
-pub fn size(of table: PSet(k, v)) -> Result(Int, ShelfError) {
+pub fn size(of table: PersistentSet(k, v)) -> Result(Int, ShelfError) {
   internal.size(table.ets)
 }
 
@@ -214,7 +229,7 @@ pub fn size(of table: PSet(k, v)) -> Result(Int, ShelfError) {
 /// In WriteThrough mode, both ETS and DETS are updated.
 ///
 pub fn insert(
-  into table: PSet(k, v),
+  into table: PersistentSet(k, v),
   key key: k,
   value value: v,
 ) -> Result(Nil, ShelfError) {
@@ -224,7 +239,7 @@ pub fn insert(
 /// Insert multiple key-value pairs at once.
 ///
 pub fn insert_list(
-  into table: PSet(k, v),
+  into table: PersistentSet(k, v),
   entries entries: List(#(k, v)),
 ) -> Result(Nil, ShelfError) {
   internal.generic_insert_list(table.ets, table.dets, table.write_mode, entries)
@@ -239,7 +254,7 @@ pub fn insert_list(
 /// there is no race between the check and write.
 ///
 pub fn insert_new(
-  into table: PSet(k, v),
+  into table: PersistentSet(k, v),
   key key: k,
   value value: v,
 ) -> Result(Nil, ShelfError) {
@@ -264,7 +279,10 @@ pub fn insert_new(
 
 /// Delete the entry with the given key.
 ///
-pub fn delete_key(from table: PSet(k, v), key key: k) -> Result(Nil, ShelfError) {
+pub fn delete_key(
+  from table: PersistentSet(k, v),
+  key key: k,
+) -> Result(Nil, ShelfError) {
   internal.generic_delete_key(table.ets, table.dets, table.write_mode, key)
 }
 
@@ -277,7 +295,7 @@ pub fn delete_key(from table: PSet(k, v), key key: k) -> Result(Nil, ShelfError)
 /// update.
 ///
 pub fn delete_object(
-  from table: PSet(k, v),
+  from table: PersistentSet(k, v),
   key key: k,
   value value: v,
 ) -> Result(Nil, ShelfError) {
@@ -295,7 +313,7 @@ pub fn delete_object(
 /// The table remains open and usable after this call — only the data
 /// is removed. To release the table entirely, use `close`.
 ///
-pub fn delete_all(from table: PSet(k, v)) -> Result(Nil, ShelfError) {
+pub fn delete_all(from table: PersistentSet(k, v)) -> Result(Nil, ShelfError) {
   internal.generic_delete_all(table.ets, table.dets, table.write_mode)
 }
 
@@ -317,7 +335,7 @@ pub fn delete_all(from table: PSet(k, v)) -> Result(Nil, ShelfError) {
 /// let assert Ok(Nil) = set.save(table)
 /// ```
 ///
-pub fn save(table: PSet(k, v)) -> Result(Nil, ShelfError) {
+pub fn save(table: PersistentSet(k, v)) -> Result(Nil, ShelfError) {
   internal.save(table.ets, table.dets)
 }
 
@@ -328,7 +346,7 @@ pub fn save(table: PSet(k, v)) -> Result(Nil, ShelfError) {
 /// Only useful in WriteBack mode — in WriteThrough mode, ETS and
 /// DETS are always in sync.
 ///
-pub fn reload(table: PSet(k, v)) -> Result(Nil, ShelfError) {
+pub fn reload(table: PersistentSet(k, v)) -> Result(Nil, ShelfError) {
   internal.generic_reload(table.ets, table.dets, table.entry_decoder)
 }
 
@@ -340,7 +358,7 @@ pub fn reload(table: PSet(k, v)) -> Result(Nil, ShelfError) {
 /// the [Durability story](https://shelf.tylerbutler.com/advanced/persistence-operations/#durability-story)
 /// for what `sync()` does and does not guarantee.
 ///
-pub fn sync(table: PSet(k, v)) -> Result(Nil, ShelfError) {
+pub fn sync(table: PersistentSet(k, v)) -> Result(Nil, ShelfError) {
   internal.sync_dets(table.ets, table.dets)
 }
 
@@ -361,40 +379,40 @@ pub fn sync(table: PSet(k, v)) -> Result(Nil, ShelfError) {
 /// supports update_counter), then DETS is updated. If the DETS write fails,
 /// the ETS increment is rolled back by applying the negated amount.
 pub fn update_counter(
-  in table: PSet(k, Int),
+  in table: PersistentSet(k, Int),
   key key: k,
   increment amount: Int,
 ) -> Result(Int, ShelfError) {
-  use new_val <- result.try(ffi_update_counter(table.ets, key, amount))
+  use new_value <- result.try(ffi_update_counter(table.ets, key, amount))
   case table.write_mode {
     shelf.WriteThrough ->
-      case internal.dets_insert(table.dets, #(key, new_val)) {
-        Ok(Nil) -> Ok(new_val)
+      case internal.dets_insert(table.dets, #(key, new_value)) {
+        Ok(Nil) -> Ok(new_value)
         Error(e) -> {
           // Undo ETS change to maintain consistency
           let _ = ffi_update_counter(table.ets, key, -amount)
           Error(e)
         }
       }
-    shelf.WriteBack -> Ok(new_val)
+    shelf.WriteBack -> Ok(new_value)
   }
 }
 
 // ── FFI bindings (set-specific) ─────────────────────────────────────────
 
 @external(erlang, "shelf_ffi", "lookup_set")
-fn ffi_lookup_set(ets: EtsRef, key: k) -> Result(v, ShelfError)
+fn ffi_lookup_set(ets: EtsReference, key: k) -> Result(v, ShelfError)
 
 @external(erlang, "shelf_ffi", "insert_new")
 fn ffi_insert_new(
-  ets: EtsRef,
-  dets: DetsRef,
+  ets: EtsReference,
+  dets: DetsReference,
   object: #(k, v),
 ) -> Result(Nil, ShelfError)
 
 @external(erlang, "shelf_ffi", "update_counter")
 fn ffi_update_counter(
-  ets: EtsRef,
+  ets: EtsReference,
   key: k,
   increment: Int,
 ) -> Result(Int, ShelfError)

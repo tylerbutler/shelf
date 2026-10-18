@@ -1,4 +1,4 @@
-/// Tag Index — demonstrates shelf's PBag (persistent bag table).
+/// Tag Index — demonstrates shelf's PersistentBag (persistent bag table).
 ///
 /// A bag table allows multiple distinct values per key. Duplicate key-value
 /// pairs are silently ignored, but the same key can map to many different
@@ -14,7 +14,7 @@ import gleam/string
 import shelf
 import shelf/bag
 
-pub fn main() {
+pub fn main() -> Nil {
   // --- 1. Open a persistent bag table ---
   // The table is backed by an ETS bag in memory and a DETS file on disk.
   let assert Ok(tags) =

@@ -1,14 +1,14 @@
 import gleam/dynamic/decode
 import shelf/set
-import test_helpers
+import test_helper
 
 /// Write a raw entry directly into DETS, bypassing shelf's type checks.
 @external(erlang, "reload_atomicity_test_ffi", "write_raw_dets_entry")
 fn write_raw_dets_entry(path: String, key: String, value: a) -> Nil
 
-pub fn reload_failure_preserves_original_ets_data_test() {
+pub fn reload_failure_preserves_original_ets_data_test() -> Nil {
   let path = "/tmp/shelf_reload_atom.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
 
   // Open table with String keys and Int values
   let assert Ok(table) =
@@ -37,13 +37,13 @@ pub fn reload_failure_preserves_original_ets_data_test() {
   let assert Ok(2) = set.size(table)
 
   let assert Ok(Nil) = set.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn successful_reload_replaces_ets_contents_test() {
+pub fn successful_reload_replaces_ets_contents_test() -> Nil {
   let path = "/tmp/shelf_reload_ok.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
 
   let assert Ok(table) =
     set.open(
@@ -69,6 +69,6 @@ pub fn successful_reload_replaces_ets_contents_test() {
   let assert Error(_) = set.lookup(table, "y")
 
   let assert Ok(Nil) = set.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }

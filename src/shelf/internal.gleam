@@ -9,15 +9,23 @@ import shelf.{type Config, type ShelfError, type WriteMode}
 
 /// Raw ETS table reference (Erlang tid).
 @internal
-pub type EtsRef
+pub type EtsReference
 
 /// Raw DETS table reference (Erlang atom).
 @internal
-pub type DetsRef
+pub type DetsReference
 
 /// Guardian process PID — monitors the owner and cleans up DETS on crash.
 @internal
-pub type GuardianRef
+pub type GuardianReference
+
+/// Native ETS/DETS kinds, represented by the atoms set, bag, duplicate_bag.
+@internal
+pub type TableKind {
+  Set
+  Bag
+  DuplicateBag
+}
 
 // ── Shared helpers ──────────────────────────────────────────────────────
 
@@ -39,8 +47,8 @@ pub fn build_entry_decoder(
 /// Any entry that fails decoding causes the load to fail with `TypeMismatch`.
 @internal
 pub fn stream_validate_and_load(
-  ets: EtsRef,
-  dets: DetsRef,
+  ets: EtsReference,
+  dets: DetsReference,
   entry_decoder: Decoder(#(k, v)),
 ) -> Result(Nil, ShelfError) {
   let decoder_fn = fn(entry: Dynamic) -> Result(
@@ -54,8 +62,8 @@ pub fn stream_validate_and_load(
 
 @external(erlang, "shelf_ffi", "dets_fold_into_ets_strict")
 fn ffi_dets_fold_into_ets_strict(
-  dets: DetsRef,
-  ets: EtsRef,
+  dets: DetsReference,
+  ets: EtsReference,
   decoder_fn: fn(Dynamic) -> Result(#(k, v), List(decode.DecodeError)),
 ) -> Result(Nil, ShelfError)
 
@@ -66,11 +74,11 @@ fn ffi_dets_fold_into_ets_strict(
 @internal
 pub fn generic_open(
   config: Config,
-  table_type: String,
+  table_type: TableKind,
   key_decoder: Decoder(k),
   value_decoder: Decoder(v),
 ) -> Result(
-  #(EtsRef, DetsRef, GuardianRef, WriteMode, Decoder(#(k, v))),
+  #(EtsReference, DetsReference, GuardianReference, WriteMode, Decoder(#(k, v))),
   ShelfError,
 ) {
   let name = shelf.get_name(config)
@@ -78,10 +86,10 @@ pub fn generic_open(
   let base_directory = shelf.get_base_directory(config)
   let write_mode = shelf.get_write_mode(config)
   use resolved_path <- result.try(shelf.validate_path(path, base_directory))
-  use refs <- result.try(open_no_load(name, resolved_path, table_type))
-  let ets = refs.0
-  let dets = refs.1
-  let guardian = refs.2
+  use references <- result.try(open_no_load(name, resolved_path, table_type))
+  let ets = references.0
+  let dets = references.1
+  let guardian = references.2
   let entry_decoder = build_entry_decoder(key_decoder, value_decoder)
   case stream_validate_and_load(ets, dets, entry_decoder) {
     Ok(Nil) -> Ok(#(ets, dets, guardian, write_mode, entry_decoder))
@@ -97,8 +105,8 @@ pub fn generic_open(
 /// never leaves ETS in a divergent state.
 @internal
 pub fn generic_insert(
-  ets: EtsRef,
-  dets: DetsRef,
+  ets: EtsReference,
+  dets: DetsReference,
   write_mode: WriteMode,
   key: k,
   value: v,
@@ -115,8 +123,8 @@ pub fn generic_insert(
 /// Generic insert_list with write-through support.
 @internal
 pub fn generic_insert_list(
-  ets: EtsRef,
-  dets: DetsRef,
+  ets: EtsReference,
+  dets: DetsReference,
   write_mode: WriteMode,
   entries: List(#(k, v)),
 ) -> Result(Nil, ShelfError) {
@@ -132,8 +140,8 @@ pub fn generic_insert_list(
 /// Generic delete_key with write-through support.
 @internal
 pub fn generic_delete_key(
-  ets: EtsRef,
-  dets: DetsRef,
+  ets: EtsReference,
+  dets: DetsReference,
   write_mode: WriteMode,
   key: k,
 ) -> Result(Nil, ShelfError) {
@@ -149,8 +157,8 @@ pub fn generic_delete_key(
 /// Generic delete_object with write-through support.
 @internal
 pub fn generic_delete_object(
-  ets: EtsRef,
-  dets: DetsRef,
+  ets: EtsReference,
+  dets: DetsReference,
   write_mode: WriteMode,
   key: k,
   value: v,
@@ -167,8 +175,8 @@ pub fn generic_delete_object(
 /// Generic delete_all with write-through support.
 @internal
 pub fn generic_delete_all(
-  ets: EtsRef,
-  dets: DetsRef,
+  ets: EtsReference,
+  dets: DetsReference,
   write_mode: WriteMode,
 ) -> Result(Nil, ShelfError) {
   case write_mode {
@@ -184,8 +192,8 @@ pub fn generic_delete_all(
 /// On failure the live ETS table is untouched.
 @internal
 pub fn generic_reload(
-  ets: EtsRef,
-  dets: DetsRef,
+  ets: EtsReference,
+  dets: DetsReference,
   entry_decoder: Decoder(#(k, v)),
 ) -> Result(Nil, ShelfError) {
   let decoder_fn = fn(entry: Dynamic) -> Result(
@@ -199,17 +207,20 @@ pub fn generic_reload(
 
 @external(erlang, "shelf_ffi", "reload_atomic")
 fn ffi_reload_atomic(
-  ets: EtsRef,
-  dets: DetsRef,
+  ets: EtsReference,
+  dets: DetsReference,
   decoder_fn: fn(Dynamic) -> Result(#(k, v), List(decode.DecodeError)),
 ) -> Result(Nil, ShelfError)
 
 /// Shared with_table implementation: open, run callback (with panic rescue),
-/// then close. Preserves crash detail from the rescue FFI.
+/// then close. Unlike explicit close, a scope cannot leave a retryable handle
+/// behind: force cleanup on close failure, preserving the original error.
+/// Preserves crash detail from the rescue FFI.
 @internal
 pub fn generic_with_table(
   open_fn: fn() -> Result(table, ShelfError),
   close_fn: fn(table) -> Result(Nil, ShelfError),
+  cleanup_fn: fn(table) -> Result(Nil, ShelfError),
   fun: fn(table) -> Result(a, ShelfError),
 ) -> Result(a, ShelfError) {
   use table <- result.try(open_fn())
@@ -219,11 +230,15 @@ pub fn generic_with_table(
   }
   case close_fn(table) {
     Ok(Nil) -> callback_result
-    Error(close_err) ->
+    Error(close_error) -> {
+      // Cleanup checks the original ETS handle before touching DETS, so a
+      // callback that closed and reopened the path cannot lose its new table.
+      let _ = cleanup_fn(table)
       case callback_result {
-        Ok(_) -> Error(close_err)
+        Ok(_) -> Error(close_error)
         Error(_) -> callback_result
       }
+    }
   }
 }
 
@@ -233,7 +248,7 @@ pub fn rescue(fun: fn() -> a) -> Result(a, String)
 /// Generic fold with key-value destructuring.
 @internal
 pub fn generic_fold(
-  ets: EtsRef,
+  ets: EtsReference,
   initial: acc,
   fun: fn(acc, k, v) -> acc,
 ) -> Result(acc, ShelfError) {
@@ -250,106 +265,116 @@ pub fn generic_fold(
 pub fn open_no_load(
   name: String,
   path: String,
-  table_type: String,
-) -> Result(#(EtsRef, DetsRef, GuardianRef), ShelfError)
+  table_type: TableKind,
+) -> Result(#(EtsReference, DetsReference, GuardianReference), ShelfError)
 
 @external(erlang, "shelf_ffi", "cleanup")
 @internal
 pub fn cleanup(
-  ets: EtsRef,
-  dets: DetsRef,
-  guardian: GuardianRef,
+  ets: EtsReference,
+  dets: DetsReference,
+  guardian: GuardianReference,
 ) -> Result(Nil, ShelfError)
 
 @external(erlang, "shelf_ffi", "close")
 @internal
 pub fn close(
-  ets: EtsRef,
-  dets: DetsRef,
-  guardian: GuardianRef,
+  ets: EtsReference,
+  dets: DetsReference,
+  guardian: GuardianReference,
 ) -> Result(Nil, ShelfError)
 
 @external(erlang, "shelf_ffi", "insert")
 @internal
 pub fn insert(
-  ets: EtsRef,
-  dets: DetsRef,
+  ets: EtsReference,
+  dets: DetsReference,
   object: #(k, v),
 ) -> Result(Nil, ShelfError)
 
 @external(erlang, "shelf_ffi", "insert_list")
 @internal
 pub fn insert_list(
-  ets: EtsRef,
-  dets: DetsRef,
+  ets: EtsReference,
+  dets: DetsReference,
   objects: List(#(k, v)),
 ) -> Result(Nil, ShelfError)
 
 @external(erlang, "shelf_ffi", "member")
 @internal
-pub fn member(ets: EtsRef, key: k) -> Result(Bool, ShelfError)
+pub fn member(ets: EtsReference, key: k) -> Result(Bool, ShelfError)
 
 @external(erlang, "shelf_ffi", "to_list")
 @internal
-pub fn to_list(ets: EtsRef) -> Result(List(#(k, v)), ShelfError)
+pub fn to_list(ets: EtsReference) -> Result(List(#(k, v)), ShelfError)
 
 @external(erlang, "shelf_ffi", "fold")
 @internal
 pub fn fold(
-  ets: EtsRef,
+  ets: EtsReference,
   fun: fn(#(k, v), acc) -> acc,
   acc: acc,
 ) -> Result(acc, ShelfError)
 
 @external(erlang, "shelf_ffi", "size")
 @internal
-pub fn size(ets: EtsRef) -> Result(Int, ShelfError)
+pub fn size(ets: EtsReference) -> Result(Int, ShelfError)
 
 @external(erlang, "shelf_ffi", "delete_key")
 @internal
-pub fn delete_key(ets: EtsRef, key: k) -> Result(Nil, ShelfError)
+pub fn delete_key(ets: EtsReference, key: k) -> Result(Nil, ShelfError)
 
 @external(erlang, "shelf_ffi", "delete_object")
 @internal
-pub fn delete_object(ets: EtsRef, key: k, value: v) -> Result(Nil, ShelfError)
+pub fn delete_object(
+  ets: EtsReference,
+  key: k,
+  value: v,
+) -> Result(Nil, ShelfError)
 
 @external(erlang, "shelf_ffi", "delete_all")
 @internal
-pub fn delete_all(ets: EtsRef) -> Result(Nil, ShelfError)
+pub fn delete_all(ets: EtsReference) -> Result(Nil, ShelfError)
 
 @external(erlang, "shelf_ffi", "save")
 @internal
-pub fn save(ets: EtsRef, dets: DetsRef) -> Result(Nil, ShelfError)
+pub fn save(ets: EtsReference, dets: DetsReference) -> Result(Nil, ShelfError)
 
 @external(erlang, "shelf_ffi", "sync_dets")
 @internal
-pub fn sync_dets(ets: EtsRef, dets: DetsRef) -> Result(Nil, ShelfError)
+pub fn sync_dets(
+  ets: EtsReference,
+  dets: DetsReference,
+) -> Result(Nil, ShelfError)
 
 // ── Targeted DETS operations (for WriteThrough mode) ────────────────────
 
 @external(erlang, "shelf_ffi", "dets_insert")
 @internal
-pub fn dets_insert(dets: DetsRef, object: #(k, v)) -> Result(Nil, ShelfError)
+pub fn dets_insert(
+  dets: DetsReference,
+  object: #(k, v),
+) -> Result(Nil, ShelfError)
 
 @external(erlang, "shelf_ffi", "dets_insert_list")
 @internal
 pub fn dets_insert_list(
-  dets: DetsRef,
+  dets: DetsReference,
   objects: List(#(k, v)),
 ) -> Result(Nil, ShelfError)
 
 @external(erlang, "shelf_ffi", "dets_delete_key")
 @internal
-pub fn dets_delete_key(dets: DetsRef, key: k) -> Result(Nil, ShelfError)
+pub fn dets_delete_key(dets: DetsReference, key: k) -> Result(Nil, ShelfError)
 
 @external(erlang, "shelf_ffi", "dets_delete_object")
 @internal
 pub fn dets_delete_object(
-  dets: DetsRef,
+  dets: DetsReference,
   key: k,
   value: v,
 ) -> Result(Nil, ShelfError)
 
 @external(erlang, "shelf_ffi", "dets_delete_all")
 @internal
-pub fn dets_delete_all(dets: DetsRef) -> Result(Nil, ShelfError)
+pub fn dets_delete_all(dets: DetsReference) -> Result(Nil, ShelfError)

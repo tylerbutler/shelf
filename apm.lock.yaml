@@ -248,7 +248,7 @@ deployments:
   owners:
   - .
   active_owner: .
-  content_hash: sha256:2f3227c88da3c11dede7701d9e01fe29e11aeda656bdba1058b1e26df8657a18
+  content_hash: sha256:9b13780cffd4f8315c083c541d874f2c07eec3f38b58239dac916711dfa9a0b0
 - kind: project-relative
   target: claude
   value: .claude/agents/shelf-otp-performance-expert.md
@@ -257,7 +257,7 @@ deployments:
   owners:
   - .
   active_owner: .
-  content_hash: sha256:2f0acb32089cb4751d4b457257268b0c9cf5bee40aa05e8fe2eac3f7374acbab
+  content_hash: sha256:1ab97c8c07ead738367b8118ee69d25926fef6b52105a9f72c348148075397d2
 - kind: project-relative
   target: claude
   value: .claude/commands/create-pr.md
@@ -995,7 +995,7 @@ deployments:
   owners:
   - .
   active_owner: .
-  content_hash: sha256:2f3227c88da3c11dede7701d9e01fe29e11aeda656bdba1058b1e26df8657a18
+  content_hash: sha256:9b13780cffd4f8315c083c541d874f2c07eec3f38b58239dac916711dfa9a0b0
 - kind: project-relative
   target: copilot
   value: .github/agents/shelf-otp-performance-expert.agent.md
@@ -1004,7 +1004,7 @@ deployments:
   owners:
   - .
   active_owner: .
-  content_hash: sha256:2f0acb32089cb4751d4b457257268b0c9cf5bee40aa05e8fe2eac3f7374acbab
+  content_hash: sha256:1ab97c8c07ead738367b8118ee69d25926fef6b52105a9f72c348148075397d2
 - kind: project-relative
   target: copilot
   value: .github/hooks/ponytail-copilot-hooks.json
@@ -1070,8 +1070,8 @@ local_deployed_files:
 - .github/agents/shelf-otp-performance-expert.agent.md
 local_deployed_file_hashes:
   .agents/skills/add-changelog-entry/SKILL.md: sha256:663bbbe9027b039076a057e73425e1af17884e1bc9c147fa0a4f27ee549beec4
-  .claude/agents/shelf-otp-expert.md: sha256:2f3227c88da3c11dede7701d9e01fe29e11aeda656bdba1058b1e26df8657a18
-  .claude/agents/shelf-otp-performance-expert.md: sha256:2f0acb32089cb4751d4b457257268b0c9cf5bee40aa05e8fe2eac3f7374acbab
+  .claude/agents/shelf-otp-expert.md: sha256:9b13780cffd4f8315c083c541d874f2c07eec3f38b58239dac916711dfa9a0b0
+  .claude/agents/shelf-otp-performance-expert.md: sha256:1ab97c8c07ead738367b8118ee69d25926fef6b52105a9f72c348148075397d2
   .claude/skills/add-changelog-entry/SKILL.md: sha256:663bbbe9027b039076a057e73425e1af17884e1bc9c147fa0a4f27ee549beec4
-  .github/agents/shelf-otp-expert.agent.md: sha256:2f3227c88da3c11dede7701d9e01fe29e11aeda656bdba1058b1e26df8657a18
-  .github/agents/shelf-otp-performance-expert.agent.md: sha256:2f0acb32089cb4751d4b457257268b0c9cf5bee40aa05e8fe2eac3f7374acbab
+  .github/agents/shelf-otp-expert.agent.md: sha256:9b13780cffd4f8315c083c541d874f2c07eec3f38b58239dac916711dfa9a0b0
+  .github/agents/shelf-otp-performance-expert.agent.md: sha256:1ab97c8c07ead738367b8118ee69d25926fef6b52105a9f72c348148075397d2

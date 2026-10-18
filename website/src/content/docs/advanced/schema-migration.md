@@ -9,8 +9,8 @@ DETS file fails with `Error(TypeMismatch(...))` — the new decoders
 reject the on-disk entries.
 
 This page documents the canonical migration procedure. A runnable
-implementation lives at
-[`examples/src/schema_migration.gleam`](https://github.com/tylerbutler/shelf/blob/main/examples/src/schema_migration.gleam).
+implementation is
+[`examples/src/shelf_examples/schema_migration.gleam`](https://github.com/tylerbutler/shelf/blob/main/examples/src/shelf_examples/schema_migration.gleam).
 
 ## When to migrate vs. when to rebuild
 

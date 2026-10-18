@@ -122,12 +122,28 @@ unregister_dets_name(Path) ->
     ets:delete(?REGISTRY, Path),
     ok.
 
+%% Only called after checking the original ETS handle's lifetime/ownership.
+%% A failed save can close DETS and fail to reopen it, losing its filename
+%% while its name remains reserved in the registry. Recover only a unique
+%% mapping: a name-wide match_delete could erase another path's reservation.
+unregister_dets_name(undefined, Dets) ->
+    ensure_registry(),
+    case ets:match_object(?REGISTRY, {'_', Dets}) of
+        [{Path, Dets}] -> unregister_dets_name(Path, Dets);
+        [] -> ok;
+        [_, _ | _] -> ok  %% Ambiguous mapping: do not remove other paths.
+    end;
+unregister_dets_name(Path, Dets) ->
+    ensure_registry(),
+    %% Do not erase a replacement mapping with a different DETS name.
+    ets:delete_object(?REGISTRY, {Path, Dets}),
+    ok.
+
 %% ── Open (no load) ──────────────────────────────────────────────────────
 %% Creates an ETS table + opens a DETS file but does NOT load DETS into ETS.
 %% Used by the validated loading path where Gleam decodes entries before insertion.
 
-open_no_load(_Name, Path, TypeBin) ->
-    Type = binary_to_atom(TypeBin, utf8),
+open_no_load(_Name, Path, Type) ->
     DetsName = path_to_dets_name(Path),
     try
         {ok, Dets} = dets:open_file(DetsName, [
@@ -254,21 +270,16 @@ stop_guardian(Guardian) ->
     ok.
 
 %% ── Cleanup ─────────────────────────────────────────────────────────────
-%% Delete ETS table and close DETS without saving. Used on validation failure.
+%% Delete ETS table and close DETS without saving. Used on validation failure
+%% and when a with_table scope cannot retain a retryable close failure.
 
 cleanup(Ets, Dets, Guardian) ->
-    stop_guardian(Guardian),
-    Path = try dets_to_path(Dets) catch _:_ -> undefined end,
-    DetsResult = (catch dets:close(Dets)),
-    _ = (catch ets:delete(Ets)),
-    case Path of
-        undefined -> ok;
-        _ -> unregister_dets_name(Path)
-    end,
-    case DetsResult of
-        ok -> {ok, nil};
-        {error, Reason} -> {error, translate_error(Reason)};
-        _ -> {ok, nil}
+    %% The ETS reference identifies this handle's lifetime; the DETS atom can
+    %% already belong to a different table reopened by the callback. Never
+    %% look up its path or close it after the original ETS handle is gone.
+    case check_owner(Ets) of
+        {error, _} = Error -> Error;
+        ok -> finalize_close(Ets, Dets, Guardian, dets_to_path(Dets))
     end.
 
 %% ── Close ───────────────────────────────────────────────────────────────
@@ -310,10 +321,7 @@ finalize_close(Ets, Dets, Guardian, Path) ->
     stop_guardian(Guardian),
     CloseResult = close_dets_handle(Dets),
     _ = (catch ets:delete(Ets)),
-    case Path of
-        undefined -> ok;
-        _ -> unregister_dets_name(Path)
-    end,
+    unregister_dets_name(Path, Dets),
     case CloseResult of
         ok -> {ok, nil};
         {error, Reason} -> {error, Reason}
@@ -323,10 +331,7 @@ teardown_resources(Ets, Dets, Guardian, Path) ->
     stop_guardian(Guardian),
     _ = close_dets_handle(Dets),
     _ = (catch ets:delete(Ets)),
-    case Path of
-        undefined -> ok;
-        _ -> unregister_dets_name(Path)
-    end,
+    unregister_dets_name(Path, Dets),
     ok.
 
 close_dets_handle(Dets) ->
@@ -512,11 +517,18 @@ safe_save_impl(Ets, Dets, OrigPath, TmpPath, Type) ->
             _ = (catch dets:close(TmpName)),
             _ = (catch file:delete(TmpPathList)),
             %% Try to reopen original if it was closed
-            _ = (catch dets:open_file(Dets, [
-                {file, OrigPathList},
-                {type, Type},
-                {repair, true}
-            ])),
+            %% Opening an already-open DETS table again increments this
+            %% caller's open count. A later cleanup would then leave DETS
+            %% open, and a reopened table could read stale disk contents.
+            case dets:info(Dets) of
+                undefined ->
+                    _ = (catch dets:open_file(Dets, [
+                        {file, OrigPathList},
+                        {type, Type},
+                        {repair, true}
+                    ]));
+                _ -> ok
+            end,
             {error, translate_error(Error)}
     end.
 

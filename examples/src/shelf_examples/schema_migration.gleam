@@ -28,19 +28,21 @@ import gleam/list
 import shelf/set
 import simplifile
 
-const data_dir = "/tmp"
+const data_directory = "/tmp"
 
 const live_path = "shelf_examples_migration.dets"
 
 const new_path = "shelf_examples_migration.new.dets"
 
-pub fn main() {
+pub fn main() -> Nil {
   // Reset previous runs.
-  let _ = simplifile.delete(data_dir <> "/" <> live_path)
-  let _ = simplifile.delete(data_dir <> "/" <> new_path)
+  let _ = simplifile.delete(data_directory <> "/" <> live_path)
+  let _ = simplifile.delete(data_directory <> "/" <> new_path)
 
   seed_v1_file()
-  io.println("✓ Seeded a v1 DETS file at " <> data_dir <> "/" <> live_path)
+  io.println(
+    "✓ Seeded a v1 DETS file at " <> data_directory <> "/" <> live_path,
+  )
 
   migrate()
   io.println("✓ Migration complete")
@@ -48,19 +50,19 @@ pub fn main() {
   reopen_and_print()
 
   // Cleanup.
-  let _ = simplifile.delete(data_dir <> "/" <> live_path)
+  let _ = simplifile.delete(data_directory <> "/" <> live_path)
   io.println("✓ Cleaned up example files")
 }
 
 // --- Setup: pretend a previous version of the app left a DETS file
 // --- behind whose values are plain strings. ----------------------------
 
-fn seed_v1_file() {
+fn seed_v1_file() -> Nil {
   let assert Ok(legacy) =
     set.open(
       name: "sessions_v1",
       path: live_path,
-      base_directory: data_dir,
+      base_directory: data_directory,
       key: decode.string,
       value: decode.string,
     )
@@ -76,13 +78,13 @@ fn seed_v1_file() {
 
 // --- The 6-step migration. --------------------------------------------
 
-fn migrate() {
+fn migrate() -> Nil {
   // Step 1: open OLD file with OLD decoders (so existing entries pass).
   let assert Ok(old_table) =
     set.open(
       name: "sessions_v1_migration",
       path: live_path,
-      base_directory: data_dir,
+      base_directory: data_directory,
       key: decode.string,
       value: decode.string,
     )
@@ -107,7 +109,7 @@ fn migrate() {
     set.open(
       name: "sessions_v2_migration",
       path: new_path,
-      base_directory: data_dir,
+      base_directory: data_directory,
       key: decode.string,
       value: new_value_decoder(),
     )
@@ -119,17 +121,20 @@ fn migrate() {
   //         destination are on the same filesystem — atomic from the
   //         perspective of any future open() at `live_path`.
   let assert Ok(Nil) =
-    simplifile.rename(data_dir <> "/" <> new_path, data_dir <> "/" <> live_path)
+    simplifile.rename(
+      data_directory <> "/" <> new_path,
+      data_directory <> "/" <> live_path,
+    )
   Nil
 }
 
 // Step 6: open the migrated file with the NEW decoders for normal use.
-fn reopen_and_print() {
+fn reopen_and_print() -> Nil {
   let assert Ok(table) =
     set.open(
       name: "sessions_v2",
       path: live_path,
-      base_directory: data_dir,
+      base_directory: data_directory,
       key: decode.string,
       value: new_value_decoder(),
     )

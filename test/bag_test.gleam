@@ -1,14 +1,15 @@
 import gleam/dynamic/decode
+import gleam/int
 import gleam/list
 import gleam/order
 import gleam/string
 import shelf
 import shelf/bag
-import test_helpers
+import test_helper
 
-pub fn opens_and_closes_a_bag_table_test() {
+pub fn opens_and_closes_a_bag_table_test() -> Nil {
   let path = "/tmp/shelf_bag_lifecycle.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     bag.open(
       name: "bag_lifecycle",
@@ -17,14 +18,16 @@ pub fn opens_and_closes_a_bag_table_test() {
       key: decode.string,
       value: decode.string,
     )
+  let legacy: bag.PBag(String, String) = table
+  let table: bag.PersistentBag(String, String) = legacy
   let assert Ok(Nil) = bag.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn with_table_opens_and_auto_closes_test() {
+pub fn with_table_opens_and_auto_closes_test() -> Nil {
   let path = "/tmp/shelf_bag_with_table.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(["hello"]) = {
     use table <- bag.with_table(
       "bag_with_table",
@@ -36,13 +39,13 @@ pub fn with_table_opens_and_auto_closes_test() {
     let assert Ok(Nil) = bag.insert(table, "key", "hello")
     bag.lookup(table, "key")
   }
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn stores_multiple_values_per_key_test() {
+pub fn stores_multiple_values_per_key_test() -> Nil {
   let path = "/tmp/shelf_bag_multi.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     bag.open(
       name: "bag_multi",
@@ -57,13 +60,13 @@ pub fn stores_multiple_values_per_key_test() {
   let sorted = list.sort(values, string.compare)
   assert sorted == ["blue", "red"]
   let assert Ok(Nil) = bag.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn deduplicates_identical_key_value_pairs_test() {
+pub fn deduplicates_identical_key_value_pairs_test() -> Nil {
   let path = "/tmp/shelf_bag_dedup.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     bag.open(
       name: "bag_dedup",
@@ -77,13 +80,13 @@ pub fn deduplicates_identical_key_value_pairs_test() {
   let assert Ok(values) = bag.lookup(table, "tag")
   assert values == ["gleam"]
   let assert Ok(Nil) = bag.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn returns_not_found_for_missing_key_test() {
+pub fn returns_not_found_for_missing_key_test() -> Nil {
   let path = "/tmp/shelf_bag_notfound.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     bag.open(
       name: "bag_notfound",
@@ -94,13 +97,13 @@ pub fn returns_not_found_for_missing_key_test() {
     )
   assert bag.lookup(table, "missing") == Error(shelf.NotFound)
   let assert Ok(Nil) = bag.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn member_checks_key_existence_test() {
+pub fn member_checks_key_existence_test() -> Nil {
   let path = "/tmp/shelf_bag_member.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     bag.open(
       name: "bag_member",
@@ -113,13 +116,13 @@ pub fn member_checks_key_existence_test() {
   let assert Ok(True) = bag.member(table, "exists")
   let assert Ok(False) = bag.member(table, "nope")
   let assert Ok(Nil) = bag.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn to_list_returns_all_entries_test() {
+pub fn to_list_returns_all_entries_test() -> Nil {
   let path = "/tmp/shelf_bag_to_list.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     bag.open(
       name: "bag_to_list",
@@ -134,21 +137,21 @@ pub fn to_list_returns_all_entries_test() {
   let assert Ok(entries) = bag.to_list(table)
   let sorted =
     list.sort(entries, fn(a, b) {
-      let key_cmp = string.compare(a.0, b.0)
-      case key_cmp {
-        order.Eq -> int_compare(a.1, b.1)
-        _ -> key_cmp
+      case string.compare(a.0, b.0) {
+        order.Eq -> int.compare(a.1, b.1)
+        order.Lt -> order.Lt
+        order.Gt -> order.Gt
       }
     })
   assert sorted == [#("a", 1), #("a", 3), #("b", 2)]
   let assert Ok(Nil) = bag.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn fold_accumulates_over_entries_test() {
+pub fn fold_accumulates_over_entries_test() -> Nil {
   let path = "/tmp/shelf_bag_fold.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     bag.open(
       name: "bag_fold",
@@ -161,16 +164,16 @@ pub fn fold_accumulates_over_entries_test() {
   let assert Ok(Nil) = bag.insert(table, "b", 2)
   let assert Ok(Nil) = bag.insert(table, "a", 3)
   let assert Ok(sum) =
-    bag.fold(table, from: 0, with: fn(acc, _key, val) { acc + val })
+    bag.fold(table, from: 0, with: fn(acc, _key, value) { acc + value })
   assert sum == 6
   let assert Ok(Nil) = bag.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn size_returns_entry_count_test() {
+pub fn size_returns_entry_count_test() -> Nil {
   let path = "/tmp/shelf_bag_size.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     bag.open(
       name: "bag_size",
@@ -185,13 +188,13 @@ pub fn size_returns_entry_count_test() {
   let assert Ok(Nil) = bag.insert(table, "b", 3)
   let assert Ok(3) = bag.size(table)
   let assert Ok(Nil) = bag.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn insert_list_inserts_multiple_entries_test() {
+pub fn insert_list_inserts_multiple_entries_test() -> Nil {
   let path = "/tmp/shelf_bag_insert_list.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     bag.open(
       name: "bag_insert_list",
@@ -202,18 +205,18 @@ pub fn insert_list_inserts_multiple_entries_test() {
     )
   let assert Ok(Nil) = bag.insert_list(table, [#("a", 1), #("b", 2), #("a", 3)])
   let assert Ok(values_a) = bag.lookup(table, "a")
-  let sorted_a = list.sort(values_a, int_compare)
+  let sorted_a = list.sort(values_a, int.compare)
   assert sorted_a == [1, 3]
   let assert Ok(values_b) = bag.lookup(table, "b")
   assert values_b == [2]
   let assert Ok(Nil) = bag.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn delete_object_removes_one_value_for_a_key_test() {
+pub fn delete_object_removes_one_value_for_a_key_test() -> Nil {
   let path = "/tmp/shelf_bag_del_obj.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     bag.open(
       name: "bag_del_obj",
@@ -228,13 +231,13 @@ pub fn delete_object_removes_one_value_for_a_key_test() {
   let assert Ok(values) = bag.lookup(table, "color")
   assert values == ["blue"]
   let assert Ok(Nil) = bag.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn delete_key_removes_all_values_for_a_key_test() {
+pub fn delete_key_removes_all_values_for_a_key_test() -> Nil {
   let path = "/tmp/shelf_bag_del_key.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     bag.open(
       name: "bag_del_key",
@@ -248,13 +251,13 @@ pub fn delete_key_removes_all_values_for_a_key_test() {
   let assert Ok(Nil) = bag.delete_key(table, "color")
   assert bag.lookup(table, "color") == Error(shelf.NotFound)
   let assert Ok(Nil) = bag.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn delete_all_removes_everything_test() {
+pub fn delete_all_removes_everything_test() -> Nil {
   let path = "/tmp/shelf_bag_del_all.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     bag.open(
       name: "bag_del_all",
@@ -268,13 +271,13 @@ pub fn delete_all_removes_everything_test() {
   let assert Ok(Nil) = bag.delete_all(table)
   let assert Ok(0) = bag.size(table)
   let assert Ok(Nil) = bag.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn save_persists_data_test() {
+pub fn save_persists_data_test() -> Nil {
   let path = "/tmp/shelf_bag_save.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     bag.open(
       name: "bag_save_1",
@@ -297,16 +300,16 @@ pub fn save_persists_data_test() {
       value: decode.int,
     )
   let assert Ok(values) = bag.lookup(table, "x")
-  let sorted = list.sort(values, int_compare)
+  let sorted = list.sort(values, int.compare)
   assert sorted == [1, 2]
   let assert Ok(Nil) = bag.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
 }
 
-pub fn reload_discards_unsaved_changes_test() {
+pub fn reload_discards_unsaved_changes_test() -> Nil {
   let path = "/tmp/shelf_bag_reload.dets"
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   let assert Ok(table) =
     bag.open(
       name: "bag_reload",
@@ -323,17 +326,6 @@ pub fn reload_discards_unsaved_changes_test() {
   let assert Ok(True) = bag.member(table, "saved")
   let assert Ok(False) = bag.member(table, "unsaved")
   let assert Ok(Nil) = bag.close(table)
-  test_helpers.cleanup(path)
+  test_helper.cleanup(path)
   Nil
-}
-
-fn int_compare(a: Int, b: Int) -> order.Order {
-  case a == b {
-    True -> order.Eq
-    False ->
-      case a < b {
-        True -> order.Lt
-        False -> order.Gt
-      }
-  }
 }

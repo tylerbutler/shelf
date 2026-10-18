@@ -1,4 +1,4 @@
-/// A simple key-value cache using shelf's PSet (persistent set table).
+/// A simple key-value cache using shelf's PersistentSet (persistent set table).
 ///
 /// This example demonstrates the core shelf/set API: opening a table,
 /// inserting and looking up entries, batch operations, persistence,
@@ -10,7 +10,7 @@ import gleam/io
 import gleam/list
 import shelf/set
 
-pub fn main() {
+pub fn main() -> Nil {
   // --- Open the table ---
   // Creates an ETS table for fast in-memory access and a DETS file
   // at the given path for disk persistence. If the file already exists,

@@ -1,6 +1,6 @@
 //// User Session Store Example
 ////
-//// Demonstrates shelf's PSet with WriteThrough mode for a user session
+//// Demonstrates shelf's PersistentSet with WriteThrough mode for a user session
 //// store where every write is immediately persisted to disk — no
 //// explicit `save()` call needed.
 ////
@@ -17,7 +17,7 @@ import gleam/string
 import shelf
 import shelf/set
 
-pub fn main() {
+pub fn main() -> Nil {
   let path = "shelf_examples_user_sessions.dets"
 
   // --- 1. Build configuration with WriteThrough mode ---
@@ -34,6 +34,8 @@ pub fn main() {
   io.println("✓ Opened user_sessions table with WriteThrough mode")
 
   // --- 3. Insert a new session (succeeds because the key is fresh) ---
+  // Reset only the demo key so this example can run again.
+  let assert Ok(Nil) = set.delete_key(from: sessions, key: "session_abc123")
   let assert Ok(Nil) =
     set.insert_new(into: sessions, key: "session_abc123", value: "alice")
   io.println("✓ Inserted session for alice")
