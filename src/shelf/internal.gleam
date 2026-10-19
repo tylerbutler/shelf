@@ -188,8 +188,9 @@ pub fn generic_delete_all(
   }
 }
 
-/// Generic reload: load DETS into a scratch table first, swap on success.
-/// On failure the live ETS table is untouched.
+/// Generic reload: validate DETS in scratch, then clear and fill live ETS.
+/// Validation failure leaves live ETS untouched. Concurrent readers can see
+/// empty or partially reloaded contents during the transfer.
 @internal
 pub fn generic_reload(
   ets: EtsReference,

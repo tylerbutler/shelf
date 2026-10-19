@@ -40,7 +40,11 @@ guarantees it gives across crashes, see [Durability story](#durability-story).
 
 ## reload
 
-Clears the ETS table and loads all DETS contents into it. Discards any unsaved changes in ETS.
+Validates DETS entries in a scratch ETS table before discarding unsaved
+changes. Validation failure leaves the live table unchanged. On success,
+reload clears the live table and copies the validated entries into it.
+Concurrent readers can see empty or partially reloaded contents during
+this transfer; reload is not a transaction.
 
 ```gleam
 // Undo unsaved changes
@@ -102,17 +106,24 @@ Practical guarantees:
 
 ## Memory cost on open and reload
 
-When a table is opened (or reloaded), shelf streams DETS entries through
-`dets:foldl/3`, validates each entry through the user-supplied decoders,
-and inserts them into ETS in batches. Peak extra memory during this
-streaming load is roughly **~1× the table size** — the previous
-materialise-then-insert approach used ~3×.
+On open, shelf streams DETS entries through `dets:foldl/3`, validates them
+with your decoders, and inserts them into ETS in batches of 5,000 entries.
+It does not create a list of the full table.
 
-This is a one-time startup cost. After the load returns, all reads and
-writes happen at raw ETS speed (no further DETS I/O on the read path).
-Startup time still scales linearly with table size, so very large tables
-(hundreds of MB+) have noticeable open latency even though peak memory is
-bounded.
+Reload first loads a scratch ETS table while the live table remains in
+memory. After validation, it clears the live table and transfers entries
+from scratch. Set transfers use selection batches of 5,000 entries. Bags
+and duplicate bags copy one complete key group at a time to preserve value
+order and duplicates. A single large key group can still require a
+full-table-sized list.
+
+Plan for both ETS tables, transfer batches, and DETS and decoder memory
+during reload. The batch size limits entry counts, not bytes; memory use
+depends on the size of your values and the runtime. Reducing transfer
+memory does not remove the scratch table.
+
+Open and reload costs grow with the number and size of entries. Reads
+after loading use ETS without further DETS I/O.
 
 This is the canonical reference for shelf's load-time memory and time
 cost; other pages link here.
