@@ -352,7 +352,6 @@ let assert Ok(entries) = set.to_list(from: table)
 - **Single node**: DETS is local to one node (use Mnesia for distribution)
 - **Table names**: Names do not need to be globally unique — shelf uses unnamed ETS tables internally. However, DETS file paths must not conflict with other open tables.
 - **Process ownership**: ETS tables are owned by the process that called `open()` and are created `protected`, so reads work from any process but writes/lifecycle calls are owner-only. See [Process Ownership](https://shelf.tylerbutler.com/advanced/limitations/#process-ownership).
-- **DETS atoms**: DETS requires atom-based table names. Shelf uses a hash-based pool to bound the number of atoms created, so atom exhaustion is not a concern in normal usage.
 - **Loading large tables**: Open and reload validate DETS entries in batches. Reload also needs a scratch ETS table and transfer memory. Details and limits: [Memory cost on open and reload](https://shelf.tylerbutler.com/advanced/persistence-operations/#memory-cost-on-open-and-reload).
 
 ## Security
