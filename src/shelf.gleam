@@ -112,8 +112,9 @@ pub type WriteMode {
   WriteBack
   /// Every write goes to both ETS and DETS immediately.
   ///
-  /// Slower writes but no data loss between saves. Reads are still
-  /// fast (always from ETS).
+  /// DETS can buffer writes in memory. Call `sync()` after critical writes;
+  /// this mode alone does not guarantee survival of a VM or OS crash.
+  /// Reads still come from ETS.
   WriteThrough
 }
 

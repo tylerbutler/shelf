@@ -57,8 +57,9 @@ To minimise data loss across crashes:
 
 - In **WriteBack** mode, save() is the explicit persistence call —
   schedule it (timer, after every N writes, at clean shutdown).
-- In **WriteThrough** mode, every write reaches DETS immediately, so the
-  on-disk file is always at most a few µs behind the in-memory table.
+- In **WriteThrough** mode, each write reaches DETS before it returns, but
+  DETS can buffer writes in memory. Call `sync()` after critical writes.
+  There is no fixed delay guarantee for writes to reach physical storage.
 
 See the [Durability story](/advanced/persistence-operations/#durability-story)
 for exactly which calls advance data past which layer.

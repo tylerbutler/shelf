@@ -11,7 +11,7 @@ shelf provides four persistence operations to control how and when data moves be
 |----------|----------|
 | `save(table)` | Atomic snapshot ETS → DETS (writes to a temp file, then renames for crash safety) |
 | `reload(table)` | Discard ETS, reload from DETS |
-| `sync(table)` | Flush DETS write buffer to OS |
+| `sync(table)` | Flush DETS writes and synchronize dirty file data |
 | `close(table)` | Save + close DETS + delete ETS |
 
 ## save
@@ -33,7 +33,9 @@ let assert Ok(Nil) = set.save(table)
 - At application shutdown
 - After critical data changes
 
-In WriteThrough mode, every write goes to DETS directly (via `dets:insert`), so data is already persisted — you rarely need to call `save()` manually.
+In WriteThrough mode, each write goes to DETS before it returns. You rarely
+need to call `save()` manually, but DETS can buffer writes in memory.
+Call `sync()` after critical writes.
 
 For exactly which on-disk layer this call advances data past, and what
 guarantees it gives across crashes, see [Durability story](#durability-story).
@@ -51,30 +53,38 @@ let assert Ok(Nil) = set.reload(table)
 
 ## sync
 
-Forces DETS's internal write buffer out to the open DETS file by calling
-`dets:sync/1`. Useful in WriteThrough mode after a critical write, when you
-need pending DETS buffers reflected in the on-disk file before continuing.
+Calls `dets:sync/1` to flush pending DETS writes. When saving a dirty
+disk-backed table, DETS also calls `file:sync/1` to synchronize file data.
+Use `sync()` after a critical WriteThrough write.
 
 ```gleam
 let assert Ok(Nil) = set.sync(table)
 ```
 
-In WriteBack mode `sync()` is rarely needed — `save()` already writes a
-fresh DETS file and reopens it.
+`sync()` does not copy unsaved ETS changes into DETS. In WriteBack mode,
+call `save()` to write those changes.
+
+DETS can skip file synchronization if it has already marked the table as
+saved. Calling `sync()` after `save()` is therefore not a general way to
+make the snapshot rename durable. Neither call synchronizes the containing
+directory after file creation or rename.
 
 ## Durability story
 
 Data goes through several layers between an `insert()` call and physical
-storage. This section is the **single source of truth** for which call
-addresses which layer; other pages link here.
+storage. Use this section to choose a persistence operation.
 
-| Layer | Where data lives | Call that advances data past this layer |
+| Layer | Data location | Operation |
 |-------|------------------|------------------------------------------|
 | 1 | Application memory | `insert()`, `delete_*`, `update_counter` |
-| 2 | ETS table (in-process) | WriteBack: `save()`. WriteThrough: every write |
+| 2 | ETS table | WriteBack: `save()`. WriteThrough: each write also goes to DETS |
 | 3 | DETS in-memory buffer | `sync()` (open DETS) or `save()` (closes a temp DETS, which flushes) |
-| 4 | DETS file content (OS page cache) | `save()` writes a temp file then atomically `rename()`s over the original |
-| 5 | Physical disk | Not exposed — DETS does not surface `fsync(2)` on the file or its directory |
+| 4 | File data in the OS cache | `sync()` calls `file:sync/1` when saving a dirty disk-backed DETS table |
+| 5 | Directory entries after file creation or rename | Shelf does not synchronize directories |
+
+File synchronization depends on the guarantees of the filesystem, operating
+system, and storage device. It does not synchronize a separate directory
+entry that creates or replaces the database path.
 
 What the calls actually do:
 
@@ -83,9 +93,12 @@ What the calls actually do:
   over the original DETS path and reopens at the original path. The rename
   is POSIX-atomic, so a process or VM crash mid-`save()` leaves either the
   previous file or the new file fully present — never a half-written file.
-- **`sync()`** calls `dets:sync/1` on the *currently open* DETS, draining its
-  in-memory write buffer into the file. It does **not** invoke `fsync(2)` on
-  the file descriptor and does **not** fsync the containing directory.
+- **`sync()`** calls `dets:sync/1` on the currently open DETS. On the tested
+  OTP 27.2.1 runtime, saving a dirty disk-backed table calls `file:sync/1`.
+  An already-saved table can return without that call. See OTP's
+  [`perform_save/2`](https://github.com/erlang/otp/blob/OTP-27.2.1/lib/stdlib/src/dets.erl#L2491-L2520)
+  and [`dets_utils:sync/1`](https://github.com/erlang/otp/blob/OTP-27.2.1/lib/stdlib/src/dets_utils.erl#L267-L275).
+  Shelf does not synchronize the containing directory.
 - **`reload()`** discards the ETS table and rebuilds it from the on-disk DETS
   file. It does not change durability — it changes which copy of the data
   the table reflects.
@@ -96,9 +109,9 @@ Practical guarantees:
 | You want… | Then call |
 |-----------|-----------|
 | WriteBack changes safe across a process crash | `save()` |
-| WriteThrough writes flushed past DETS's buffer into the file | `sync()` |
-| Strongest crash safety shelf can provide | `save()` (atomic rename, then no further shelf call is needed in WriteBack) |
-| `fsync(2)`-level guarantees against OS crash / power loss | Not provided. If you need this, call out to a process that opens the DETS file path with `file:open/2` and `file:sync/1`, or place the data directory on a filesystem mounted with stronger durability semantics. |
+| WriteThrough writes flushed, with file synchronization when DETS is dirty | `sync()` |
+| A complete replacement snapshot across a process or VM crash | `save()` |
+| Full durability across OS crash or power loss | Shelf does not guarantee this. File data and directory entries after creation or rename both need synchronization, with suitable filesystem and device guarantees. |
 
 ## Memory cost on open and reload
 

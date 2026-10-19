@@ -102,7 +102,10 @@ let assert Ok(Nil) = set.reload(table)
 
 ### WriteThrough
 
-Every write persists immediately:
+Each write updates DETS before it returns. DETS can buffer writes in
+memory; call `sync()` after critical writes. See the
+[durability guarantees](https://shelf.tylerbutler.com/advanced/persistence-operations/#durability-story)
+for file and directory synchronization limits.
 
 ```gleam
 let config =
@@ -210,13 +213,14 @@ a failed save.
 |----------|----------|
 | `save(table)` | Atomic snapshot ETS → DETS (writes to temp file, then renames for crash safety) |
 | `reload(table)` | Discard ETS, reload from DETS |
-| `sync(table)` | Flush DETS write buffer to OS |
+| `sync(table)` | Flush DETS writes and synchronize dirty file data |
 | `close(table)` | Save + close DETS + delete ETS |
 
 **`save` vs `sync`**: `save()` snapshots ETS → DETS using a temp-file +
-atomic rename (use in WriteBack to persist your changes). `sync()` drains
-DETS's internal write buffer into the open DETS file (use in WriteThrough
-when pending DETS writes need to be reflected in the on-disk file).
+atomic rename (use in WriteBack to persist your changes). `sync()` flushes
+DETS writes and calls `file:sync/1` when saving a dirty disk-backed table.
+DETS can skip file synchronization for an already-saved table. Neither
+operation synchronizes directory entries after file creation or rename.
 
 For the precise per-call durability guarantees and crash semantics, see
 the canonical [Durability story](https://shelf.tylerbutler.com/advanced/persistence-operations/#durability-story)
@@ -318,7 +322,7 @@ let assert Ok(Nil) = set.delete_all(from: table)
 
 `delete_object` behaves differently depending on the table type:
 
-- **Bag / Duplicate Bag**: Removes a specific value while keeping other values for the same key.
+- **Bag / Duplicate Bag**: Removes all occurrences of a specific value while keeping other values for the same key.
 - **Set**: Acts as a compare-and-delete — only deletes if both the key and value match the stored entry.
 
 ```gleam
@@ -366,7 +370,8 @@ ETS tables are owned by the process that calls `open()`, and shelf creates them 
 In short: reads work from any process; writes and lifecycle calls (`insert`, `delete_*`, `update_counter`, `save`, `reload`, `sync`, `close`) must come from the owner.
 
 If the owning process crashes, the ETS table is deleted and unsaved data is lost. The DETS file is preserved — the next `open()` call reloads it.
-- Use WriteThrough mode for data that cannot tolerate loss
+- Use WriteThrough to send each write to DETS, and `sync()` after critical
+  writes. Neither mode guarantees full durability across OS crash or power loss.
 
 ### Write Safety
 

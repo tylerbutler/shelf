@@ -78,8 +78,8 @@ because most projects need both at once.
   </div>
   <div>
     <dt>Two write modes</dt>
-    <dd>WriteBack for high-throughput batching, or WriteThrough for immediate
-    durability on every write.</dd>
+    <dd>WriteBack for batching, or WriteThrough to update DETS with each
+    write. Call <code>sync()</code> after critical WriteThrough writes.</dd>
   </div>
   <div>
     <dt>Set, bag, and duplicate bag</dt>
@@ -93,8 +93,8 @@ because most projects need both at once.
   </div>
   <div>
     <dt>Atomic counters</dt>
-    <dd>Lock-free increments via <code>update_counter</code> — no serialising
-    through an actor.</dd>
+    <dd>Atomic increments via <code>update_counter</code> in the table owner.
+    Other processes send increment requests to the owner.</dd>
   </div>
   <div>
     <dt>Cross-process reads</dt>

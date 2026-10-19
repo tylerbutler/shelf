@@ -1,0 +1,3 @@
+package = "shelf"
+kind = "Fixed"
+body = "Clarify that duplicate-bag deletion removes all matching events."

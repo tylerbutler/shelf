@@ -297,12 +297,13 @@ pub fn reload(table: PersistentBag(k, v)) -> Result(Nil, ShelfError) {
   internal.generic_reload(table.ets, table.dets, table.entry_decoder)
 }
 
-/// Drain the DETS in-memory write buffer into the open DETS file.
+/// Flush pending DETS writes and synchronize dirty file data.
 ///
-/// Calls `dets:sync/1`. Most useful in WriteThrough mode after a critical
-/// write, to make sure pending DETS writes are reflected in the file on
-/// disk. Note: this does not call `fsync(2)` on the file descriptor — see
-/// the [Durability story](https://shelf.tylerbutler.com/advanced/persistence-operations/#durability-story)
+/// Calls `dets:sync/1`, which uses `file:sync/1` when saving a dirty
+/// disk-backed table. DETS can skip file synchronization if it already
+/// marked the table as saved. This does not synchronize the containing
+/// directory after file creation or rename. See the
+/// [Durability story](https://shelf.tylerbutler.com/advanced/persistence-operations/#durability-story)
 /// for what `sync()` does and does not guarantee.
 ///
 pub fn sync(table: PersistentBag(k, v)) -> Result(Nil, ShelfError) {
