@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.1.0 - 2026-10-18
+
+#### Added
+
+##### Add full names for persistent table types
+Use `PersistentSet`, `PersistentBag`, and `PersistentDuplicateBag`. Existing
+`PSet`, `PBag`, and `PDuplicateBag` names remain supported as library type aliases.
+##### Require Gleam 1.14 or later
+Upgrade to Gleam 1.14 or later to use this release.
+
+#### Fixed
+
+##### Release scoped tables after a failed final save
+`with_table` releases remaining table resources when close fails and preserves
+callback-error precedence. Explicit `close` still supports retrying a failed
+save. Save recovery no longer leaves an extra DETS open reference.
 
 ## v1.0.1 - 2026-05-02
 
@@ -9,7 +25,6 @@
 ##### Use named arguments consistently in documentation examples (#62)
 
 README examples, website guides, and public source docs now show the same named-argument call style for table operations so generated package docs match the recommended usage.
-
 
 ## v1.0.0 - 2026-04-11
 
@@ -154,8 +169,6 @@ All open functions now require a base_directory parameter. DETS file paths are v
 
 ETS table creation no longer converts user-provided `Config.name` values to atoms. Previously, each distinct name created a permanent atom via `binary_to_atom`, which could exhaust the VM atom table in dynamic or multi-tenant workloads. The `name` field is now a diagnostic label only.
 
-
 ## v0.1.0 - 2026-03-08
 
 Initial release.
-
