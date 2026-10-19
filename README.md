@@ -352,12 +352,16 @@ let assert Ok(entries) = set.to_list(from: table)
 - **Single node**: DETS is local to one node (use Mnesia for distribution)
 - **Table names**: Names do not need to be globally unique — shelf uses unnamed ETS tables internally. However, DETS file paths must not conflict with other open tables.
 - **Process ownership**: ETS tables are owned by the process that called `open()` and are created `protected`, so reads work from any process but writes/lifecycle calls are owner-only. See [Process Ownership](https://shelf.tylerbutler.com/advanced/limitations/#process-ownership).
-- **DETS atoms**: DETS requires atom-based table names. Shelf uses a hash-based pool to bound the number of atoms created, so atom exhaustion is not a concern in normal usage.
+- **Exclusive paths**: Each canonical database path is reserved by one live shelf table per VM, including during save. A second open returns `NameConflict`, even in the same process. Internal DETS names are unique per-lifetime Erlang terms, not atoms derived from filenames.
 - **Opening large tables**: Open/reload streams DETS entries through `dets:foldl` for ~1× peak memory, but startup time still scales linearly with table size. Details and trade-offs: [Memory cost on open and reload](https://shelf.tylerbutler.com/advanced/persistence-operations/#memory-cost-on-open-and-reload).
 
 ## Security
 
-All DETS file paths are validated against the provided `base_directory` to prevent path traversal attacks. Paths containing `..` segments or other unsafe patterns that would escape the base directory are rejected with an `InvalidPath` error.
+All DETS file paths are resolved against the provided `base_directory`, including symbolic links in existing directories and at the filename itself. Paths that escape the resolved base directory are rejected with `InvalidPath`, as are null bytes, link loops, and filesystem resolution errors. In-base aliases resolve to the same canonical path and therefore share one exclusive reservation. Unicode directories and filenames are preserved, and `/` is a valid base directory. Missing components can pass validation, but opening still requires the parent directory to exist.
+
+Use a trusted base directory and trusted contents. This check does not protect against concurrent external replacement of directories or symbolic links between validation and I/O, and does not detect hard-link aliases.
+
+Snapshots use an exclusively created private sibling directory on the same filesystem, then rename its DETS file over the database. Save cleans up only its own temporary file and directory; an unrelated `<database>.tmp` is never used. The guardian acquires and tracks that location, cleaning it up after temporary DETS shutdown if the owner exits during save. A VM crash can still leave a private snapshot directory behind.
 
 ## Process Ownership
 

@@ -119,11 +119,10 @@ let assert Ok(table) =
 
 ### Does the new file need to live at the same path as the old one?
 
-No, but it usually should. The atom that shelf assigns to a path is
-derived from the path string, so reopening at the same path keeps the
-internal mapping stable across the migration. If you choose to keep the
-new file at a different path, update every `open()` call site that
-referenced the old path.
+No, but keeping the same path avoids changing callers. Each open gets
+a unique internal DETS reference and exclusively reserves its canonical
+path until close or owner-exit cleanup. If you keep the new file at a
+different path, update every `open()` call site that referenced the old path.
 
 ### Should I delete the old file first?
 
@@ -144,9 +143,9 @@ rather than dropping into raw Erlang.
 If the migration succeeded, the old DETS file no longer exists (the
 rename overwrote it) and nothing further is required. If the migration
 fails partway, delete the temp `*.new.dets` file before retrying so the
-next attempt starts from a clean slate. shelf's internal atom registry
-and guardian process watch process exits, not file paths, so they do
-not need manual cleanup between migrations.
+next attempt starts from a clean slate. Close each shelf table before
+replacing its file; close releases its path reservation. On owner exit,
+the reservation is released only after native DETS finishes closing.
 
 ### What about a "migration table" pattern?
 

@@ -1,4 +1,5 @@
 import gleam/dynamic/decode
+import shelf
 import shelf/set
 import test_helper
 
@@ -154,16 +155,17 @@ pub fn dets_path_conflict_returns_error_test() -> Nil {
       key: decode.string,
       value: decode.string,
     )
-  // DETS returns an error when the file is already open with a
-  // different owner, so this should fail
-  case result {
-    Error(_) -> Nil
-    Ok(table2) -> {
-      // If it succeeded (DETS allows same-process opens), close it
-      let assert Ok(Nil) = set.close(table2)
-      Nil
-    }
-  }
+  let assert Error(shelf.NameConflict) = result
+  // A rejected open must not release the first table's reservation.
+  let assert Ok(Nil) = set.save(table1)
+  let assert Error(shelf.NameConflict) =
+    set.open(
+      name: "persist_conflict_3",
+      path: path,
+      base_directory: "/tmp",
+      key: decode.string,
+      value: decode.string,
+    )
 
   let assert Ok(Nil) = set.close(table1)
   test_helper.cleanup(path)
