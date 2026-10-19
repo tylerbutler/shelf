@@ -33,6 +33,10 @@ build-strict:
 test:
     gleam test
 
+# Test the website deploy filter without network access
+test-site-ignore:
+    bash website/netlify-ignore.test.sh
+
 # === CODE QUALITY ===
 
 # Format source code
@@ -87,7 +91,7 @@ build-examples:
 # === CI ===
 
 # Run all CI checks (format, check, test, build)
-ci: format-check check test build-strict check-examples
+ci: format-check check test test-site-ignore build-strict check-examples
 
 # Alias for PR checks
 alias pr := ci

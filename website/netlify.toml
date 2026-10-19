@@ -1,6 +1,5 @@
 [build]
   command = "pnpm build:site"
   publish = "dist"
-  # Only trigger builds when files in this directory change. See the script for
-  # why the pathspec has to be `.` rather than `website/`.
+  # Build when website files or the release version in ../gleam.toml change.
   ignore = "bash netlify-ignore.sh"
