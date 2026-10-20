@@ -45,6 +45,29 @@ pub fn with_table_opens_and_auto_closes_test() -> Nil {
   Nil
 }
 
+pub fn configured_scope_uses_write_through_and_closes_test() -> Nil {
+  let path = "/tmp/shelf_duplicate_bag_configured_scope.dets"
+  test_helper.cleanup(path)
+  let config =
+    shelf.config("configured_scope", path, base_directory: "/tmp")
+    |> shelf.write_mode(shelf.WriteThrough)
+  let assert Ok(closed) = {
+    use table <- duplicate_bag.with_table_config(
+      config,
+      key: decode.string,
+      value: decode.string,
+      map_error: fn(error) { error },
+    )
+    let assert Ok(Nil) = duplicate_bag.insert(table, "key", "hello")
+    let assert Ok(Nil) = duplicate_bag.insert(table, "key", "hello")
+    let assert Ok(Nil) = duplicate_bag.reload(table)
+    let assert Ok(["hello", "hello"]) = duplicate_bag.lookup(table, "key")
+    Ok(table)
+  }
+  let assert Error(shelf.TableClosed) = duplicate_bag.size(closed)
+  test_helper.cleanup(path)
+}
+
 pub fn preserves_duplicate_key_value_pairs_test() -> Nil {
   let path = "/tmp/shelf_dbag_dupes.dets"
   test_helper.cleanup(path)

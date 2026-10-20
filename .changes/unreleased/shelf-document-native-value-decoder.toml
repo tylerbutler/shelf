@@ -1,0 +1,3 @@
+package = "shelf"
+kind = "Changed"
+body = "Document native-value decoder round-trip requirements"

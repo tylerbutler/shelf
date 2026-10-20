@@ -1,71 +1,103 @@
-/// Persistent ETS tables backed by DETS.
-///
-/// shelf combines ETS (fast, in-memory) with DETS (persistent, on-disk)
-/// to give you microsecond reads with durable storage. The classic
-/// Erlang persistence pattern, wrapped in a type-safe Gleam API.
-///
-/// ## Quick Start
-///
-/// ```gleam
-/// import gleam/dynamic/decode
-/// import shelf
-/// import shelf/set
-///
-/// let assert Ok(table) =
-///   set.open(name: "cache", path: "data/cache.dets",
-///     base_directory: "/app/storage",
-///     key: decode.string, value: decode.string)
-/// let assert Ok(Nil) = set.insert(into: table, key: "key", value: "value")
-/// let assert Ok("value") = set.lookup(from: table, key: "key")
-/// let assert Ok(Nil) = set.save(table)   // persist to disk
-/// let assert Ok(Nil) = set.close(table)
-/// ```
-///
-/// ## Write Modes
-///
-/// - `WriteBack` (default) — writes go to ETS only; call `save()` to persist
-/// - `WriteThrough` — every write goes to both ETS and DETS immediately
-///
-/// ## Table Types
-///
-/// - `shelf/set` — unique keys, one value per key
-/// - `shelf/bag` — multiple distinct values per key
-/// - `shelf/duplicate_bag` — multiple values per key (duplicates allowed)
-///
-/// ## Security
-///
-/// All DETS file paths are validated against a required base directory.
-/// Paths that escape the base directory (e.g., via `..` traversal) or
-/// contain null bytes are rejected with `InvalidPath`.
-///
-/// ## Limitations
-///
-/// - DETS has a 2 GB maximum file size
-/// - No ordered set (DETS doesn't support it)
-/// - DETS performs disk I/O — `save()` has real latency
-/// - Opening tables streams entries via `dets:foldl` directly into ETS
-///   without materializing a full list in memory.
-///
-/// ## Process Ownership
-///
-/// ETS tables are owned by the process that calls `open()`. If that process
-/// exits or crashes, the ETS table is automatically deleted and any unsaved
-/// data is lost. The DETS file on disk is preserved — the next `open()` call
-/// reloads it. In long-running applications, ensure the owning process is
-/// supervised.
-///
-/// **Reads** (`lookup`, `member`, `to_list`, `fold`, `size`) work from any
-/// process — ETS tables are created as `protected`.
-///
-/// **Writes and lifecycle** (`insert`, `delete_*`, `update_counter`, `save`,
-/// `reload`, `sync`, `close`) are restricted to the owner process. Non-owner
-/// attempts return `Error(NotOwner)`. If you need cross-process writes, wrap
-/// the table in a supervised actor/server that owns the table and forwards
-/// mutation requests.
-///
-/// ## Errors
-///
-/// Operations return `Result` with `ShelfError` for failures.
+//// Persistent ETS tables backed by DETS.
+////
+//// shelf combines ETS (fast, in-memory) with DETS (persistent, on-disk)
+//// to give you microsecond reads with durable storage. The classic
+//// Erlang persistence pattern, wrapped in a type-safe Gleam API.
+////
+//// ## Quick Start
+////
+//// ```gleam
+//// import gleam/dynamic/decode
+//// import shelf
+//// import shelf/set
+////
+//// let assert Ok(table) =
+////   set.open(name: "cache", path: "data/cache.dets",
+////     base_directory: "/app/storage",
+////     key: decode.string, value: decode.string)
+//// let assert Ok(Nil) = set.insert(into: table, key: "key", value: "value")
+//// let assert Ok("value") = set.lookup(from: table, key: "key")
+//// let assert Ok(Nil) = set.save(table)   // persist to disk
+//// let assert Ok(Nil) = set.close(table)
+//// ```
+////
+//// ## Write Modes
+////
+//// - `WriteBack` (default) — writes go to ETS only; call `save()` to persist
+//// - `WriteThrough` — every write goes to both ETS and DETS immediately
+////
+//// ## Table Types
+////
+//// - `shelf/set` — unique keys, one value per key
+//// - `shelf/bag` — multiple distinct values per key
+//// - `shelf/duplicate_bag` — multiple values per key (duplicates allowed)
+////
+//// ## Decoder round trips
+////
+//// Shelf stores native Gleam values, not JSON or another encoded format.
+//// For each key and value you insert, decoding its stored representation
+//// must return that same value without changes.
+//// Loading uses the decoder's output. A decoder that changes a value can
+//// change it again on the next reload or open. A JSON decoder can reject
+//// the native value that shelf saved. Use a separate schema migration
+//// to change stored values.
+////
+//// On the BEAM, a record is a tuple with its constructor tag at index 0.
+//// This decoder preserves a `User` record's fields:
+////
+//// ```gleam
+//// import gleam/dynamic/decode
+////
+//// pub type User {
+////   User(name: String, score: Int)
+//// }
+////
+//// pub fn user_decoder() -> decode.Decoder(User) {
+////   use name <- decode.field(1, decode.string)
+////   use score <- decode.field(2, decode.int)
+////   decode.success(User(name, score))
+//// }
+//// ```
+////
+//// For a type with multiple constructors, decode the tag and reconstruct
+//// the same constructor. Test the round-trip rule for each constructor.
+//// Shelf does not run decoders on writes or enforce this rule at runtime.
+////
+//// ## Security
+////
+//// All DETS file paths are validated against a required base directory.
+//// Paths that escape the base directory (e.g., via `..` traversal) or
+//// contain null bytes are rejected with `InvalidPath`.
+////
+//// ## Limitations
+////
+//// - DETS has a 2 GB maximum file size
+//// - No ordered set (DETS doesn't support it)
+//// - DETS performs disk I/O — `save()` has real latency
+//// - Opening tables streams entries via `dets:foldl` directly into ETS
+////   without materializing a full list in memory.
+////
+//// ## Process Ownership
+////
+//// ETS tables are owned by the process that calls `open()`. If that process
+//// exits or crashes, the ETS table is automatically deleted and any unsaved
+//// data is lost. The DETS file on disk is preserved — the next `open()` call
+//// reloads it. In long-running applications, ensure the owning process is
+//// supervised.
+////
+//// **Reads** (`lookup`, `member`, `to_list`, `fold`, `size`) work from any
+//// process — ETS tables are created as `protected`.
+////
+//// **Writes and lifecycle** (`insert`, `delete_*`, `update_counter`, `save`,
+//// `reload`, `sync`, `close`) are restricted to the owner process. Non-owner
+//// attempts return `Error(NotOwner)`. If you need cross-process writes, wrap
+//// the table in a supervised actor/server that owns the table and forwards
+//// mutation requests.
+////
+//// ## Errors
+////
+//// Operations return `Result` with `ShelfError` for failures.
+
 import gleam/dynamic/decode
 import gleam/string
 
@@ -136,6 +168,9 @@ pub opaque type Config {
 /// The `name` is a diagnostic label for the table — it is not used as an
 /// ETS table name and does not need to be unique. Multiple tables can
 /// share the same name as long as they use different DETS file paths.
+/// On an open failure, shelf includes this label in the message of
+/// `InvalidPath`, `FileError`, and `ErlangError`. Other error variants
+/// remain unchanged.
 ///
 /// The `base_directory` restricts DETS file paths to prevent directory
 /// traversal attacks. The `path` is resolved relative to `base_directory`.

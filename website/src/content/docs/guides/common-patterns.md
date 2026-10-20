@@ -106,3 +106,46 @@ let assert Ok(Nil) = {
   set.insert(into: table, key: "key", value: "value")
 }
 ```
+
+### Configured scopes and application errors
+
+Use `with_table_config` for WriteThrough tables or a callback that returns
+your application's error type:
+
+```gleam
+import gleam/dynamic/decode
+import gleam/result
+import shelf
+import shelf/set
+
+pub type AppError {
+  StorageError(shelf.ShelfError)
+}
+
+pub fn update_account() -> Result(Nil, AppError) {
+  let config =
+    shelf.config("accounts", "accounts.dets", base_directory: "/app/data")
+    |> shelf.write_mode(shelf.WriteThrough)
+
+  use table <- set.with_table_config(
+    config,
+    key: decode.string,
+    value: decode.int,
+    map_error: StorageError,
+  )
+  set.insert(table, "alice", 42) |> result.map_error(StorageError)
+}
+```
+
+Shelf calls `map_error` for open errors, final close errors, and rescued
+callback panics. Map storage errors inside your callback yourself. Shelf
+returns application errors from the callback unchanged. A callback error
+takes precedence over a close error.
+
+If the final save fails, shelf releases the table and loses unsaved changes.
+Use explicit `open_config` and `close` if you need to retain the handle and
+retry. For callback and close failures, shelf releases the table before it
+calls your error mapper.
+
+Both bag modules provide `with_table_config` with the same arguments.
+Pass `map_error: fn(error) { error }` to keep `ShelfError`.

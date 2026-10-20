@@ -1,0 +1,3 @@
+package = "shelf"
+kind = "Added"
+body = "Add configured table scopes with application error mapping"

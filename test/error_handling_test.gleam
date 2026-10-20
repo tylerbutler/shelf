@@ -9,6 +9,11 @@ import shelf/internal
 import shelf/set
 import test_helper
 
+type ApplicationError {
+  StorageError(ShelfError)
+  Rejected
+}
+
 @external(erlang, "close_test_ffi", "with_close_recovery_fixture")
 fn with_close_recovery_fixture(fun: fn(String) -> a) -> a
 
@@ -150,6 +155,116 @@ pub fn catches_panics_and_still_closes_the_table_test() -> Nil {
   let assert Ok(table) = set_operations().open(path)
   let assert Ok(Nil) = set.close(table)
   test_helper.cleanup(path)
+}
+
+pub fn configured_scope_maps_named_open_errors_test() -> Nil {
+  let config = shelf.config("accounts", "bad\u{0}path", base_directory: "/tmp")
+  let result =
+    set.with_table_config(
+      config,
+      key: decode.string,
+      value: decode.string,
+      map_error: StorageError,
+      fun: fn(_) { panic as "open failure must not call the callback" },
+    )
+  let assert Error(StorageError(shelf.InvalidPath(detail))) = result
+  assert string.contains(detail, "Table \"accounts\"")
+  assert string.contains(detail, "Path contains null bytes")
+}
+
+pub fn open_file_error_includes_table_name_test() -> Nil {
+  let directory = "/tmp/shelf_named_open_missing"
+  test_helper.delete_directory(directory)
+  let result =
+    set.open(
+      "accounts",
+      directory <> "/table.dets",
+      base_directory: "/tmp",
+      key: decode.string,
+      value: decode.string,
+    )
+  let assert Error(shelf.FileError(detail)) = result
+  assert string.contains(detail, "Table \"accounts\"")
+  assert string.contains(detail, "File not found")
+}
+
+pub fn configured_scope_maps_panics_after_closing_test() -> Nil {
+  let path = "/tmp/shelf_configured_scope_panic.dets"
+  test_helper.cleanup(path)
+  let captured = process.new_subject()
+  let result =
+    set.with_table_config(
+      shelf.config("configured_panic", path, base_directory: "/tmp"),
+      key: decode.string,
+      value: decode.string,
+      map_error: fn(error) {
+        let assert Ok(#(table, guardian, monitor)) =
+          process.receive(captured, within: 1000)
+        let assert Error(shelf.TableClosed) = set.size(table)
+        test_helper.await_guardian(monitor, guardian)
+        StorageError(error)
+      },
+      fun: fn(table) {
+        let guardian = guardian_test.extract_guardian_set(table)
+        process.send(captured, #(table, guardian, process.monitor(guardian)))
+        panic as "configured callback panic"
+      },
+    )
+  let assert Error(StorageError(shelf.ErlangError(detail))) = result
+  assert string.contains(detail, "configured callback panic")
+  test_helper.cleanup(path)
+}
+
+pub fn configured_scope_maps_close_errors_test() -> Nil {
+  assert_configured_scope_close_failure(
+    "/tmp/shelf_configured_close_error",
+    Ok(Nil),
+  )
+}
+
+pub fn configured_scope_preserves_domain_error_over_close_error_test() -> Nil {
+  assert_configured_scope_close_failure(
+    "/tmp/shelf_configured_domain_error",
+    Error(Rejected),
+  )
+}
+
+fn assert_configured_scope_close_failure(
+  directory: String,
+  callback_result: Result(Nil, ApplicationError),
+) -> Nil {
+  let path = directory <> "/table.dets"
+  test_helper.prepare_retry_directory(directory, path)
+  let captured = process.new_subject()
+  let result =
+    set.with_table_config(
+      shelf.config("configured_close", path, base_directory: "/tmp"),
+      key: decode.string,
+      value: decode.string,
+      map_error: StorageError,
+      fun: fn(table) {
+        let assert Ok(Nil) = set.insert(table, "key", "unsaved")
+        let guardian = guardian_test.extract_guardian_set(table)
+        process.send(captured, #(table, guardian, process.monitor(guardian)))
+        test_helper.make_directory_read_only(directory)
+        callback_result
+      },
+    )
+  test_helper.make_directory_writable(directory)
+  let assert Ok(#(table, guardian, monitor)) =
+    process.receive(captured, within: 1000)
+  let assert Error(shelf.TableClosed) = set.size(table)
+  test_helper.await_guardian(monitor, guardian)
+  case callback_result {
+    Ok(Nil) -> {
+      let assert Error(StorageError(shelf.ErlangError(detail))) = result
+      assert string.contains(detail, "eacces")
+    }
+    Error(error) -> {
+      assert result == Error(error)
+    }
+  }
+  test_helper.cleanup_retry_directory(directory, path)
 }
 
 pub fn preserves_panic_detail_when_final_close_also_fails_test() -> Nil {

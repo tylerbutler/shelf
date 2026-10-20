@@ -5,6 +5,7 @@
 import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode.{type Decoder}
 import gleam/result
+import gleam/string
 import shelf.{type Config, type ShelfError, type WriteMode}
 
 /// Raw ETS table reference (Erlang tid).
@@ -85,19 +86,36 @@ pub fn generic_open(
   let path = shelf.get_path(config)
   let base_directory = shelf.get_base_directory(config)
   let write_mode = shelf.get_write_mode(config)
-  use resolved_path <- result.try(shelf.validate_path(path, base_directory))
-  use references <- result.try(open_no_load(name, resolved_path, table_type))
-  let ets = references.0
-  let dets = references.1
-  let guardian = references.2
-  let entry_decoder = build_entry_decoder(key_decoder, value_decoder)
-  case stream_validate_and_load(ets, dets, entry_decoder) {
-    Ok(Nil) -> Ok(#(ets, dets, guardian, write_mode, entry_decoder))
-    Error(e) -> {
-      let _ = cleanup(ets, dets, guardian)
-      Error(e)
+  let opened = {
+    use resolved_path <- result.try(shelf.validate_path(path, base_directory))
+    use references <- result.try(open_no_load(name, resolved_path, table_type))
+    let ets = references.0
+    let dets = references.1
+    let guardian = references.2
+    let entry_decoder = build_entry_decoder(key_decoder, value_decoder)
+    case stream_validate_and_load(ets, dets, entry_decoder) {
+      Ok(Nil) -> Ok(#(ets, dets, guardian, write_mode, entry_decoder))
+      Error(error) -> {
+        let _ = cleanup(ets, dets, guardian)
+        Error(error)
+      }
     }
   }
+  result.map_error(opened, fn(error) {
+    let prefix = "Table " <> string.inspect(name) <> ": "
+    case error {
+      shelf.InvalidPath(detail) -> shelf.InvalidPath(prefix <> detail)
+      shelf.FileError(detail) -> shelf.FileError(prefix <> detail)
+      shelf.ErlangError(detail) -> shelf.ErlangError(prefix <> detail)
+      shelf.NotFound
+      | shelf.KeyAlreadyPresent
+      | shelf.TableClosed
+      | shelf.NotOwner
+      | shelf.NameConflict
+      | shelf.FileSizeLimitExceeded
+      | shelf.TypeMismatch(_) -> error
+    }
+  })
 }
 
 /// Generic insert with write-through support.
@@ -221,24 +239,28 @@ pub fn generic_with_table(
   open_fn: fn() -> Result(table, ShelfError),
   close_fn: fn(table) -> Result(Nil, ShelfError),
   cleanup_fn: fn(table) -> Result(Nil, ShelfError),
-  fun: fn(table) -> Result(a, ShelfError),
-) -> Result(a, ShelfError) {
-  use table <- result.try(open_fn())
-  let callback_result = case rescue(fn() { fun(table) }) {
-    Ok(result) -> result
-    Error(crash_detail) -> Error(shelf.ErlangError(crash_detail))
-  }
-  case close_fn(table) {
-    Ok(Nil) -> callback_result
+  map_error: fn(ShelfError) -> error,
+  fun: fn(table) -> Result(a, error),
+) -> Result(a, error) {
+  use table <- result.try(open_fn() |> result.map_error(map_error))
+  let callback_result = rescue(fn() { fun(table) })
+  let close_result = case close_fn(table) {
+    Ok(Nil) -> Ok(Nil)
     Error(close_error) -> {
       // Cleanup checks the original ETS handle before touching DETS, so a
       // callback that closed and reopened the path cannot lose its new table.
       let _ = cleanup_fn(table)
-      case callback_result {
-        Ok(_) -> Error(close_error)
-        Error(_) -> callback_result
-      }
+      Error(close_error)
     }
+  }
+  // Run the caller's error mapper only after releasing the table.
+  case callback_result {
+    Error(crash_detail) -> Error(map_error(shelf.ErlangError(crash_detail)))
+    Ok(Error(error)) -> Error(error)
+    Ok(Ok(value)) ->
+      close_result
+      |> result.map(fn(_) { value })
+      |> result.map_error(map_error)
   }
 }
 
