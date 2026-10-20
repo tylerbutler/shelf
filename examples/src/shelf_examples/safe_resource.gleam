@@ -1,21 +1,35 @@
 /// Safe Resource Management — demonstrates shelf's resource-safety patterns.
 ///
-/// This example covers two approaches to managing persistent tables:
+/// This example covers three approaches to managing persistent tables:
 ///
 /// 1. **with_table** — automatic open/close via a callback. The table is
 ///    guaranteed to close even if the callback returns an error.
 /// 2. **Manual save/reload cycle** — checkpoint your data with save(),
 ///    then undo unsaved changes with reload(). Finish with sync() to
 ///    ensure the DETS write buffer is flushed to the OS.
+/// 3. **Configured scope** with WriteThrough, application errors, and a
+///    decoder that preserves a native Gleam record.
 import gleam/dynamic/decode
 import gleam/io
+import gleam/result
 import gleam/string
+import shelf
 import shelf/set
+
+type ApplicationError {
+  StorageError(shelf.ShelfError)
+}
+
+type User {
+  User(name: String, score: Int)
+}
 
 pub fn main() -> Nil {
   pattern_1_with_table()
   io.println("")
   pattern_2_save_reload()
+  io.println("")
+  pattern_3_configured_table()
 }
 
 // ── Pattern 1: with_table (auto-close) ─────────────────────────────────
@@ -119,7 +133,50 @@ fn pattern_2_save_reload() -> Nil {
   io.println("  Table closed.")
 
   io.println("")
-  io.println("Done! Both patterns demonstrated safe resource management.")
+  io.println("Manual save/reload cycle complete.")
+}
+
+fn user_decoder() -> decode.Decoder(User) {
+  use name <- decode.field(1, decode.string)
+  use score <- decode.field(2, decode.int)
+  decode.success(User(name, score))
+}
+
+fn pattern_3_configured_table() -> Nil {
+  let config =
+    shelf.config(
+      "users",
+      "shelf_examples_configured_scope.dets",
+      base_directory: "/tmp",
+    )
+    |> shelf.write_mode(shelf.WriteThrough)
+  let user = User("Alice", 42)
+  let assert Ok(saved) = {
+    use table <- set.with_table_config(
+      config,
+      key: decode.string,
+      value: user_decoder(),
+      map_error: StorageError,
+    )
+    use _ <- result.try(
+      set.insert(table, "alice", user) |> result.map_error(StorageError),
+    )
+    use _ <- result.try(set.reload(table) |> result.map_error(StorageError))
+    set.lookup(table, "alice") |> result.map_error(StorageError)
+  }
+  assert saved == user
+
+  let assert Ok(restored) = {
+    use table <- set.with_table_config(
+      config,
+      key: decode.string,
+      value: user_decoder(),
+      map_error: StorageError,
+    )
+    set.lookup(table, "alice") |> result.map_error(StorageError)
+  }
+  assert restored == user
+  io.println("Configured scope preserved the record through reload and reopen.")
 }
 
 /// Format a list of key-value pairs for display.

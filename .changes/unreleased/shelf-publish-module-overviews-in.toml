@@ -1,0 +1,3 @@
+package = "shelf"
+kind = "Fixed"
+body = "Publish module overviews in API documentation"

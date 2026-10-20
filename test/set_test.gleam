@@ -45,6 +45,28 @@ pub fn with_table_opens_and_auto_closes_test() -> Nil {
   Nil
 }
 
+pub fn configured_scope_uses_write_through_and_closes_test() -> Nil {
+  let path = "/tmp/shelf_set_configured_scope.dets"
+  test_helper.cleanup(path)
+  let config =
+    shelf.config("configured_scope", path, base_directory: "/tmp")
+    |> shelf.write_mode(shelf.WriteThrough)
+  let assert Ok(closed) = {
+    use table <- set.with_table_config(
+      config,
+      key: decode.string,
+      value: decode.int,
+      map_error: fn(error) { error },
+    )
+    let assert Ok(Nil) = set.insert(table, "key", 42)
+    let assert Ok(Nil) = set.reload(table)
+    let assert Ok(42) = set.lookup(table, "key")
+    Ok(table)
+  }
+  let assert Error(shelf.TableClosed) = set.size(closed)
+  test_helper.cleanup(path)
+}
+
 pub fn inserts_and_looks_up_a_value_test() -> Nil {
   let path = "/tmp/shelf_set_insert.dets"
   test_helper.cleanup(path)

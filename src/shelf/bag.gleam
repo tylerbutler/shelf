@@ -1,32 +1,33 @@
-/// Persistent bag tables — multiple distinct values per key.
-///
-/// A bag table backed by ETS (for fast reads and writes) and DETS
-/// (for persistence). Multiple values can be stored per key, but
-/// duplicate key-value pairs are silently ignored.
-///
-/// **Ownership**: The process that calls `open()` owns the table. Reads
-/// work from any process; writes and lifecycle ops (`insert`, `delete_*`,
-/// `save`, `reload`, `sync`, `close`) are owner-only and return
-/// `Error(NotOwner)` from other processes.
-///
-/// ## Example
-///
-/// ```gleam
-/// import gleam/dynamic/decode
-/// import shelf/bag
-///
-/// let assert Ok(table) =
-///   bag.open(name: "tags", path: "data/tags.dets",
-///     base_directory: "/app/data",
-///     key: decode.string, value: decode.string)
-/// let assert Ok(Nil) = bag.insert(into: table, key: "color", value: "red")
-/// let assert Ok(Nil) = bag.insert(into: table, key: "color", value: "blue")
-/// let assert Ok(["red", "blue"]) = bag.lookup(from: table, key: "color")
-/// // values contains "red" and "blue" (order is unspecified)
-/// let assert Ok(Nil) = bag.save(table)
-/// let assert Ok(Nil) = bag.close(table)
-/// ```
-///
+//// Persistent bag tables — multiple distinct values per key.
+////
+//// A bag table backed by ETS (for fast reads and writes) and DETS
+//// (for persistence). Multiple values can be stored per key, but
+//// duplicate key-value pairs are silently ignored.
+////
+//// **Ownership**: The process that calls `open()` owns the table. Reads
+//// work from any process; writes and lifecycle ops (`insert`, `delete_*`,
+//// `save`, `reload`, `sync`, `close`) are owner-only and return
+//// `Error(NotOwner)` from other processes.
+////
+//// ## Example
+////
+//// ```gleam
+//// import gleam/dynamic/decode
+//// import shelf/bag
+////
+//// let assert Ok(table) =
+////   bag.open(name: "tags", path: "data/tags.dets",
+////     base_directory: "/app/data",
+////     key: decode.string, value: decode.string)
+//// let assert Ok(Nil) = bag.insert(into: table, key: "color", value: "red")
+//// let assert Ok(Nil) = bag.insert(into: table, key: "color", value: "blue")
+//// let assert Ok(["red", "blue"]) = bag.lookup(from: table, key: "color")
+//// // values contains "red" and "blue" (order is unspecified)
+//// let assert Ok(Nil) = bag.save(table)
+//// let assert Ok(Nil) = bag.close(table)
+//// ```
+////
+
 import gleam/dynamic/decode.{type Decoder}
 import gleam/result
 import shelf.{type Config, type ShelfError}
@@ -58,6 +59,10 @@ pub type PBag(k, v) =
 /// If no file exists, both tables start empty.
 ///
 /// The DETS file path is validated against the configured base directory.
+///
+/// Decoders must return the original key or value from its native stored
+/// representation without changing it.
+/// See the `shelf` module documentation for a custom-record example.
 ///
 /// ```gleam
 /// let config =
@@ -145,18 +150,48 @@ pub fn with_table(
   value value_decoder: Decoder(v),
   fun fun: fn(PersistentBag(k, v)) -> Result(a, ShelfError),
 ) -> Result(a, ShelfError) {
+  with_table_config(
+    config: shelf.config(name:, path:, base_directory:),
+    key: key_decoder,
+    value: value_decoder,
+    map_error: fn(error) { error },
+    fun:,
+  )
+}
+
+/// Use a configured table within a callback, then save and close it.
+///
+/// Supports both write modes. `map_error` converts open errors, final close
+/// errors, and rescued callback panics into your application's error type.
+/// Map errors from table operations inside the callback yourself.
+///
+/// A callback error takes precedence over a close error. On a failed final
+/// save, the table is released and unsaved changes are lost, as with
+/// `with_table`. The error mapper runs after cleanup for callback and close
+/// failures.
+///
+/// ```gleam
+/// use table <- bag.with_table_config(
+///   config,
+///   key: decode.string,
+///   value: decode.string,
+///   map_error: StorageError,
+/// )
+/// bag.insert(table, "color", "red") |> result.map_error(StorageError)
+/// ```
+///
+pub fn with_table_config(
+  config config: Config,
+  key key_decoder: Decoder(k),
+  value value_decoder: Decoder(v),
+  map_error map_error: fn(ShelfError) -> error,
+  fun fun: fn(PersistentBag(k, v)) -> Result(a, error),
+) -> Result(a, error) {
   internal.generic_with_table(
-    fn() {
-      open(
-        name:,
-        path:,
-        base_directory:,
-        key: key_decoder,
-        value: value_decoder,
-      )
-    },
+    fn() { open_config(config, key: key_decoder, value: value_decoder) },
     close,
     fn(table) { internal.cleanup(table.ets, table.dets, table.guardian) },
+    map_error,
     fun,
   )
 }

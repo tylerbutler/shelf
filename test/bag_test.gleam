@@ -43,6 +43,28 @@ pub fn with_table_opens_and_auto_closes_test() -> Nil {
   Nil
 }
 
+pub fn configured_scope_uses_write_through_and_closes_test() -> Nil {
+  let path = "/tmp/shelf_bag_configured_scope.dets"
+  test_helper.cleanup(path)
+  let config =
+    shelf.config("configured_scope", path, base_directory: "/tmp")
+    |> shelf.write_mode(shelf.WriteThrough)
+  let assert Ok(closed) = {
+    use table <- bag.with_table_config(
+      config,
+      key: decode.string,
+      value: decode.string,
+      map_error: fn(error) { error },
+    )
+    let assert Ok(Nil) = bag.insert(table, "key", "hello")
+    let assert Ok(Nil) = bag.reload(table)
+    let assert Ok(["hello"]) = bag.lookup(table, "key")
+    Ok(table)
+  }
+  let assert Error(shelf.TableClosed) = bag.size(closed)
+  test_helper.cleanup(path)
+}
+
 pub fn stores_multiple_values_per_key_test() -> Nil {
   let path = "/tmp/shelf_bag_multi.dets"
   test_helper.cleanup(path)

@@ -204,6 +204,34 @@ Unsaved changes are lost. A callback error takes precedence over a close
 error. Use explicit `close()` when you need to retain the handle and retry
 a failed save.
 
+Use `with_table_config` to select WriteThrough or return your application's
+error type:
+
+```gleam
+import gleam/result
+
+pub type AppError {
+  StorageError(shelf.ShelfError)
+}
+
+let config =
+  shelf.config("accounts", "accounts.dets", base_directory: "/app/data")
+  |> shelf.write_mode(shelf.WriteThrough)
+
+use table <- set.with_table_config(
+  config,
+  key: decode.string,
+  value: decode.int,
+  map_error: StorageError,
+)
+set.insert(table, "alice", 42) |> result.map_error(StorageError)
+```
+
+`map_error` handles open errors, close errors, and rescued callback panics.
+Map storage errors inside your callback with `result.map_error`. A callback
+error takes precedence over a close error. Both bag modules provide the same
+helper. To keep `ShelfError`, pass `map_error: fn(error) { error }`.
+
 ## Persistence Operations
 
 | Function | Behavior |
@@ -236,7 +264,24 @@ let assert Ok(table) =
     key: decode.string, value: decode.int)
 ```
 
-Within a running session, Gleam's type system guarantees correctness — decoders only validate the DETS→ETS boundary at open time. The `save()` path is unaffected and still uses Erlang's efficient `ets:to_dets/2` bulk transfer.
+Within a running session, Gleam's type system guarantees correctness. Decoders validate the DETS-to-ETS boundary on open and reload. The `save()` path uses Erlang's `ets:to_dets/2` bulk transfer.
+
+### Decoder contract
+
+Shelf stores native Gleam values, not JSON. For each key and value you
+insert, its decoder must return that same value from its stored
+representation without changes.
+Shelf uses decoder output when it loads data. A decoder that transforms
+values can change them on reload or reopening; a JSON decoder can reject
+the native values that shelf saved.
+
+For records, decode the native tuple fields, which start at index 1 after
+the constructor tag. See the
+[custom-record example](https://shelf.tylerbutler.com/advanced/schema-migration/#decoder-round-trips)
+and the runnable
+[`safe_resource` example](examples/src/shelf_examples/safe_resource.gleam).
+Shelf does not run decoders on writes or enforce the round-trip rule.
+Use a separate migration to change stored values.
 
 > **Performance note**: The DETS → ETS load streams entries through
 > `dets:foldl` and decodes them in batches, so peak extra memory during
@@ -270,6 +315,10 @@ All operations return `Result(value, ShelfError)`. The error type covers all fai
 | `FileSizeLimitExceeded` | DETS file exceeds the 2 GB limit |
 | `TypeMismatch(List(DecodeError))` | Data loaded from DETS failed decoder validation |
 | `ErlangError(String)` | Catch-all for unexpected Erlang-level errors |
+
+On an open failure, shelf includes the table's `name` in `InvalidPath`,
+`FileError`, and `ErlangError` messages. It preserves the error variant and
+the original reason. Other error variants do not include the name.
 
 ```gleam
 case set.open(name: "cache", path: "data/cache.dets",

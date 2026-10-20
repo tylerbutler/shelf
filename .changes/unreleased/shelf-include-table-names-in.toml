@@ -1,0 +1,3 @@
+package = "shelf"
+kind = "Fixed"
+body = "Include table names in open error messages"

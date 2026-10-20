@@ -12,6 +12,40 @@ This page documents the canonical migration procedure. A runnable
 implementation is
 [`examples/src/shelf_examples/schema_migration.gleam`](https://github.com/tylerbutler/shelf/blob/main/examples/src/shelf_examples/schema_migration.gleam).
 
+## Decoder round trips
+
+Shelf stores native Gleam values. It does not encode them as JSON. For each
+key and value you insert, its decoder must return that same value from its
+stored representation without changes.
+
+Shelf uses the decoder's output on open and reload. A decoder that changes
+values can change them again on the next load. A decoder for JSON objects
+can reject the native records that shelf saved. Shelf does not run decoders
+on writes or enforce this rule at runtime.
+
+On the BEAM, a record is a tuple with its constructor tag at index 0.
+This decoder reads the fields of a native `User` record:
+
+```gleam
+import gleam/dynamic/decode
+
+pub type User {
+  User(name: String, score: Int)
+}
+
+pub fn user_decoder() -> decode.Decoder(User) {
+  use name <- decode.field(1, decode.string)
+  use score <- decode.field(2, decode.int)
+  decode.success(User(name, score))
+}
+```
+
+For a type with multiple constructors, decode the tag and reconstruct the
+same constructor. Check each constructor. The
+[`safe_resource` example](https://github.com/tylerbutler/shelf/blob/main/examples/src/shelf_examples/safe_resource.gleam)
+checks a record through WriteThrough, reload, close, and reopen.
+Use the migration procedure below to change stored values.
+
 ## When to migrate vs. when to rebuild
 
 If the data is regenerable (a cache, a derived index), the simplest

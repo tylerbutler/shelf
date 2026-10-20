@@ -7,6 +7,11 @@ This page collects the questions that come up most often when integrating
 shelf. Each entry references the relevant error variant or the source of
 the limitation.
 
+When an open fails with `InvalidPath`, `FileError`, or `ErlangError`, the
+message includes the table's `name` and the original reason. For example,
+`Table "accounts": File not found` identifies which table failed to open.
+Other error variants do not include the name.
+
 ## I'm getting `NameConflict` on `open()` — why?
 
 `Error(NameConflict)` is returned when you try to open a DETS file that is
