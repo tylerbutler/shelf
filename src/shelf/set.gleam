@@ -341,8 +341,11 @@ pub fn save(table: PersistentSet(k, v)) -> Result(Nil, ShelfError) {
 
 /// Discard unsaved ETS changes and reload from DETS.
 ///
-/// Clears the ETS table, re-reads all DETS entries, validates them
-/// through the stored decoders, and loads valid entries into ETS.
+/// Validates all DETS entries in a scratch table through the stored decoders.
+/// Validation failure leaves the live ETS table untouched. On success, clears
+/// the live table and fills it in selection batches. This is not transactional:
+/// concurrent readers can see empty or partially reloaded contents.
+///
 /// Only useful in WriteBack mode — in WriteThrough mode, ETS and
 /// DETS are always in sync.
 ///

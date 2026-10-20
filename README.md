@@ -236,11 +236,11 @@ let assert Ok(table) =
     key: decode.string, value: decode.int)
 ```
 
-Within a running session, Gleam's type system guarantees correctness — decoders only validate the DETS→ETS boundary at open time. The `save()` path is unaffected and still uses Erlang's efficient `ets:to_dets/2` bulk transfer.
+Within a running session, Gleam's type system guarantees correctness — decoders validate the DETS→ETS boundary on open and reload. The `save()` path is unaffected and still uses Erlang's efficient `ets:to_dets/2` bulk transfer.
 
 > **Performance note**: The DETS → ETS load streams entries through
-> `dets:foldl` and decodes them in batches, so peak extra memory during
-> open/reload is ~1× table size. See
+> `dets:foldl`, validates each entry, and inserts batches into ETS.
+> Reload also keeps a scratch table and needs transfer memory. See
 > [Memory cost on open and reload](https://shelf.tylerbutler.com/advanced/persistence-operations/#memory-cost-on-open-and-reload).
 
 ### Schema Migration
@@ -352,8 +352,7 @@ let assert Ok(entries) = set.to_list(from: table)
 - **Single node**: DETS is local to one node (use Mnesia for distribution)
 - **Table names**: Names do not need to be globally unique — shelf uses unnamed ETS tables internally. However, DETS file paths must not conflict with other open tables.
 - **Process ownership**: ETS tables are owned by the process that called `open()` and are created `protected`, so reads work from any process but writes/lifecycle calls are owner-only. See [Process Ownership](https://shelf.tylerbutler.com/advanced/limitations/#process-ownership).
-- **DETS atoms**: DETS requires atom-based table names. Shelf uses a hash-based pool to bound the number of atoms created, so atom exhaustion is not a concern in normal usage.
-- **Opening large tables**: Open/reload streams DETS entries through `dets:foldl` for ~1× peak memory, but startup time still scales linearly with table size. Details and trade-offs: [Memory cost on open and reload](https://shelf.tylerbutler.com/advanced/persistence-operations/#memory-cost-on-open-and-reload).
+- **Loading large tables**: Open and reload validate DETS entries in batches. Reload also needs a scratch ETS table and transfer memory. Details and limits: [Memory cost on open and reload](https://shelf.tylerbutler.com/advanced/persistence-operations/#memory-cost-on-open-and-reload).
 
 ## Security
 
