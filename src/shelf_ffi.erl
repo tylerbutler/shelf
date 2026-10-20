@@ -231,10 +231,11 @@ dets_fold_into_ets_strict(Dets, Ets, DecoderFun) ->
         _:CatchReason -> {error, translate_error(CatchReason)}
     end.
 
-%% ── Atomic reload ───────────────────────────────────────────────────────
+%% ── Validated reload ────────────────────────────────────────────────────
 %% Load DETS entries into a scratch ETS table first.  Only replace the
-%% live table contents after the full validation succeeds; on failure the
-%% live ETS is untouched.
+%% live table contents after the full validation succeeds; validation failure
+%% leaves the live ETS untouched. Replacement is clear-then-fill, not a
+%% transaction: concurrent readers can see an empty or partially filled table.
 
 reload_atomic(Ets, Dets, DecoderFun) ->
     case check_owner(Ets) of
@@ -248,9 +249,8 @@ reload_atomic_validated(Ets, Dets, DecoderFun) ->
     try
         case dets_fold_into_ets_strict(Dets, Scratch, DecoderFun) of
             {ok, nil} ->
-                %% Validation passed — swap contents.
                 ets:delete_all_objects(Ets),
-                ets:insert(Ets, ets:tab2list(Scratch)),
+                copy_reload_table(Ets, Scratch, Type),
                 ets:delete(Scratch),
                 {ok, nil};
             {error, _} = Err ->
@@ -262,6 +262,39 @@ reload_atomic_validated(Ets, Dets, DecoderFun) ->
             (catch ets:delete(Scratch)),
             {error, translate_error(Reason)}
     end.
+
+%% Scratch is owned by this process and is not modified during traversal,
+%% so neither selection continuations nor key traversal need safe_fixtable.
+copy_reload_table(Ets, Scratch, set) ->
+    copy_reload_set(Ets, ets:select(Scratch, [{'_', [], ['$_']}], ?LOAD_BATCH_SIZE));
+copy_reload_table(Ets, Scratch, Type) when Type =:= bag; Type =:= duplicate_bag ->
+    copy_reload_bag(Ets, Scratch, ets:first(Scratch)).
+
+copy_reload_set(_Ets, '$end_of_table') ->
+    ok;
+copy_reload_set(Ets, {Batch, Continuation}) ->
+    ets:insert(Ets, Batch),
+    copy_reload_set(Ets, ets:select(Continuation)).
+
+%% Chunked select does not preserve bag lookup order across chunk boundaries.
+%% Copy each key's objects in lookup order instead, retaining duplicate_bag
+%% multiplicity. Peak transfer memory depends on the largest key group, which
+%% can be the entire table; bags do not have a fixed LOAD_BATCH_SIZE bound.
+copy_reload_bag(Ets, Scratch, '$end_of_table') ->
+    %% first/next use this atom as a sentinel, but the old tab2list transfer
+    %% also handled it as a stored key. Since live ETS starts empty, membership
+    %% there distinguishes an unvisited key from the actual end of traversal.
+    case ets:member(Scratch, '$end_of_table') andalso
+         not ets:member(Ets, '$end_of_table') of
+        true -> copy_reload_bag_key(Ets, Scratch, '$end_of_table');
+        false -> ok
+    end;
+copy_reload_bag(Ets, Scratch, Key) ->
+    copy_reload_bag_key(Ets, Scratch, Key).
+
+copy_reload_bag_key(Ets, Scratch, Key) ->
+    ets:insert(Ets, ets:lookup(Scratch, Key)),
+    copy_reload_bag(Ets, Scratch, ets:next(Scratch, Key)).
 
 %% ── Guardian ────────────────────────────────────────────────────────────
 

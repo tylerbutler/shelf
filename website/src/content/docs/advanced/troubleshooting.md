@@ -84,8 +84,9 @@ without going through the actor. See
 The DETS → ETS load streams every entry through your decoders and inserts
 into ETS in batches. Both decode work and insert work scale linearly with
 the number of entries on disk, so opening a table with millions of
-entries can take noticeable wall time even though peak extra memory is
-bounded to ~1× the table size.
+entries can take noticeable wall time. Batch loading avoids a full-table
+list, but memory use still depends on entry size, ETS storage, and decoder
+work. Reload also keeps a scratch table until the transfer completes.
 
 This is by design — see
 [Memory cost on open and reload](/advanced/persistence-operations/#memory-cost-on-open-and-reload).
