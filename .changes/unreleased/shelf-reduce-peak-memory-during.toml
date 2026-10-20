@@ -1,3 +1,0 @@
-package = "shelf"
-kind = "Performance"
-body = "Reduce peak memory during table reloads."

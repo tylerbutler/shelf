@@ -1,3 +1,0 @@
-package = "shelf"
-kind = "Fixed"
-body = "Save snapshots without overwriting unrelated temporary files."
