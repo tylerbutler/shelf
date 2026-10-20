@@ -10,18 +10,19 @@ the limitation.
 ## I'm getting `NameConflict` on `open()` — why?
 
 `Error(NameConflict)` is returned when you try to open a DETS file that is
-already open by another live shelf table in the same VM. shelf maps
-file paths to a bounded pool of internal DETS atom names; two opens at
-the same path collide intentionally — DETS itself does not allow
-concurrent owners of one file.
+already reserved by another live shelf table in the same VM, even in
+the same process or during save. shelf reserves canonical paths
+exclusively and uses a unique Erlang term for each DETS lifetime.
+Symbolic-link aliases within the base resolve to the same reservation.
 
 What to check:
 
 - Are you calling `open()` twice at the same path without closing in
   between? Use `with_table` for short-lived tables.
 - Did a previous owner crash? The `NameConflict` should normally clear
-  once the guardian process notices the owner exit; if it persists,
-  inspect whether you have a stale handle holding the table.
+  after native DETS finishes closing the dead owner's file. The guardian
+  releases the reservation, or a subsequent open reclaims it after
+  waiting for that close to finish.
 - Are two `set.open` / `bag.open` / `duplicate_bag.open` calls pointing
   at the same path with different table types? Pick one type per file.
 
@@ -99,10 +100,16 @@ Mitigations:
 ## What does `Error(InvalidPath)` mean?
 
 shelf validates every DETS file path against the `base_directory` you
-pass to `open()` / `config()` to prevent path-traversal. Paths containing
-`..` segments, absolute paths that escape the base, or platform-unsafe
-characters are rejected up front with `Error(InvalidPath(reason))`. Pick
-a base directory you control and keep `path` relative to it.
+pass to `open()` / `config()` to prevent path traversal. After resolving
+symbolic links (including an existing leaf), paths that escape the resolved
+base are rejected with `Error(InvalidPath(reason))`. Null bytes, link loops,
+and filesystem resolution errors are also rejected. In-base aliases are
+allowed, Unicode names are preserved, and `/` is a valid base.
+
+Pick a base directory and contents you control. Validation does not protect
+against concurrent external directory/symlink replacement between validation
+and I/O, nor does it detect hard-link aliases. Missing components can pass
+validation, but opening still requires existing parent directories.
 
 ## What is `FileSizeLimitExceeded`?
 

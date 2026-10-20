@@ -260,13 +260,16 @@ pub fn insert_new(
 ) -> Result(Nil, ShelfError) {
   case table.write_mode {
     shelf.WriteThrough -> {
+      use _ <- result.try(internal.validate_owner(table.ets))
       // Check uniqueness in ETS first
       use exists <- result.try(internal.member(table.ets, key))
       case exists {
         True -> Error(shelf.KeyAlreadyPresent)
         False -> {
           // DETS first, then ETS
-          use _ <- result.try(internal.dets_insert(table.dets, #(key, value)))
+          use _ <- result.try(
+            internal.dets_insert(table.ets, table.dets, #(key, value)),
+          )
           internal.insert(table.ets, table.dets, #(key, value))
         }
       }
@@ -389,7 +392,7 @@ pub fn update_counter(
   use new_value <- result.try(ffi_update_counter(table.ets, key, amount))
   case table.write_mode {
     shelf.WriteThrough ->
-      case internal.dets_insert(table.dets, #(key, new_value)) {
+      case internal.dets_insert(table.ets, table.dets, #(key, new_value)) {
         Ok(Nil) -> Ok(new_value)
         Error(e) -> {
           // Undo ETS change to maintain consistency

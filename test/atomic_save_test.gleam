@@ -2,13 +2,12 @@ import gleam/dynamic/decode
 import gleam/int
 import gleam/list
 import shelf/set
+import storage_safety_test as fixture
 import test_helper
 
 pub fn save_cleans_up_temporary_file_test() -> Nil {
-  let path = "/tmp/shelf_as_temp.dets"
-  let temporary_path = path <> ".tmp"
-  test_helper.cleanup(path)
-  test_helper.cleanup(temporary_path)
+  use directory <- fixture.with_directory()
+  let path = directory <> "/table.dets"
 
   let assert Ok(table) =
     set.open(
@@ -22,12 +21,11 @@ pub fn save_cleans_up_temporary_file_test() -> Nil {
   let assert Ok(Nil) = set.insert(table, "key", 1)
   let assert Ok(Nil) = set.save(table)
 
-  // The .tmp file should not remain after save
-  let assert Error(test_helper.FileNotFound) =
-    test_helper.delete_file(temporary_path)
+  // Neither the private snapshot file nor its directory should remain.
+  assert fixture.list_directory(directory) == ["table.dets"]
 
   let assert Ok(Nil) = set.close(table)
-  test_helper.cleanup(path)
+  assert fixture.list_directory(directory) == ["table.dets"]
   Nil
 }
 

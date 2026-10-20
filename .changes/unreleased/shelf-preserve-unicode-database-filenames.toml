@@ -1,0 +1,3 @@
+package = "shelf"
+kind = "Fixed"
+body = "Preserve Unicode database filenames and directories."

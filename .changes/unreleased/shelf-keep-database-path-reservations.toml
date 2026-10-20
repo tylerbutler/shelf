@@ -1,0 +1,3 @@
+package = "shelf"
+kind = "Fixed"
+body = "Keep database path reservations exclusive and safe across owner exits."

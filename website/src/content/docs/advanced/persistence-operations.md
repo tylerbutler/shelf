@@ -20,6 +20,15 @@ Atomically snapshots the entire ETS table into DETS, replacing all DETS contents
 
 The save uses a temp-file-plus-rename strategy for crash safety: data is written to a temporary file first, then atomically renamed over the original DETS file. If the process is killed mid-save, the original file remains intact until the rename succeeds.
 
+Each snapshot acquires a private sibling directory exclusively, keeping the
+temporary file on the same filesystem. It never uses an unrelated
+`<database>.tmp` file. Success and handled failures clean up only that save's
+temporary file and directory. The guardian acquires and tracks the location;
+if the owner exits during save, it waits for temporary DETS shutdown before
+cleaning up. A VM crash can still leave the private directory behind.
+The database path stays exclusively reserved throughout
+the original DETS close/reopen.
+
 Internally, the ETS-to-DETS copy uses `ets:to_dets/2`, which transfers entries inside the Erlang VM without materializing the table as a list.
 
 ```gleam

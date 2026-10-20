@@ -263,7 +263,11 @@ fn assert_failed_final_close(
   assert string.contains(detail, "eacces")
   case callback_result {
     Ok(Nil) -> {
-      assert result == save_result
+      // Each save now acquires a different private snapshot location, so
+      // its failure detail includes a different attempted path.
+      let assert Error(shelf.ErlangError(close_detail)) = result
+      assert string.contains(close_detail, "eacces")
+      assert string.contains(close_detail, directory)
     }
     Error(error) -> {
       assert result == Error(error)

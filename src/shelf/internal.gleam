@@ -11,11 +11,12 @@ import shelf.{type Config, type ShelfError, type WriteMode}
 @internal
 pub type EtsReference
 
-/// Raw DETS table reference (Erlang atom).
+/// Raw DETS table reference (a unique Erlang term for this lifetime).
 @internal
 pub type DetsReference
 
-/// Guardian process PID — monitors the owner and cleans up DETS on crash.
+/// Guardian PID — waits for native DETS cleanup on owner exit, then releases
+/// this lifetime's path reservation.
 @internal
 pub type GuardianReference
 
@@ -113,7 +114,7 @@ pub fn generic_insert(
 ) -> Result(Nil, ShelfError) {
   case write_mode {
     shelf.WriteThrough -> {
-      use _ <- result.try(dets_insert(dets, #(key, value)))
+      use _ <- result.try(dets_insert(ets, dets, #(key, value)))
       insert(ets, dets, #(key, value))
     }
     shelf.WriteBack -> insert(ets, dets, #(key, value))
@@ -130,7 +131,7 @@ pub fn generic_insert_list(
 ) -> Result(Nil, ShelfError) {
   case write_mode {
     shelf.WriteThrough -> {
-      use _ <- result.try(dets_insert_list(dets, entries))
+      use _ <- result.try(dets_insert_list(ets, dets, entries))
       insert_list(ets, dets, entries)
     }
     shelf.WriteBack -> insert_list(ets, dets, entries)
@@ -147,7 +148,7 @@ pub fn generic_delete_key(
 ) -> Result(Nil, ShelfError) {
   case write_mode {
     shelf.WriteThrough -> {
-      use _ <- result.try(dets_delete_key(dets, key))
+      use _ <- result.try(dets_delete_key(ets, dets, key))
       delete_key(ets, key)
     }
     shelf.WriteBack -> delete_key(ets, key)
@@ -165,7 +166,7 @@ pub fn generic_delete_object(
 ) -> Result(Nil, ShelfError) {
   case write_mode {
     shelf.WriteThrough -> {
-      use _ <- result.try(dets_delete_object(dets, key, value))
+      use _ <- result.try(dets_delete_object(ets, dets, key, value))
       delete_object(ets, key, value)
     }
     shelf.WriteBack -> delete_object(ets, key, value)
@@ -181,7 +182,7 @@ pub fn generic_delete_all(
 ) -> Result(Nil, ShelfError) {
   case write_mode {
     shelf.WriteThrough -> {
-      use _ <- result.try(dets_delete_all(dets))
+      use _ <- result.try(dets_delete_all(ets, dets))
       delete_all(ets)
     }
     shelf.WriteBack -> delete_all(ets)
@@ -350,9 +351,14 @@ pub fn sync_dets(
 
 // ── Targeted DETS operations (for WriteThrough mode) ────────────────────
 
+@external(erlang, "shelf_ffi", "validate_owner")
+@internal
+pub fn validate_owner(ets: EtsReference) -> Result(Nil, ShelfError)
+
 @external(erlang, "shelf_ffi", "dets_insert")
 @internal
 pub fn dets_insert(
+  ets: EtsReference,
   dets: DetsReference,
   object: #(k, v),
 ) -> Result(Nil, ShelfError)
@@ -360,17 +366,23 @@ pub fn dets_insert(
 @external(erlang, "shelf_ffi", "dets_insert_list")
 @internal
 pub fn dets_insert_list(
+  ets: EtsReference,
   dets: DetsReference,
   objects: List(#(k, v)),
 ) -> Result(Nil, ShelfError)
 
 @external(erlang, "shelf_ffi", "dets_delete_key")
 @internal
-pub fn dets_delete_key(dets: DetsReference, key: k) -> Result(Nil, ShelfError)
+pub fn dets_delete_key(
+  ets: EtsReference,
+  dets: DetsReference,
+  key: k,
+) -> Result(Nil, ShelfError)
 
 @external(erlang, "shelf_ffi", "dets_delete_object")
 @internal
 pub fn dets_delete_object(
+  ets: EtsReference,
   dets: DetsReference,
   key: k,
   value: v,
@@ -378,4 +390,7 @@ pub fn dets_delete_object(
 
 @external(erlang, "shelf_ffi", "dets_delete_all")
 @internal
-pub fn dets_delete_all(dets: DetsReference) -> Result(Nil, ShelfError)
+pub fn dets_delete_all(
+  ets: EtsReference,
+  dets: DetsReference,
+) -> Result(Nil, ShelfError)

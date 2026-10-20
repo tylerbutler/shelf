@@ -1,4 +1,5 @@
 -module(shelf_ffi).
+-include_lib("kernel/include/file.hrl").
 -export([
     open_no_load/3,
     close/3, cleanup/3,
@@ -9,25 +10,24 @@
     save/2, sync_dets/1, sync_dets/2,
     update_counter/3,
     dets_fold_into_ets_strict/3,
-    dets_insert/2, dets_insert_list/2,
-    dets_delete_key/2, dets_delete_object/3, dets_delete_all/1,
+    validate_owner/1,
+    dets_insert/3, dets_insert_list/3,
+    dets_delete_key/3, dets_delete_object/4, dets_delete_all/2,
     reload_atomic/3,
     validate_path/2,
     normalize_path/1
 ]).
 
-%% ── DETS atom registry ──────────────────────────────────────────────────
-%% DETS requires atom names. To avoid unbounded atom creation from
-%% user-provided paths, we maintain a registry ETS table that maps
-%% path binaries to deterministic atoms from a bounded pool.
+%% ── DETS path reservations ──────────────────────────────────────────────
+%% Each canonical path has one lifetime-exclusive reservation. Native DETS
+%% accepts arbitrary terms as names: the reference prevents stale cleanup
+%% from affecting a replacement, without allocating atoms from paths.
 %%
 %% The registry ETS table is owned by a dedicated long-lived process
 %% (shelf_dets_registry_owner) so it survives the death of any individual
 %% caller process.
 
 -define(REGISTRY, shelf_dets_registry).
--define(POOL_SIZE, 65536).
--define(MAX_COLLISION_ATTEMPTS, 100).
 
 ensure_registry() ->
     case ets:whereis(?REGISTRY) of
@@ -82,48 +82,27 @@ wait_for_registry(N) ->
             ok
     end.
 
-%% Map a path binary to a bounded atom. Uses erlang:phash2 to hash
-%% the path into a fixed pool of atoms (shelf_dets_0 .. shelf_dets_N).
-%% Collisions are capped at MAX_COLLISION_ATTEMPTS to keep atom creation bounded.
-path_to_dets_name(Path) ->
-    ensure_registry(),
-    case ets:lookup(?REGISTRY, Path) of
-        [{Path, Name}] ->
-            Name;
-        [] ->
-            Hash = erlang:phash2(Path, ?POOL_SIZE),
-            Name = find_available_name(Path, Hash, 0),
-            %% Use insert_new to handle races — if another process
-            %% registered this path first, use their name.
-            case ets:insert_new(?REGISTRY, {Path, Name}) of
-                true -> Name;
-                false ->
-                    case ets:lookup(?REGISTRY, Path) of
-                        [{Path, ExistingName}] -> ExistingName;
-                        [] -> path_to_dets_name(Path)
-                    end
+reserve_path(Path, Name) ->
+    case ets:insert_new(?REGISTRY, {Path, Name}) of
+        true -> ok;
+        false ->
+            case ets:lookup(?REGISTRY, Path) of
+                [{Path, {shelf_dets, Owner, _, _} = Previous}] ->
+                    %% Native DETS closes asynchronously on owner death.
+                    %% Do not reclaim while its file server can still write.
+                    case not is_process_alive(Owner) of
+                        true ->
+                            release_dead_reservation(Path, Previous),
+                            reserve_path(Path, Name);
+                        false -> {error, name_conflict}
+                    end;
+                [] -> reserve_path(Path, Name)
             end
     end.
 
-find_available_name(_Path, _Hash, Attempt) when Attempt >= ?MAX_COLLISION_ATTEMPTS ->
-    error(atom_pool_exhausted);
-find_available_name(Path, Hash, Attempt) ->
-    Candidate = list_to_atom("shelf_dets_" ++ integer_to_list(Hash) ++ "_" ++ integer_to_list(Attempt)),
-    %% Check if this atom is already used by a different path
-    case ets:match_object(?REGISTRY, {'_', Candidate}) of
-        [] -> Candidate;
-        [{Path, Candidate}] -> Candidate;  %% Same path, reuse
-        _ -> find_available_name(Path, Hash, Attempt + 1)  %% Collision, try next
-    end.
-
-%% Remove a path from the registry (called on close).
-unregister_dets_name(Path) ->
-    ensure_registry(),
-    ets:delete(?REGISTRY, Path),
-    ok.
-
-%% Only called after checking the original ETS handle's lifetime/ownership.
-%% A failed save can close DETS and fail to reopen it, losing its filename
+%% Delete only the matching lifetime's reservation. Explicit close/cleanup
+%% first validate the original ETS handle; owner-death cleanup waits for
+%% native DETS close. A failed save can fail to reopen DETS, losing its filename
 %% while its name remains reserved in the registry. Recover only a unique
 %% mapping: a name-wide match_delete could erase another path's reservation.
 unregister_dets_name(undefined, Dets) ->
@@ -144,44 +123,135 @@ unregister_dets_name(Path, Dets) ->
 %% Used by the validated loading path where Gleam decodes entries before insertion.
 
 open_no_load(_Name, Path, Type) ->
-    DetsName = path_to_dets_name(Path),
-    try
-        {ok, Dets} = dets:open_file(DetsName, [
-            {file, binary_to_list(Path)},
-            {type, Type},
-            {repair, true}
-        ]),
-        try
-            Ets = ets:new(shelf_ets, [Type, protected, {keypos, 1}, {read_concurrency, true}]),
-            %% Spawn a guardian to close DETS if the owning process dies.
-            %% Safe to call erlang:monitor inside the spawned process: if
-            %% OwnerPid is already dead when monitor/2 runs, it delivers
-            %% an immediate 'DOWN' rather than silently dropping it.
-            OwnerPid = self(),
-            Guardian = spawn(fun() ->
-                erlang:monitor(process, OwnerPid),
-                receive
-                    {'DOWN', _, process, OwnerPid, _} ->
-                        _ = dets:close(Dets),
-                        unregister_dets_name(Path);
-                    stop ->
-                        ok
-                end
-            end),
-            {ok, {Ets, Dets, Guardian}}
-        catch
-            _:badarg ->
-                _ = dets:close(Dets),
-                unregister_dets_name(Path),
-                {error, {erlang_error, <<"Failed to create table">>}}
+    ensure_registry(),
+    Owner = self(),
+    Lifetime = make_ref(),
+    %% Reserve inside the guardian, after monitoring the owner. There is
+    %% then no owner-death gap between reservation and guardian creation.
+    {Guardian, Monitor} = spawn_monitor(fun() ->
+        Name = {shelf_dets, Owner, Lifetime, self()},
+        OwnerMonitor = monitor(process, Owner),
+        case reserve_path(Path, Name) of
+            ok ->
+                Owner ! {Name, reserved},
+                guard_reservation(Owner, OwnerMonitor, Path, Name, none);
+            {error, _} = Error -> Owner ! {Name, Error}
         end
-    catch
-        _:{badmatch, {error, Reason}} ->
-            unregister_dets_name(Path),
-            {error, translate_error(Reason)};
-        _:Reason ->
-            unregister_dets_name(Path),
+    end),
+    Name = {shelf_dets, Owner, Lifetime, Guardian},
+    receive
+        {Name, reserved} ->
+            demonitor(Monitor, [flush]),
+            open_reserved(Path, Type, Name, Guardian);
+        {Name, {error, _} = Error} ->
+            demonitor(Monitor, [flush]),
+            Error;
+        {'DOWN', Monitor, process, Guardian, Reason} ->
+            exit({shelf_guardian_failed, Reason})
+    end.
+
+open_reserved(Path, Type, Name, Guardian) ->
+    %% OTP 27 DETS requires a charlist filename (file:* accepts binaries).
+    case dets:open_file(Name, [
+        {file, unicode:characters_to_list(Path)}, {type, Type}, {repair, true}
+    ]) of
+        {ok, Dets} ->
+            %% An unexpected ETS creation failure remains a process failure;
+            %% the guardian and native DETS still handle owner death.
+            Ets = ets:new(shelf_ets, [Type, protected, {keypos, 1}, {read_concurrency, true}]),
+            {ok, {Ets, Dets, Guardian}};
+        {error, Reason} ->
+            unregister_dets_name(Path, Name),
+            stop_guardian(Guardian),
             {error, translate_error(Reason)}
+    end.
+
+guard_reservation(Owner, Monitor, Path, Name, Snapshot) ->
+    receive
+        {acquire_snapshot, Owner, Request} when Snapshot =:= none ->
+            %% The guardian acquires the directory itself: owner death at
+            %% any point (even before the reply) cannot leave it untracked.
+            case make_save_directory(Path, 100) of
+                {ok, Directory} ->
+                    Temporary = {shelf_tmp, make_ref()},
+                    Acquired = {Directory, Temporary},
+                    Owner ! {Request, {ok, Acquired}},
+                    guard_reservation(Owner, Monitor, Path, Name, Acquired);
+                {error, _} = Error ->
+                    Owner ! {Request, Error},
+                    guard_reservation(Owner, Monitor, Path, Name, none)
+            end;
+        {{finish_snapshot, Temporary}, Owner, Request}
+            when Snapshot =/= none, element(2, Snapshot) =:= Temporary ->
+            %% The caller's after block runs after closing temporary DETS.
+            %% Cleanup and forgetting happen in this one process, avoiding
+            %% a second deletion by a delayed owner-DOWN handler.
+            cleanup_snapshot_directory(Snapshot),
+            Owner ! {Request, ok},
+            guard_reservation(Owner, Monitor, Path, Name, none);
+        {'DOWN', Monitor, process, Owner, _} ->
+            cleanup_dead_snapshot(Snapshot),
+            %% This close also serializes behind any pending native open.
+            %% The guardian is not a DETS opening user: close alone cannot
+            %% release the dead owner's handle. Wait for its file server.
+            release_dead_reservation(Path, Name);
+        stop ->
+            demonitor(Monitor, [flush]),
+            ok
+    end.
+
+release_dead_reservation(Path, Name) ->
+    await_dead_dets_close(Name),
+    unregister_dets_name(Path, Name).
+
+await_dead_dets_close(Name) ->
+    %% Capture the PID before close: DETS removes its registry entry before
+    %% its asynchronous file close completes. close/1 serializes behind
+    %% pending opens/closes even when info/2 already returns undefined.
+    ServerBefore = dets:info(Name, owner),
+    _ = dets:close(Name),
+    %% A pending open may only have published its server during the close
+    %% barrier. Conversely, an owner-exit close may already have removed it.
+    Server = case ServerBefore of
+        undefined -> dets:info(Name, owner);
+        _ -> ServerBefore
+    end,
+    case Server of
+        undefined -> ok;
+        Pid ->
+            Monitor = monitor(process, Pid),
+            receive
+                {'DOWN', Monitor, process, Pid, _} -> ok
+            end
+    end,
+    %% Cover a native close that removed its registry entry between the
+    %% lookups above: the file may still be flushing in a pending request.
+    _ = dets:close(Name),
+    ok.
+
+cleanup_dead_snapshot(none) -> ok;
+cleanup_dead_snapshot({_Directory, Temporary} = Snapshot) ->
+    %% Native DETS, not the guardian, owns the dead caller's open count.
+    %% Wait for pending temp opens/closes and the file server before unlink.
+    await_dead_dets_close(Temporary),
+    cleanup_snapshot_directory(Snapshot).
+
+cleanup_snapshot_directory({Directory, _Temporary}) ->
+    _ = file:delete(filename:join(Directory, <<"snapshot.dets">>)),
+    _ = file:del_dir(Directory),
+    ok.
+
+snapshot_request(Guardian, Operation) ->
+    Request = monitor(process, Guardian),
+    Guardian ! {Operation, self(), Request},
+    %% Like native DETS I/O, acquisition is synchronous: do not time out
+    %% and abandon a directory while the guardian is still acquiring it.
+    receive
+        {Request, Reply} ->
+            demonitor(Request, [flush]),
+            Reply;
+        {'DOWN', Request, process, Guardian, Reason} ->
+            exit({shelf_guardian_failed, Reason})
     end.
 
 %% ── Streaming DETS → ETS loaders ────────────────────────────────────────
@@ -307,8 +377,7 @@ stop_guardian(Guardian) ->
 %% and when a with_table scope cannot retain a retryable close failure.
 
 cleanup(Ets, Dets, Guardian) ->
-    %% The ETS reference identifies this handle's lifetime; the DETS atom can
-    %% already belong to a different table reopened by the callback. Never
+    %% The ETS reference identifies this handle's lifetime. Never
     %% look up its path or close it after the original ETS handle is gone.
     case check_owner(Ets) of
         {error, _} = Error -> Error;
@@ -351,20 +420,20 @@ preserve_table_after_close_error(undefined, _Reason) -> false;
 preserve_table_after_close_error(_Path, _Reason) -> true.
 
 finalize_close(Ets, Dets, Guardian, Path) ->
-    stop_guardian(Guardian),
     CloseResult = close_dets_handle(Dets),
     _ = (catch ets:delete(Ets)),
     unregister_dets_name(Path, Dets),
+    stop_guardian(Guardian),
     case CloseResult of
         ok -> {ok, nil};
         {error, Reason} -> {error, Reason}
     end.
 
 teardown_resources(Ets, Dets, Guardian, Path) ->
-    stop_guardian(Guardian),
     _ = close_dets_handle(Dets),
     _ = (catch ets:delete(Ets)),
     unregister_dets_name(Path, Dets),
+    stop_guardian(Guardian),
     ok.
 
 close_dets_handle(Dets) ->
@@ -379,7 +448,7 @@ close_dets_handle(Dets) ->
 dets_to_path(Dets) ->
     case dets:info(Dets, filename) of
         undefined -> undefined;
-        Filename -> list_to_binary(Filename)
+        Filename -> unicode:characters_to_binary(Filename)
     end.
 
 %% ── Insert ──────────────────────────────────────────────────────────────
@@ -496,9 +565,15 @@ check_owner(Ets) ->
         _ -> {error, not_owner}
     end.
 
+validate_owner(Ets) ->
+    case check_owner(Ets) of
+        ok -> {ok, nil};
+        {error, _} = Error -> Error
+    end.
+
 %% Atomic save: snapshot ETS to a temp DETS file, then rename over the original.
 %% This prevents data loss if the process is killed mid-save.
-save(Ets, Dets) ->
+save(Ets, {shelf_dets, _Owner, _Lifetime, Guardian} = Dets) ->
     case check_owner(Ets) of
         {error, _} = Err -> Err;
         ok ->
@@ -508,23 +583,49 @@ save(Ets, Dets) ->
                     undefined ->
                         {error, table_closed};
                     _ ->
-                        TmpPath = <<OrigPath/binary, ".tmp">>,
                         Type = dets:info(Dets, type),
-                        safe_save_impl(Ets, Dets, OrigPath, TmpPath, Type)
+                        case snapshot_request(Guardian, acquire_snapshot) of
+                            {ok, {Directory, Temporary}} ->
+                                TmpPath = filename:join(Directory, <<"snapshot.dets">>),
+                                try safe_save_impl(Ets, Dets, OrigPath, TmpPath, Type, Temporary)
+                                after
+                                    snapshot_request(Guardian, {finish_snapshot, Temporary})
+                                end;
+                            {error, TempReason} ->
+                                %% Keep the save error's native failure detail,
+                                %% as for a failed snapshot/open/rename below.
+                                {error, translate_error({badmatch, {error, TempReason}})}
+                        end
                 end
             catch
                 _:Reason -> {error, translate_error(Reason)}
             end
     end.
 
-safe_save_impl(Ets, Dets, OrigPath, TmpPath, Type) ->
-    TmpPathList = binary_to_list(TmpPath),
-    OrigPathList = binary_to_list(OrigPath),
-    TmpName = {shelf_tmp, make_ref()},
+make_save_directory(_Path, 0) ->
+    {error, {file_error, temp_directory, eexist}};
+make_save_directory(Path, Attempts) ->
+    Suffix = integer_to_binary(erlang:unique_integer([positive, monotonic])),
+    Pid = list_to_binary(os:getpid()),
+    Directory = filename:join(filename:dirname(Path),
+        <<".shelf-save-", Pid/binary, "-", Suffix/binary>>),
+    case file:make_dir(Directory) of
+        ok ->
+            case file:change_mode(Directory, 8#700) of
+                ok -> {ok, Directory};
+                {error, Reason} ->
+                    _ = file:del_dir(Directory),
+                    {error, {file_error, Directory, Reason}}
+            end;
+        {error, eexist} -> make_save_directory(Path, Attempts - 1);
+        {error, Reason} -> {error, {file_error, Directory, Reason}}
+    end.
+
+safe_save_impl(Ets, Dets, OrigPath, TmpPath, Type, TmpName) ->
     try
         %% 1. Open temp DETS
         {ok, TmpDets} = dets:open_file(TmpName, [
-            {file, TmpPathList},
+            {file, unicode:characters_to_list(TmpPath)},
             {type, Type},
             {repair, false}
         ]),
@@ -535,11 +636,11 @@ safe_save_impl(Ets, Dets, OrigPath, TmpPath, Type) ->
         %% 4. Close original DETS
         ok = dets:close(Dets),
         %% 5. Atomic rename (POSIX guarantees this is atomic)
-        ok = file:rename(TmpPathList, OrigPathList),
-        %% 6. Reopen DETS at original path with the same atom name
+        ok = file:rename(TmpPath, OrigPath),
+        %% 6. Reopen DETS using the same lifetime reservation
         DetsName = Dets,
         {ok, _} = dets:open_file(DetsName, [
-            {file, OrigPathList},
+            {file, unicode:characters_to_list(OrigPath)},
             {type, Type},
             {repair, true}
         ]),
@@ -548,7 +649,6 @@ safe_save_impl(Ets, Dets, OrigPath, TmpPath, Type) ->
         _:Error ->
             %% Clean up temp file on failure
             _ = (catch dets:close(TmpName)),
-            _ = (catch file:delete(TmpPathList)),
             %% Try to reopen original if it was closed
             %% Opening an already-open DETS table again increments this
             %% caller's open count. A later cleanup would then leave DETS
@@ -556,7 +656,7 @@ safe_save_impl(Ets, Dets, OrigPath, TmpPath, Type) ->
             case dets:info(Dets) of
                 undefined ->
                     _ = (catch dets:open_file(Dets, [
-                        {file, OrigPathList},
+                        {file, unicode:characters_to_list(OrigPath)},
                         {type, Type},
                         {repair, true}
                     ]));
@@ -604,37 +704,61 @@ update_counter(Ets, Key, Increment) ->
 
 %% ── Targeted DETS operations (for WriteThrough mode) ────────────────────
 
-dets_insert(Dets, Object) ->
+dets_insert(Ets, Dets, Object) ->
+    case check_owner(Ets) of
+        ok -> dets_insert_validated(Dets, Object);
+        {error, _} = Error -> Error
+    end.
+
+dets_insert_validated(Dets, Object) ->
     try dets:insert(Dets, Object) of
-        ok -> {ok, nil}
+        ok -> {ok, nil};
+        {error, Reason} -> {error, translate_error(Reason)}
     catch
         _:Reason -> {error, translate_error(Reason)}
     end.
 
-dets_insert_list(Dets, Objects) ->
-    try dets:insert(Dets, Objects) of
-        ok -> {ok, nil}
-    catch
-        _:Reason -> {error, translate_error(Reason)}
+dets_insert_list(Ets, Dets, Objects) ->
+    dets_insert(Ets, Dets, Objects).
+
+dets_delete_key(Ets, Dets, Key) ->
+    case check_owner(Ets) of
+        ok -> dets_delete_key_validated(Dets, Key);
+        {error, _} = Error -> Error
     end.
 
-dets_delete_key(Dets, Key) ->
+dets_delete_key_validated(Dets, Key) ->
     try dets:delete(Dets, Key) of
-        ok -> {ok, nil}
+        ok -> {ok, nil};
+        {error, Reason} -> {error, translate_error(Reason)}
     catch
         _:Reason -> {error, translate_error(Reason)}
     end.
 
-dets_delete_object(Dets, Key, Value) ->
+dets_delete_object(Ets, Dets, Key, Value) ->
+    case check_owner(Ets) of
+        ok -> dets_delete_object_validated(Dets, Key, Value);
+        {error, _} = Error -> Error
+    end.
+
+dets_delete_object_validated(Dets, Key, Value) ->
     try dets:delete_object(Dets, {Key, Value}) of
-        ok -> {ok, nil}
+        ok -> {ok, nil};
+        {error, Reason} -> {error, translate_error(Reason)}
     catch
         _:Reason -> {error, translate_error(Reason)}
     end.
 
-dets_delete_all(Dets) ->
+dets_delete_all(Ets, Dets) ->
+    case check_owner(Ets) of
+        ok -> dets_delete_all_validated(Dets);
+        {error, _} = Error -> Error
+    end.
+
+dets_delete_all_validated(Dets) ->
     try dets:delete_all_objects(Dets) of
-        ok -> {ok, nil}
+        ok -> {ok, nil};
+        {error, Reason} -> {error, translate_error(Reason)}
     catch
         _:Reason -> {error, translate_error(Reason)}
     end.
@@ -680,21 +804,61 @@ classify_ets_error(_Ets, Reason) ->
 %% ── Path validation ────────────────────────────────────────────────────
 
 validate_path(Path, BaseDirectory) ->
-    BaseAbs = filename:absname(binary_to_list(BaseDirectory)),
-    Resolved = filename:absname(binary_to_list(Path), BaseAbs),
-    %% Normalize by splitting and rejoining (resolves . and ..)
-    Normalized = normalize_path(Resolved),
-    NormalizedBase = normalize_path(BaseAbs),
-    %% Ensure the resolved path is inside the base directory.
-    %% We must check for a directory boundary to prevent sibling directory
-    %% bypass (e.g. base="/app/data" must not match "/app/data_sibling/x").
-    case Normalized =:= NormalizedBase orelse
-         lists:prefix(NormalizedBase ++ "/", Normalized) of
-        true ->
-            {ok, list_to_binary(Normalized)};
-        false ->
-            {error, {invalid_path, <<"Path escapes base directory">>}}
+    case resolve_path(filename:absname(BaseDirectory)) of
+        {ok, Base} ->
+            case resolve_path(filename:absname(Path, Base)) of
+                {ok, Resolved} ->
+                    %% Component comparison handles root and sibling names.
+                    case lists:prefix(filename:split(Base), filename:split(Resolved)) of
+                        true ->
+                            case unicode:characters_to_binary(Resolved) of
+                                Canonical when is_binary(Canonical) -> {ok, Canonical};
+                                _ -> {error, {invalid_path, <<"Path is not valid UTF-8">>}}
+                            end;
+                        false -> {error, {invalid_path, <<"Path escapes base directory">>}}
+                    end;
+                {error, _} = Error -> Error
+            end;
+        {error, _} = Error -> Error
     end.
+
+%% Resolve links before processing "..", including links at the leaf.
+%% Missing components are allowed for paths that will be created later;
+%% DETS open still requires existing parent directories. A bounded link
+%% count rejects loops. This is not a sandbox against concurrent replacement.
+resolve_path(Path) ->
+    [Root | Parts] = filename:split(Path),
+    resolve_parts(Parts, Root, 40).
+
+resolve_parts([], Current, _LinksLeft) -> {ok, Current};
+resolve_parts([<<".">> | Rest], Current, LinksLeft) ->
+    resolve_parts(Rest, Current, LinksLeft);
+resolve_parts([<<"..">> | Rest], Current, LinksLeft) ->
+    resolve_parts(Rest, filename:dirname(Current), LinksLeft);
+resolve_parts([Part | Rest], Current, LinksLeft) ->
+    Candidate = filename:join(Current, Part),
+    case file:read_link_info(Candidate) of
+        {ok, #file_info{type = symlink}} when LinksLeft =:= 0 ->
+            {error, {invalid_path, <<"Too many symbolic links">>}};
+        {ok, #file_info{type = symlink}} ->
+            case file:read_link(Candidate) of
+                {ok, Target} ->
+                    Absolute = filename:absname(Target, Current),
+                    [Root | TargetParts] = filename:split(Absolute),
+                    resolve_parts(TargetParts ++ Rest, Root, LinksLeft - 1);
+                {error, Reason} -> path_resolution_error(Reason)
+            end;
+        {ok, #file_info{type = directory}} ->
+            resolve_parts(Rest, Candidate, LinksLeft);
+        {ok, _} when Rest =:= [] -> {ok, Candidate};
+        {ok, _} -> path_resolution_error(enotdir);
+        {error, enoent} -> resolve_parts(Rest, Candidate, LinksLeft);
+        {error, Reason} -> path_resolution_error(Reason)
+    end.
+
+path_resolution_error(Reason) ->
+    {error, {invalid_path, unicode:characters_to_binary(
+        io_lib:format("Cannot resolve path: ~p", [Reason]))}}.
 
 normalize_path(Path) ->
     Parts = filename:split(Path),
@@ -705,6 +869,8 @@ normalize_parts([], Acc) ->
     lists:reverse(Acc);
 normalize_parts(["." | Rest], Acc) ->
     normalize_parts(Rest, Acc);
+normalize_parts([".." | Rest], ["/"]) ->
+    normalize_parts(Rest, ["/"]);
 normalize_parts([".." | Rest], [_ | Acc]) ->
     normalize_parts(Rest, Acc);
 normalize_parts([".." | Rest], []) ->

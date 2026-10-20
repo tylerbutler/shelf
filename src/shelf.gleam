@@ -35,8 +35,12 @@
 /// ## Security
 ///
 /// All DETS file paths are validated against a required base directory.
-/// Paths that escape the base directory (e.g., via `..` traversal) or
-/// contain null bytes are rejected with `InvalidPath`.
+/// Paths that escape the resolved base directory (via `..` or symbolic
+/// links) or contain null bytes are rejected with `InvalidPath`. Paths
+/// are canonicalized and Unicode filenames are preserved.
+/// The base directory and its contents must be trusted: validation does
+/// not protect against concurrent external symlink/path replacement or
+/// hard-link aliases.
 ///
 /// ## Limitations
 ///
@@ -85,8 +89,8 @@ pub type ShelfError {
   NotOwner
   /// DETS file could not be found or created
   FileError(String)
-  /// A DETS file at this path is already open by another shelf table.
-  /// This is a file-level conflict, not related to the table name.
+  /// This canonical path is reserved by another live shelf table, even
+  /// in the same process or while saving. Not related to the table name.
   NameConflict
   /// The DETS file path is invalid (escapes base directory, contains
   /// null bytes, or is otherwise unsafe)
@@ -192,7 +196,12 @@ pub fn get_write_mode(config: Config) -> WriteMode {
 /// Validate that a path is safe and resolve it against the base directory.
 ///
 /// Rejects paths containing null bytes or that escape the base directory
-/// via `..` traversal. Returns the resolved absolute path on success.
+/// via `..` traversal or symbolic links, including an existing leaf link.
+/// Returns a canonical absolute Unicode path; `/` is a valid base.
+/// Missing components are allowed, but opening requires existing parent
+/// directories. Link loops and filesystem resolution errors are rejected.
+/// Requires trusted directories; concurrent external path replacement is
+/// not prevented.
 @internal
 pub fn validate_path(
   path: String,
