@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.1.1 - 2026-10-20
+
+#### Fixed
+
+##### Accept the filesystem root as a base directory.
+##### Keep database path reservations exclusive and safe across owner exits.
+##### Preserve Unicode database filenames and directories.
+##### Reject non-owner and closed-handle writes before changing persistent data.
+##### Return WriteThrough storage errors without crashing the owner.
+##### Save snapshots without overwriting unrelated temporary files.
+
+#### Performance
+
+##### Reduce peak memory during table reloads.
+
+#### Security
+
+##### Reject database paths that escape the base directory through symbolic links.
+
 ## v1.1.0 - 2026-10-18
 
 #### Added

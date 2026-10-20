@@ -1,3 +1,0 @@
-package = "shelf"
-kind = "Security"
-body = "Reject database paths that escape the base directory through symbolic links."
