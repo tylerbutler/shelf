@@ -110,8 +110,10 @@ pub fn main() -> Nil {
   let assert Ok(after_delete) = duplicate_bag.size(of: table)
   io.println("Events remaining: " <> int.to_string(after_delete))
 
-  // Also demonstrate delete_object — remove one specific duplicate
-  io.println("Deleting one /blog/1 @ 1718000020 event...")
+  // delete_object removes all exact matches, including duplicates.
+  let expected_remaining =
+    list.filter(blog_views, fn(timestamp) { timestamp != 1_718_000_020 })
+  io.println("Deleting all /blog/1 @ 1718000020 events...")
   let assert Ok(Nil) =
     duplicate_bag.delete_object(
       from: table,
@@ -119,6 +121,7 @@ pub fn main() -> Nil {
       value: 1_718_000_020,
     )
   let assert Ok(blog_after) = duplicate_bag.lookup(from: table, key: "/blog/1")
+  assert blog_after == expected_remaining
   io.println(
     "/blog/1 events remaining: " <> int.to_string(list.length(blog_after)),
   )

@@ -43,7 +43,8 @@ let assert Ok(Nil) = set.reload(table)
 
 ## WriteThrough
 
-In WriteThrough mode, every write persists to both ETS and DETS immediately. Reads are still served from ETS (fast).
+In WriteThrough mode, each write updates DETS and ETS before it returns.
+Reads still use ETS.
 
 ```gleam
 import gleam/dynamic/decode
@@ -60,22 +61,26 @@ let assert Ok(table) = set.open_config(config: config, key: decode.string, value
 let assert Ok(Nil) = set.insert(into: table, key: "acct:1", value: account)
 ```
 
-**Best for**: Data that must survive crashes with no loss — financial records, user accounts, configuration.
+**Best for**: Data that needs a DETS update after each write, without a
+separate snapshot. WriteThrough alone does not guarantee survival of a
+VM crash, OS crash, or power loss.
 
-### Guaranteeing Durability
+### Synchronizing Writes
 
 After a WriteThrough write, the data has been handed to DETS but may still
-be in DETS's in-memory write buffer. Call `sync()` to drain that buffer
-into the on-disk DETS file:
+be in DETS's in-memory write buffer. Call `sync()` to flush pending writes
+and synchronize file data when DETS is dirty:
 
 ```gleam
 let assert Ok(Nil) = set.insert(into: table, key: "critical", value: value)
 let assert Ok(Nil) = set.sync(table)
 ```
 
-`sync()` does **not** call `fsync(2)` on the underlying file. For the full
-layer-by-layer breakdown of what `save()` and `sync()` actually guarantee,
-see the canonical [Durability story](/advanced/persistence-operations/#durability-story).
+For a dirty disk-backed table, `dets:sync/1` calls `file:sync/1`. DETS can
+skip this step for an already-saved table. Shelf does not synchronize
+directory entries after file creation or rename, so this is not a full
+power-loss guarantee. See the
+[Durability story](/advanced/persistence-operations/#durability-story).
 
 ## Comparison
 

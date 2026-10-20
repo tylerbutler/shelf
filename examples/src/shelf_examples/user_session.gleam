@@ -1,8 +1,8 @@
 //// User Session Store Example
 ////
 //// Demonstrates shelf's PersistentSet with WriteThrough mode for a user session
-//// store where every write is immediately persisted to disk — no
-//// explicit `save()` call needed.
+//// store where each write reaches DETS without an explicit `save()`.
+//// DETS can buffer writes; call `sync()` after critical writes.
 ////
 //// Key concepts shown:
 ////   - Config builder pattern with WriteThrough mode
@@ -22,8 +22,8 @@ pub fn main() -> Nil {
 
   // --- 1. Build configuration with WriteThrough mode ---
   // The builder pattern lets you start with defaults and override what you need.
-  // WriteThrough means every write is immediately persisted to the DETS file,
-  // so there's no need to call save() manually.
+  // WriteThrough sends each write to DETS without a separate save().
+  // DETS can buffer writes; sync() requests file-data synchronization.
   let config =
     shelf.config("user_sessions", path, base_directory: "/tmp")
     |> shelf.write_mode(shelf.WriteThrough)
@@ -87,10 +87,8 @@ pub fn main() -> Nil {
   let assert Ok(Nil) = set.close(sessions)
   io.println("✓ Closed user_sessions table")
 
-  // Note: Because we used WriteThrough mode, every insert above was
-  // immediately persisted to disk. There's no need for an explicit
-  // save() call before closing — all data is already safely on disk.
+  // WriteThrough sent each write to DETS. close() saved a final snapshot.
   io.println("")
-  io.println("Done! WriteThrough mode ensured all writes were persisted")
-  io.println("immediately — no explicit save() was needed.")
+  io.println("Done! WriteThrough sent each write to DETS without a save().")
+  io.println("DETS can buffer writes; use sync() after critical writes.")
 }
