@@ -1,3 +1,3 @@
 package = "shelf"
 kind = "Changed"
-body = "Include reproducible CycloneDX SBOMs in Shelf Hex packages and GitHub Releases."
+body = "Inspect Shelf's dependency versions and declared licences with the reproducible CycloneDX software bill of materials (SBOM) included in Hex packages and available from GitHub Releases."
