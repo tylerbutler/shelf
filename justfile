@@ -21,11 +21,22 @@ deps:
 
 # Build project (Erlang target)
 build:
+    rm -f priv/shelf.cdx.json
     gleam build
+    just sbom
 
 # Build with warnings as errors
 build-strict:
+    rm -f priv/shelf.cdx.json
     gleam build --warnings-as-errors
+    just sbom
+
+# Generate a reproducible CycloneDX SBOM for the locked Shelf dependencies
+sbom:
+    rm -f priv/shelf.cdx.json
+    gleam deps download
+    mkdir -p priv
+    SOURCE_DATE_EPOCH=0 licence_audit sbom --reproducible --output=priv/shelf.cdx.json
 
 # === TESTING ===
 
@@ -36,6 +47,14 @@ test:
 # Test the website deploy filter without network access
 test-site-ignore:
     bash website/netlify-ignore.test.sh
+
+# Check SBOM reproducibility, locked dependency coverage, and Hex package bytes
+test-sbom: sbom
+    SOURCE_DATE_EPOCH=0 licence_audit sbom --reproducible --output=build/shelf-check.cdx.json
+    cmp priv/shelf.cdx.json build/shelf-check.cdx.json
+    rm build/shelf-check.cdx.json
+    gleam export hex-tarball
+    python3 test/sbom_test.py
 
 # === CODE QUALITY ===
 
@@ -76,6 +95,7 @@ changelog:
 
 # Remove build artifacts
 clean:
+    rm -f priv/shelf.cdx.json
     rm -rf build
 
 # === EXAMPLES ===
@@ -91,7 +111,7 @@ build-examples:
 # === CI ===
 
 # Run all CI checks (format, check, test, build)
-ci: format-check check test test-site-ignore build-strict check-examples
+ci: format-check check test test-site-ignore build-strict test-sbom check-examples
 
 # Alias for PR checks
 alias pr := ci

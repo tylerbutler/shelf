@@ -14,6 +14,13 @@ gleam format src test examples/src    # Format code
 gleam docs build         # Generate documentation
 ```
 
+Use `just build` or `just build-strict` to compile and generate the Shelf
+SBOM with the pinned standalone licence_audit tool. `just sbom` writes
+`priv/shelf.cdx.json`; `just test-sbom` verifies reproducibility, lockfile
+coverage, and Hex archive bytes with Python 3.11 or newer. CI calls the
+tools directly. Release generation and attachment use the approved merge
+SHA; SBOM checks and upload must succeed before release completion.
+
 ## Changelogs and Releases
 
 Keep Just as the task interface. Trellis manages changelogs, version bumps,
