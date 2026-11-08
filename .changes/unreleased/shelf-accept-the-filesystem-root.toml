@@ -1,3 +1,0 @@
-package = "shelf"
-kind = "Fixed"
-body = "Accept the filesystem root as a base directory."

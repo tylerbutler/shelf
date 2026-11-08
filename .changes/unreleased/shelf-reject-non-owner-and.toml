@@ -1,3 +1,0 @@
-package = "shelf"
-kind = "Fixed"
-body = "Reject non-owner and closed-handle writes before changing persistent data."

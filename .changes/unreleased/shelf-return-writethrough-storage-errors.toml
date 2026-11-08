@@ -1,3 +1,0 @@
-package = "shelf"
-kind = "Fixed"
-body = "Return WriteThrough storage errors without crashing the owner."
