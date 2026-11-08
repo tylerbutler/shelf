@@ -398,15 +398,36 @@ The `[tools.trellis.changelog]` table in `gleam.toml` defines the change kinds
 and version bumps. Development-only changes need no entry; the PR check
 warns about missing entries and fails on invalid fragments.
 
-On a push to `main`, trellis creates or updates a release PR on
-`release/next`. Merging that PR creates the `v<version>` tag and GitHub
-release. The tag starts the Hex publish workflow. The workflows use the
-existing `RELEASE_APP_ID`, `RELEASE_APP_PRIVATE_KEY`, and `HEXPM_API_KEY`
-secrets. The examples remain workspace members but do not release.
+On a push to `main`, the pinned Trellis release coordinator creates or updates
+a release PR on `release/pending`. Trellis 1.3.0 preserves the pending release
+intent and skips unchanged preparations. After you merge that PR, the
+coordinator checks out its merge commit, publishes Shelf to Hex, and then
+creates the `v<version>` tag and GitHub Release. The examples remain workspace
+members and do not release.
 
-For a manual release, `just changelog` applies the version bump, consumes
-the pending fragments, and updates the changelog and internal lockfile versions.
-Use `just changelog-preview` first; it does not change files.
+The coordinator queues preparation and publication in one repository-wide
+concurrency group. It records completion in the `trellis/release` commit status
+and blocks the next preparation if the preceding release did not complete.
+For a failed release, retry its original Release workflow run with
+`gh run rerun <run-id> --repo tylerbutler/shelf --failed`. Do not move its tag
+or publish from a newer commit. Trellis skips package versions already on Hex;
+the coordinator skips publication and tagging after it records success.
+
+For a release candidate, run the Release workflow on `main` with `pre=rc`.
+Candidate continuation requires another manual request. Promote to stable
+with `pre=none`; use `set` for an exact target such as `shelf=1.1.1`, or `bump`
+for an override such as `shelf=patch`. The workflow uses the existing
+`RELEASE_APP_ID`, `RELEASE_APP_PRIVATE_KEY`, and `HEXPM_API_KEY` secrets.
+The release App needs permission to push branches and create PRs. The
+workflow token needs contents and commit-status write access.
+
+The migration leaves `v1.1.0` unchanged and starts new release history on
+`release/pending`. Do not merge the legacy `release/next` PR (#89); use the new
+release PR for the next patch version.
+
+For a local version preview, use `just changelog-preview`. `just changelog`
+applies the version bump, consumes the pending fragments, and updates the
+changelog and internal lockfile versions; it does not publish a release.
 
 ## See Also
 

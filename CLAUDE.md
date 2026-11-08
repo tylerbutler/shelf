@@ -26,7 +26,9 @@ the `[tools.trellis]` tables in `gleam.toml` hold the release configuration.
 - Run `trellis doctor` to check release configuration and fragments.
 - Keep released sections in `.changes/shelf/`; do not edit `CHANGELOG.md`.
 - `just changelog` applies the version bump and consumes fragments.
-- Release PRs use `release/next`; tags keep the `v<version>` format.
+- Release PRs use `release/pending`; tags keep the `v<version>` format.
+- The pinned release coordinator publishes to Hex before creating tags and
+  GitHub Releases. Retry failed releases at the original merge revision.
 - Do not release `shelf_examples`.
 
 ## Project Structure

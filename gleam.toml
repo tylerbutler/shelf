@@ -26,6 +26,11 @@ exact_tag_format = "v{version}"
 [tools.trellis.publish.lifecycle]
 packages = { "." = "hex", examples = "workspace" }
 
+[tools.trellis.release]
+resume = true
+auto_pre = true
+skip_unchanged = true
+
 [tools.trellis.changelog]
 strictness = "warn"
 header_format = "# Changelog"
