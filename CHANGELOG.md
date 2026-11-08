@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.1.2 - 2026-11-08
+
+#### Changed
+
+##### Inspect Shelf's dependency versions and declared licences with the reproducible CycloneDX software bill of materials (SBOM) included in Hex packages and available from GitHub Releases.
+
 ## v1.1.1 - 2026-11-08
 
 #### Fixed
