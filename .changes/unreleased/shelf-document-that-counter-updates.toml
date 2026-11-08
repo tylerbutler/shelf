@@ -1,0 +1,3 @@
+package = "shelf"
+kind = "Fixed"
+body = "Document that counter updates require the table owner."

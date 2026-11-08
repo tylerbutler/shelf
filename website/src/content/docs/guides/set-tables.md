@@ -96,7 +96,9 @@ let assert Ok(Nil) = set.delete_all(from: table)
 
 ## Atomic Counters
 
-Set tables support atomic integer counters — useful for metrics, rate limiting, or any lock-free counting:
+Set tables support atomic integer counters for metrics and rate limiting.
+Only the table owner can update a counter. Other processes must send
+increment requests to the owner; direct calls return `Error(NotOwner)`.
 
 ```gleam
 let assert Ok(Nil) = set.insert(into: table, key: "page_views", value: 0)

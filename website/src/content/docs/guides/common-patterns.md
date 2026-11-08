@@ -59,8 +59,8 @@ let assert Ok(Nil) = set.delete_all(from: t)
 
 `delete_object` behaves differently depending on the table type:
 
-- **Bag / Duplicate Bag**: removes a specific `#(key, value)` pair while
-  keeping other values for the same key.
+- **Bag / Duplicate Bag**: removes all occurrences of a specific
+  `#(key, value)` pair while keeping other values for the same key.
 - **Set**: acts as a *compare-and-delete* — only deletes if both the key
   and value match the stored entry. This is useful for optimistic
   concurrency.
@@ -75,9 +75,10 @@ let assert Ok(Nil) = set.delete_object(from: t, key: "key", value: "value")
 
 ## Atomic counters
 
-`update_counter` performs a lock-free atomic add inside ETS. It avoids
-the round-trip overhead of read-modify-write through an actor when many
-producers share a counter.
+`update_counter` performs an atomic add inside ETS. Only the table owner
+can call it; other processes receive `Error(NotOwner)`. If several
+processes produce increments, send their requests to the owner or to an
+actor that owns the table.
 
 ```gleam
 let assert Ok(Nil) = set.insert(into: t, key: "page_views", value: 0)
