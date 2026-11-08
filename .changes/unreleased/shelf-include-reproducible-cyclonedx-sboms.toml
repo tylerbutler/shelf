@@ -1,0 +1,3 @@
+package = "shelf"
+kind = "Changed"
+body = "Include reproducible CycloneDX SBOMs in Shelf Hex packages and GitHub Releases."

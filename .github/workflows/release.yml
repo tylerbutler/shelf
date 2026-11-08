@@ -28,10 +28,12 @@ permissions:
 
 jobs:
   release:
-    uses: tylerbutler/actions/.github/workflows/trellis-release.yml@40269ed66210884257a06ab9c0f7e2c4f987af05 # ratchet:tylerbutler/actions/.github/workflows/trellis-release.yml@main
+    uses: tylerbutler/actions/.github/workflows/trellis-release.yml@74c553a56a41cc46a32fccd83c9a0e385c396a00 # ratchet:tylerbutler/actions/.github/workflows/trellis-release.yml@main
     with:
       trellis_version: "1.3.0"
       release_mode: hex
+      sbom_package: shelf
+      licence_audit_version: "0.15.0"
       base: main
       release_branch: release/pending
       gleam_version: "1.19.2"

@@ -20,8 +20,45 @@ jobs:
       - name: Setup environment
         uses: ./.github/actions/setup
 
+      - name: Install licence_audit
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # ratchet:jdx/mise-action@v3
+        with:
+          install_args: github:tylerbutler/licence_audit
+
       - name: Run CI checks
-        run: just ci
+        run: |
+          rm -f priv/shelf.cdx.json
+          gleam format --check src test examples/src
+          gleam check
+          gleam test
+          bash website/netlify-ignore.test.sh
+          gleam build --warnings-as-errors
+          (cd examples && gleam check)
+
+      - name: Generate Shelf SBOM
+        env:
+          SOURCE_DATE_EPOCH: "0"
+        run: |
+          gleam deps download
+          mkdir -p priv
+          licence_audit sbom --reproducible --output=priv/shelf.cdx.json
+
+      - name: Verify Shelf SBOM and Hex archive
+        env:
+          SOURCE_DATE_EPOCH: "0"
+        run: |
+          licence_audit sbom --reproducible --output=build/shelf-check.cdx.json
+          cmp priv/shelf.cdx.json build/shelf-check.cdx.json
+          rm build/shelf-check.cdx.json
+          gleam export hex-tarball
+          python3 test/sbom_test.py
+
+      - name: Upload Shelf SBOM
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ratchet:actions/upload-artifact@v4
+        with:
+          name: shelf-sbom
+          path: priv/shelf.cdx.json
+          if-no-files-found: error
 
   docs:
     runs-on: ubuntu-latest

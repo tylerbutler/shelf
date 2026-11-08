@@ -3,6 +3,7 @@
 *.ez
 /build
 /examples/build
+/priv/shelf.cdx.json
 erl_crash.dump
 
 # Coverage
