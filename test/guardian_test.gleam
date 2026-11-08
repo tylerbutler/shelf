@@ -151,7 +151,11 @@ pub fn opening_and_closing_many_tables_does_not_leak_guardians_test() -> Nil {
   Nil
 }
 
-fn open_close_collect(path: String, remaining: Int, acc: List(Pid)) -> List(Pid) {
+fn open_close_collect(
+  path: String,
+  remaining: Int,
+  acc: List(Pid),
+) -> List(Pid) {
   case remaining {
     0 -> acc
     n -> {
