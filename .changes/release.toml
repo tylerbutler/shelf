@@ -1,0 +1,86 @@
+schema = "trellis.release_intent/1"
+base = "main"
+branch = "release/pending"
+base_commit = "9454a129766d857a1a9a0891cde9f7ffc28e8411"
+
+[intent]
+bump = []
+set = []
+
+[packages.shelf]
+path = "./gleam.toml"
+current = "1.1.0"
+next = "1.1.1"
+
+[inputs]
+".changes/unreleased/shelf-accept-the-filesystem-root.toml" = "57d57c2cae1d98d2ba032d547b5415455872796f"
+".changes/unreleased/shelf-keep-database-path-reservations.toml" = "c7da30090af7c3b29fba43a368a9a537ed517e19"
+".changes/unreleased/shelf-preserve-unicode-database-filenames.toml" = "aeb1bac30d0729ff63a1b308faaf0552dfeb3f34"
+".changes/unreleased/shelf-reduce-peak-memory-during.toml" = "7ee952f888c92459f61a4b4ee1534f0558da3ce1"
+".changes/unreleased/shelf-reject-database-paths-that.toml" = "dbb9cdcf4517ffed35e44ef4f355bbffe1212875"
+".changes/unreleased/shelf-reject-non-owner-and.toml" = "32112206edb08e9193c96238b375b2522a67ced7"
+".changes/unreleased/shelf-return-writethrough-storage-errors.toml" = "21a3fcb0a8a45e6c7b3ced70b8c5a174b6da9aeb"
+".changes/unreleased/shelf-save-snapshots-without-overwriting.toml" = "ac66b55d93ca77cdafeb519fc5ade7f69458701a"
+"@release_config" = """
+members = [".", "examples"]
+
+[changelog]
+change_format = "##### {{ body }}"
+header_format = "# Changelog"
+kind_format = "#### {{ kind }}"
+
+[[changelog.kinds]]
+bump = "major"
+label = "Breaking"
+
+[[changelog.kinds]]
+bump = "minor"
+label = "Added"
+
+[[changelog.kinds]]
+bump = "patch"
+label = "Changed"
+
+[[changelog.kinds]]
+bump = "patch"
+label = "Deprecated"
+
+[[changelog.kinds]]
+bump = "patch"
+label = "Fixed"
+
+[[changelog.kinds]]
+bump = "patch"
+label = "Performance"
+
+[[changelog.kinds]]
+bump = "patch"
+label = "Removed"
+
+[[changelog.kinds]]
+bump = "patch"
+label = "Reverted"
+
+[[changelog.kinds]]
+bump = "patch"
+label = "Dependencies"
+
+[[changelog.kinds]]
+bump = "patch"
+label = "Security"
+
+[publish]
+exact_tag_format = "v{version}"
+
+[publish.lifecycle.packages]
+"." = "hex"
+examples = "workspace"
+"""
+"gleam.toml" = "2665485616c2b4c7f3949f241b477fd01fe0fedd"
+"src/shelf.gleam" = "f49927f013acaeec69c2d07a46b398d88098dd3b"
+"src/shelf/bag.gleam" = "4a52b5b6a689efc15603378f7ff20f8af2b3f5b3"
+"src/shelf/duplicate_bag.gleam" = "789ba303f02e993bbef3129f155788b6c3f9899e"
+"src/shelf/internal.gleam" = "435dea0296e532c7d84659b2f71adae201b6be36"
+"src/shelf/set.gleam" = "5d1b5c351338858ca4522478197474c37ae5af88"
+"src/shelf_ffi.erl" = "4f5a4e5f94f39072bfc8897cb287915938956142"
+"src/shelf_rescue_ffi.erl" = "27f29ebbfbe69caaa3632c055e3b251cc5861edc"
