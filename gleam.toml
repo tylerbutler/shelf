@@ -14,7 +14,7 @@ gleam_erlang = ">= 1.0.0 and < 2.0.0"
 unitest = ">= 1.6.1 and < 2.0.0"
 
 [tools.licence_audit]
-allow = ["Apache-2.0", "MIT"]
+allow = ["Apache-2.0", "BSD-3-Clause", "MIT"]
 deny = []
 
 [tools.trellis]
