@@ -58,6 +58,10 @@ test-sbom: sbom
 
 # === CODE QUALITY ===
 
+# Check dependency licences and known vulnerabilities
+audit-check:
+    licence_audit check --vulns
+
 # Format source code
 format:
     gleam format src test examples/src
@@ -111,7 +115,7 @@ build-examples:
 # === CI ===
 
 # Run all CI checks (format, check, test, build)
-ci: format-check check test test-site-ignore build-strict test-sbom check-examples
+ci: audit-check format-check check test test-site-ignore build-strict test-sbom check-examples
 
 # Alias for PR checks
 alias pr := ci

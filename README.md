@@ -384,6 +384,12 @@ Use [mise](https://mise.jdx.dev/) to install the pinned tools with `mise install
 Keep using Just for builds, tests, and other project tasks: run `just --list`
 to see the commands.
 
+Run `just audit-check` to enforce the dependency licence policy and check
+known vulnerabilities through OSV. CI runs the same command before its build
+checks. The policy permits Apache-2.0, BSD-3-Clause, and MIT. The audit covers
+Shelf's lockfile, including dev dependencies, but not the dependencies bundled
+inside the standalone licence_audit executable.
+
 ### Build SBOMs
 
 The pinned licence_audit 1.0.0-rc.2 development tool uses a standalone binary

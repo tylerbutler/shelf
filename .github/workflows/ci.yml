@@ -27,6 +27,7 @@ jobs:
 
       - name: Run CI checks
         run: |
+          just audit-check
           rm -f priv/shelf.cdx.json
           gleam format --check src test examples/src
           gleam check
