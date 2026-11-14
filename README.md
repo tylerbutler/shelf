@@ -386,9 +386,10 @@ to see the commands.
 
 ### Build SBOMs
 
-The pinned licence_audit development tool uses a standalone binary with its
-own runtime. The Mise asset filter excludes the escript, which requires
-OTP 28. Shelf does not add this tool to its runtime dependencies.
+The pinned licence_audit 1.0.0-rc.2 development tool uses a standalone binary
+with its own runtime. The Mise asset filter excludes the escript, which
+requires OTP 28. Shelf keeps the tool out of its dependency graph and uses
+the same release candidate for local builds, CI, and release SBOMs.
 
 `just build` and `just build-strict` generate `priv/shelf.cdx.json` after
 compilation. Use `just sbom` to generate it without compiling Shelf. Each
