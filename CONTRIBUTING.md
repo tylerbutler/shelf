@@ -103,6 +103,54 @@ For a local version preview, use `just changelog-preview`. `just changelog`
 applies the version bump, consumes the pending fragments, and updates the
 changelog and internal lockfile versions; it does not publish a release.
 
+## Website deployment
+
+The Astro/Starlight site in `website/` builds static files. Cloudflare Workers
+serves `website/dist/` through Workers Static Assets; no server adapter is
+needed. `website/wrangler.jsonc` defines the Worker name and asset routing.
+
+Connect `tylerbutler/shelf` directly to **Workers Builds** in Cloudflare,
+not Cloudflare Pages. Use these build settings:
+
+| Setting | Value |
+| --- | --- |
+| Worker name | `shelf-docs` |
+| Production branch | `main` |
+| Root directory | `website` |
+| Build command | `pnpm build:site` |
+| Deploy command | `pnpm deploy` |
+| Preview command | `pnpm exec wrangler versions upload` |
+| Build watch paths: include | `website/*`, `gleam.toml` |
+| Build watch paths: exclude | None |
+| Build variables | `NODE_VERSION=22`, `PNPM_VERSION=12.14.0` |
+
+Enable builds for non-production branches if you need preview URLs. The preview
+command uploads a version without changing production. Watch paths are relative
+to the repository root, not `website/`. Include `gleam.toml` because the site
+reads the library version from it at build time. Cloudflare installs dependencies
+from `website/package.json` and `website/pnpm-lock.yaml` before the build.
+No GitHub deployment workflow or GitHub deployment secrets are needed.
+
+After the first successful deployment, add `shelf.tylerbutler.com` under the
+Worker's **Settings > Domains & Routes > Custom Domain**. The domain's zone
+must be active in the same Cloudflare account. Remove any conflicting Netlify
+DNS record when you switch the domain, then disable the old Netlify site.
+Keep Netlify serving the domain until the Worker is ready.
+
+For a local build or deployment:
+
+```sh
+cd website
+pnpm install --frozen-lockfile
+cd ..
+just build-site
+just deploy-site
+```
+
+Local deployment requires Cloudflare authentication (`pnpm exec wrangler login`
+from `website/`). To check routing locally without deploying, run
+`pnpm exec wrangler dev` from `website/` after a build.
+
 ## Shared agent setup
 
 Install [APM](https://github.com/microsoft/apm), then run `apm install` to deploy

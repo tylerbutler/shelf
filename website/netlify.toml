@@ -1,5 +1,0 @@
-[build]
-  command = "pnpm build:site"
-  publish = "dist"
-  # Build when website files or the release version in ../gleam.toml change.
-  ignore = "bash netlify-ignore.sh"
