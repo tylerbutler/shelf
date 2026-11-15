@@ -44,10 +44,6 @@ sbom:
 test:
     gleam test
 
-# Test the website deploy filter without network access
-test-site-ignore:
-    bash website/netlify-ignore.test.sh
-
 # Check SBOM reproducibility, locked dependency coverage, and Hex package bytes
 test-sbom: sbom
     SOURCE_DATE_EPOCH=0 licence_audit sbom --reproducible --output=build/shelf-check.cdx.json
@@ -79,6 +75,14 @@ check:
 # Build documentation
 docs:
     gleam docs build
+
+# Build the static documentation website
+build-site:
+    cd website && pnpm build:site
+
+# Deploy a fresh website build to Cloudflare Workers
+deploy-site: build-site
+    cd website && pnpm deploy
 
 # === CHANGELOG ===
 
@@ -115,7 +119,7 @@ build-examples:
 # === CI ===
 
 # Run all CI checks (format, check, test, build)
-ci: audit-check format-check check test test-site-ignore build-strict test-sbom check-examples
+ci: audit-check format-check check test build-strict test-sbom check-examples
 
 # Alias for PR checks
 alias pr := ci

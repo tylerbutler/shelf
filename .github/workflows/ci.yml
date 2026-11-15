@@ -32,7 +32,6 @@ jobs:
           gleam format --check src test examples/src
           gleam check
           gleam test
-          bash website/netlify-ignore.test.sh
           gleam build --warnings-as-errors
           (cd examples && gleam check)
 
