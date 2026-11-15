@@ -5,6 +5,9 @@ description: Unique key-value storage with persistent set tables.
 
 Set tables store one value per key — inserting with an existing key overwrites the previous value. This is the most common table type, equivalent to a persistent key-value store.
 
+Create `/app/data` before opening the table. The examples below assume a new
+`users.dets` file and follow one table from insertion through close.
+
 ## Opening a Set Table
 
 ```gleam
@@ -12,12 +15,12 @@ import gleam/dynamic/decode
 import shelf/set
 
 let assert Ok(table) =
-  set.open(name: "users", path: "data/users.dets", base_directory: "/app/data", key: decode.string, value: decode.int)
+  set.open(name: "users", path: "users.dets", base_directory: "/app/data", key: decode.string, value: decode.int)
 ```
 
 If the DETS file exists, its contents are loaded into ETS automatically. If the file doesn't exist, both tables start empty.
 
-For custom configuration (e.g., WriteThrough mode), use `open_config`:
+For WriteThrough, open the table with `open_config` instead:
 
 ```gleam
 import gleam/dynamic/decode
@@ -25,37 +28,10 @@ import shelf
 import shelf/set
 
 let config =
-  shelf.config(name: "users", path: "data/users.dets", base_directory: "/app/data")
+  shelf.config(name: "users", path: "users.dets", base_directory: "/app/data")
   |> shelf.write_mode(shelf.WriteThrough)
 
 let assert Ok(table) = set.open_config(config: config, key: decode.string, value: decode.int)
-```
-
-## Reading Data
-
-```gleam
-// Look up a single value
-let assert Ok(value) = set.lookup(from: table, key: "alice")
-
-// Check if a key exists (without fetching the value)
-let assert Ok(True) = set.member(of: table, key: "alice")
-
-// Get the number of entries
-let assert Ok(count) = set.size(of: table)
-
-// Get all entries as a list (loads entire table into memory)
-let assert Ok(entries) = set.to_list(from: table)
-```
-
-### Folding
-
-Fold over all entries to compute an aggregate. Order is unspecified.
-
-```gleam
-let assert Ok(total) =
-  set.fold(over: table, from: 0, with: fn(acc, _key, value) {
-    acc + value
-  })
 ```
 
 ## Writing Data
@@ -78,6 +54,27 @@ let assert Ok(Nil) = set.insert_list(into: table, entries: [
 `insert_new` is unique to set tables — bag and duplicate bag tables don't support it.
 :::
 
+## Reading Data
+
+With those entries inserted, you can read them from ETS:
+
+```gleam
+let assert Ok(42) = set.lookup(from: table, key: "alice")
+let assert Ok(True) = set.member(of: table, key: "alice")
+let assert Ok(count) = set.size(of: table)
+let assert Ok(entries) = set.to_list(from: table)
+```
+
+`to_list` allocates a list of all entries. Use `fold` when you need an
+aggregate instead. Iteration order is unspecified.
+
+```gleam
+let assert Ok(total) =
+  set.fold(over: table, from: 0, with: fn(acc, _key, value) {
+    acc + value
+  })
+```
+
 ## Deleting Data
 
 ```gleam
@@ -96,7 +93,7 @@ let assert Ok(Nil) = set.delete_all(from: table)
 
 ## Atomic Counters
 
-Set tables support atomic integer counters — useful for metrics, rate limiting, or any lock-free counting:
+The owner can increment integer values with `update_counter`:
 
 ```gleam
 let assert Ok(Nil) = set.insert(into: table, key: "page_views", value: 0)
@@ -107,15 +104,22 @@ let assert Ok(9) = set.update_counter(in: table, key: "page_views", increment: -
 
 :::note
 `update_counter` is unique to set tables and requires integer values.
+Other processes must send increment requests to the owner.
 :::
 
 ## Resource Management
+
+Close the table to save the changes and release its resources:
+
+```gleam
+let assert Ok(Nil) = set.close(table)
+```
 
 Use `with_table` to ensure a table is always closed, even if an error occurs:
 
 ```gleam
 let assert Ok(Nil) = {
-  use table <- set.with_table("cache", "data/cache.dets", base_directory: "/app/data", key: decode.string, value: decode.string)
+  use table <- set.with_table("cache", "cache.dets", base_directory: "/app/data", key: decode.string, value: decode.string)
   set.insert(into: table, key: "key", value: "value")
 }
 ```

@@ -3,11 +3,13 @@ title: Write Modes
 description: Choose between WriteBack and WriteThrough persistence strategies.
 ---
 
-shelf supports two write modes that control when data is persisted to disk. Choose the mode that matches your durability and performance requirements.
+Choose when your writes reach DETS: save a batch with WriteBack, or send
+each change to DETS with WriteThrough. Both modes serve reads from ETS.
 
 ## WriteBack (Default)
 
-In WriteBack mode, writes go to ETS (memory) only. Data is persisted to DETS (disk) when you explicitly call `save()`, or automatically when the table is closed.
+In WriteBack mode, writes go to ETS only. Call `save()` to snapshot the
+changes to DETS. Successful close also saves the table.
 
 ```gleam
 import gleam/dynamic/decode
@@ -43,7 +45,8 @@ let assert Ok(Nil) = set.reload(table)
 
 ## WriteThrough
 
-In WriteThrough mode, every write persists to both ETS and DETS immediately. Reads are still served from ETS (fast).
+In WriteThrough mode, each write goes to DETS first, then ETS. If the DETS
+write fails, shelf does not apply that change to ETS.
 
 ```gleam
 import gleam/dynamic/decode
@@ -60,9 +63,10 @@ let assert Ok(table) = set.open_config(config: config, key: decode.string, value
 let assert Ok(Nil) = set.insert(into: table, key: "acct:1", value: account)
 ```
 
-**Best for**: Data that must survive crashes with no loss — financial records, user accounts, configuration.
+Use this mode when you want each change handed to DETS before the operation
+returns, without saving a full-table snapshot.
 
-### Guaranteeing Durability
+### Flush DETS buffers and account for crash limits
 
 After a WriteThrough write, the data has been handed to DETS but may still
 be in DETS's in-memory write buffer. Call `sync()` to drain that buffer
@@ -77,13 +81,21 @@ let assert Ok(Nil) = set.sync(table)
 layer-by-layer breakdown of what `save()` and `sync()` actually guarantee,
 see the canonical [Durability story](/advanced/persistence-operations/#durability-story).
 
+An owner-process exit removes ETS; the guardian closes DETS as part of
+cleanup. A VM crash can lose writes still in DETS's buffer. Neither
+WriteBack nor WriteThrough provides `fsync(2)`-level guarantees against
+OS crashes or power loss. Choose another store if your application needs
+those guarantees.
+
 ## Comparison
 
 | | WriteBack | WriteThrough |
 |---|-----------|-------------|
 | Write speed | Fast (ETS only) | Slower (ETS + DETS) |
-| Data loss on process crash | Since last `save()` | None — written DETS file survives |
-| When to persist | Manual `save()` call | Automatic on every write |
+| On owner-process exit | Unsaved ETS changes are lost | Changes have reached DETS; cleanup closes the file |
+| On VM crash | Unsaved ETS changes are lost | Buffered DETS writes may be lost |
+| OS crash / power-loss guarantees | Not provided | Not provided |
+| When to persist | `save()` or successful close | Each write reaches DETS; `sync()` flushes its buffer |
 | `reload()` useful? | Yes — discards unsaved changes | Not typically — ETS and DETS are in sync |
 | Best for | Caches, sessions, high-throughput | Accounts, config, audit logs |
 

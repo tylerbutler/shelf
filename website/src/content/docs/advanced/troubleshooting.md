@@ -59,7 +59,10 @@ To minimise data loss across crashes:
 - In **WriteBack** mode, save() is the explicit persistence call —
   schedule it (timer, after every N writes, at clean shutdown).
 - In **WriteThrough** mode, every write reaches DETS immediately, so the
-  on-disk file is always at most a few µs behind the in-memory table.
+  change reaches DETS before ETS. DETS can still buffer it in memory;
+  call `sync()` to flush that buffer to the file. A VM crash can lose
+  buffered writes, and shelf does not provide `fsync(2)`-level guarantees
+  against OS crashes or power loss.
 
 See the [Durability story](/advanced/persistence-operations/#durability-story)
 for exactly which calls advance data past which layer.

@@ -3,52 +3,68 @@
 [![Package Version](https://img.shields.io/hexpm/v/shelf)](https://hex.pm/packages/shelf)
 [![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/shelf/)
 
-Persistent ETS tables backed by DETS — fast in-memory access with automatic disk persistence for the BEAM.
+Persistent ETS tables backed by DETS for Gleam on the BEAM.
 
-Shelf combines ETS (fast, in-memory) with DETS (persistent, on-disk) to give you microsecond reads with durable storage. It implements the classic Erlang persistence pattern, wrapped in a type-safe Gleam API.
+Shelf combines in-memory ETS tables with DETS files through a type-safe Gleam API.
+Reads use ETS. By default, you save changes with `save()` or on successful close;
+WriteThrough sends each change to DETS before updating ETS. When you reopen a
+table, your decoders validate the saved data before loading it into memory.
 
-If you only need ETS or DETS individually, check out these excellent standalone wrappers:
-
-- **[bravo](https://hex.pm/packages/bravo)** — Type-safe ETS wrapper for Gleam
-- **[slate](https://hex.pm/packages/slate)** — Type-safe DETS wrapper for Gleam
-
-Shelf coordinates both together, using Erlang's native `ets:to_dets/2` for efficient bulk saves from memory to disk.
+Use Shelf for local persistence when your data fits in memory and each DETS file
+stays below 2 GB. One process owns each table and handles writes; other processes
+can read it. Shelf does not provide transactions, replication, or durability
+guarantees against OS crashes and power loss.
 
 ## Quick Start
 
 ```sh
 gleam add shelf
+mkdir -p /tmp/shelf-quick-start
 ```
+
+Use this example in your application's main module, then run `gleam run`:
 
 ```gleam
 import gleam/dynamic/decode
-import shelf
+import gleam/io
 import shelf/set
 
 pub fn main() -> Nil {
-  // Open a persistent set — loads existing data from disk
-  // Decoders validate data loaded from the DETS file
   let assert Ok(table) =
-    set.open(name: "users", path: "data/users.dets",
-      base_directory: "/app/data",
-      key: decode.string, value: decode.int)
+    set.open(
+      name: "users",
+      path: "users.dets",
+      base_directory: "/tmp/shelf-quick-start",
+      key: decode.string,
+      value: decode.int,
+    )
 
-  // Fast writes (to ETS)
   let assert Ok(Nil) = set.insert(into: table, key: "alice", value: 42)
   let assert Ok(Nil) = set.insert(into: table, key: "bob", value: 99)
-
-  // Fast reads (from ETS)
   let assert Ok(42) = set.lookup(from: table, key: "alice")
 
-  // Persist to disk when ready
   let assert Ok(Nil) = set.save(table)
-
-  // Close auto-saves
   let assert Ok(Nil) = set.close(table)
+
+  // Reopen and read saved values without inserting them again.
+  let assert Ok(reopened) =
+    set.open(
+      name: "users",
+      path: "users.dets",
+      base_directory: "/tmp/shelf-quick-start",
+      key: decode.string,
+      value: decode.int,
+    )
+  let assert Ok(42) = set.lookup(from: reopened, key: "alice")
+  let assert Ok(99) = set.lookup(from: reopened, key: "bob")
+  let assert Ok(Nil) = set.close(reopened)
+  io.println("Saved users loaded from DETS.")
 }
 ```
 
-On next startup, `set.open` automatically loads the saved data back into ETS.
+The second table loads the saved values from DETS into fresh ETS storage.
+The [website quick start](https://shelf.tylerbutler.com/quick-start/) also shows
+how to check them in a separate application run.
 
 ## How It Works
 
@@ -65,14 +81,14 @@ On next startup, `set.open` automatically loads the saved data back into ETS.
 └──────────────────┴──────────────────┘
 ```
 
-**Reads** always go to ETS — consistent microsecond latency regardless of table size.
+**Reads** use ETS without DETS I/O after loading.
 
-**Writes** go to ETS immediately. When they hit DETS depends on the write mode:
+**Writes** follow the selected write mode:
 
 | Write Mode | Behavior | Use Case |
 |-----------|----------|----------|
 | `WriteBack` (default) | ETS only; call `save()` to persist | High-throughput, periodic snapshots |
-| `WriteThrough` | Both ETS and DETS on every write | Maximum durability |
+| `WriteThrough` | DETS first, then ETS on every write | Persist each change without a full snapshot |
 
 ## Write Modes
 
@@ -102,7 +118,7 @@ let assert Ok(Nil) = set.reload(table)
 
 ### WriteThrough
 
-Every write persists immediately:
+Every write goes to DETS before ETS:
 
 ```gleam
 let config =
@@ -117,6 +133,10 @@ let assert Ok(table) =
 // This writes to both ETS and DETS
 let assert Ok(Nil) = set.insert(into: table, key: "acct:789", value: account)
 ```
+
+DETS can buffer these writes in memory. Use `sync()` to flush that buffer to
+the file. Neither mode provides `fsync(2)`-level protection against OS crashes
+or power loss; see [Persistence Operations](#persistence-operations).
 
 ## Table Types
 
@@ -370,116 +390,14 @@ ETS tables are owned by the process that calls `open()`, and shelf creates them 
 In short: reads work from any process; writes and lifecycle calls (`insert`, `delete_*`, `update_counter`, `save`, `reload`, `sync`, `close`) must come from the owner.
 
 If the owning process crashes, the ETS table is deleted and unsaved data is lost. The DETS file is preserved — the next `open()` call reloads it.
-- Use WriteThrough mode for data that cannot tolerate loss
+Use WriteThrough to send each change to DETS, but account for its buffering and
+the [durability limits](https://shelf.tylerbutler.com/advanced/persistence-operations/#durability-story).
 
 ### Write Safety
 
 Within the owner process, all shelf operations are individual ETS/DETS calls — there is no built-in transaction support. If you need atomic multi-key updates, coordinate through a single process (e.g., a GenServer).
 
 For set tables, concurrent reads from other processes while the owner writes to *different* keys are safe. Writes to the *same* key result in last-writer-wins (no corruption, but potential data loss from the reader's perspective). Bag and duplicate bag tables follow the same model.
-
-## Development and Releases
-
-Use [mise](https://mise.jdx.dev/) to install the pinned tools with `mise install`.
-Keep using Just for builds, tests, and other project tasks: run `just --list`
-to see the commands.
-
-Run `just audit-check` to enforce the dependency licence policy and check
-known vulnerabilities through OSV. CI runs the same command before its build
-checks. The policy permits Apache-2.0, BSD-3-Clause, and MIT. The audit covers
-Shelf's lockfile, including dev dependencies, but not the dependencies bundled
-inside the standalone licence_audit executable.
-
-### Build SBOMs
-
-The pinned licence_audit 1.0.0-rc.2 development tool uses a standalone binary
-with its own runtime. The Mise asset filter excludes the escript, which
-requires OTP 28. Shelf keeps the tool out of its dependency graph and uses
-the same release candidate for local builds, CI, and release SBOMs.
-
-`just build` and `just build-strict` generate `priv/shelf.cdx.json` after
-compilation. Use `just sbom` to generate it without compiling Shelf. Each
-command removes the previous document before it starts, so a failed build
-or generation does not leave an old SBOM. `just clean` removes the document.
-Install the pinned tools before you run these tasks.
-
-The CycloneDX 1.6 JSON document covers Shelf's complete lockfile. Runtime
-dependencies have `required` scope; dev-only dependencies have `optional`
-scope. The document excludes the examples and website. It reports declared
-licences from checksum-verified package archives, not source-scan conclusions.
-Generation fails if the locked archive metadata is unavailable. The command
-does not enforce the licence policy or fetch vulnerability reports.
-
-Generation uses `--reproducible` and `SOURCE_DATE_EPOCH=0`, so the same project
-metadata, lockfile, and tool version produce the same bytes. Git ignores the
-output. Gleam includes it in the Hex archive under `priv/shelf.cdx.json`.
-Run `just test-sbom` to compare two generations and check the root metadata,
-locked dependency graph, scopes, hashes, and exported Hex archive bytes.
-This check requires Python 3.11 or newer.
-
-CI calls the tools directly, checks the SBOM and Hex archive, and uploads the
-document as the `shelf-sbom` workflow artifact.
-
-The release coordinator generates a fresh SBOM from the approved merge SHA
-before publishing Shelf to Hex. It checks the complete locked inventory and
-the packaged document, then checks the published Hex archive against the
-generated bytes. After tagging, it attaches the same document to the GitHub
-Release as `v<version>.cdx.json`. Generation, package checks, and attachment
-must succeed before the coordinator records release completion.
-
-If attachment fails, rerun the original Release workflow. Trellis skips the
-version already on Hex. The coordinator checks the published document and
-the exact tag commit before it resumes attachment. It accepts an existing
-asset only if its bytes match; it does not overwrite a different document.
-Do not regenerate from a newer commit or move the tag to recover.
-
-### Changelogs and publication
-
-Use [trellis](https://trellis.tylerbutler.com/docs/changelog/) for changelogs
-and releases. Add an entry for a user-facing change:
-
-```sh
-just change Fixed "Fix the user-facing problem"
-just changelog-preview
-```
-
-Trellis stores TOML fragments in `.changes/unreleased/` and released sections
-in `.changes/shelf/`. Do not edit the generated `CHANGELOG.md`.
-The `[tools.trellis.changelog]` table in `gleam.toml` defines the change kinds
-and version bumps. Development-only changes need no entry; the PR check
-warns about missing entries and fails on invalid fragments.
-
-On a push to `main`, the pinned Trellis release coordinator creates or updates
-a release PR on `release/pending`. The coordinator calls Trellis directly.
-Trellis 1.3.0 preserves the pending release
-intent and skips unchanged preparations. After you merge that PR, the
-coordinator checks out its merge commit, publishes Shelf to Hex, and then
-creates the `v<version>` tag and GitHub Release. The examples remain workspace
-members and do not release.
-
-The coordinator queues preparation and publication in one repository-wide
-concurrency group. It records completion in the `trellis/release` commit status
-and blocks the next preparation if the preceding release did not complete.
-For a failed release, retry its original Release workflow run with
-`gh run rerun <run-id> --repo tylerbutler/shelf --failed`. Do not move its tag
-or publish from a newer commit. Trellis skips package versions already on Hex;
-the coordinator skips publication and tagging after it records success.
-
-For a release candidate, run the Release workflow on `main` with `pre=rc`.
-Candidate continuation requires another manual request. Promote to stable
-with `pre=none`; use `set` for an exact target such as `shelf=1.1.1`, or `bump`
-for an override such as `shelf=patch`. The workflow uses the existing
-`RELEASE_APP_ID`, `RELEASE_APP_PRIVATE_KEY`, and `HEXPM_API_KEY` secrets.
-The release App needs permission to push branches and create PRs. The
-workflow token needs contents and commit-status write access.
-
-The migration leaves `v1.1.0` unchanged and starts new release history on
-`release/pending`. Do not merge the legacy `release/next` PR (#89); use the new
-release PR for the next patch version.
-
-For a local version preview, use `just changelog-preview`. `just changelog`
-applies the version bump, consumes the pending fragments, and updates the
-changelog and internal lockfile versions; it does not publish a release.
 
 ## See Also
 
@@ -490,27 +408,6 @@ changelog and internal lockfile versions; it does not publish a release.
 
 ## Development
 
-Use Gleam 1.14 or later.
-
-```sh
-gleam test    # Run the test suite
-gleam build   # Build the package
-gleam format  # Format source code
-```
-
-### Shared agent setup
-
-Install [APM](https://github.com/microsoft/apm), then run `apm install` to deploy
-skills and agents for Claude Code and GitHub Copilot.
-Run the command again after changes to `.apm/` or `apm.yml`.
-
-Edit local skills in `.apm/skills/` and local agent definitions in
-`.apm/agents/`. APM generates the skill copies in `.claude/skills/` and
-`.agents/skills/`, and agent definitions in `.claude/agents/` and
-`.github/agents/`. Do not edit these generated copies; commit them with the
-source changes. Local agents inherit the tools available in each platform.
-
-Dependency skills and agents remain managed by `apm.yml` and `apm.lock.yaml`;
-do not copy them into `.apm/`.
-
-Further documentation can be found at <https://hexdocs.pm/shelf>.
+Install the pinned tools with `mise install`, then use `just --list` to
+find the build and test commands. See [Contributing](CONTRIBUTING.md) for
+development setup, dependency audits, SBOMs, changelogs, and releases.

@@ -1,41 +1,58 @@
 ---
 title: What is shelf?
-description: An introduction to shelf and persistent ETS tables.
+description: How shelf coordinates ETS tables, DETS files, and process ownership.
 ---
 
-shelf combines **ETS** (fast, in-memory) with **DETS** (persistent, on-disk) to give you microsecond reads with durable storage. It implements the classic Erlang persistence pattern, wrapped in a type-safe Gleam API.
+shelf coordinates an ETS table for in-memory access and a DETS file for
+persistence. You work with a typed table handle in Gleam; shelf handles
+loading, validation, and snapshots through OTP's built-in storage APIs.
 
-## How it works
+## Open and validate
 
-```mermaid
-block-beta
-  columns 2
-  App["Your Application"]:2
-  Shelf["shelf (this library)"]:2
-  ETS["ETS (memory)\n• μs reads\n• μs writes\n• in-process"]
-  DETS["DETS (disk)\n• persistence\n• survives restarts"]
-```
+When you call `open()`, shelf opens the DETS file and creates an ETS table.
+If the file exists, shelf checks each saved key and value with your decoders
+before loading them into ETS. If the file does not exist, you start with an
+empty table. You must create the parent directory before opening the file.
 
-**Reads** always go to ETS — consistent microsecond latency regardless of table size.
+The decoders let you detect stored data that does not match your application's
+types. If a new application version changes those types, you may need a
+[schema migration](/advanced/schema-migration/) before reopening the table.
 
-**Writes** go to ETS immediately. Persistence to DETS depends on the write mode.
+## Read and write
 
-## Why shelf?
+After loading, reads use ETS without DETS I/O. Writes follow the mode you
+choose when you open the table:
 
-If you only need ETS or DETS individually, check out these standalone wrappers:
+- **WriteBack**, the default: update ETS and call `save()` to snapshot the
+  changes to DETS.
+- **WriteThrough**: update DETS first, then ETS, on each write.
 
-- **[bravo](https://hex.pm/packages/bravo)** — Type-safe ETS wrapper for Gleam
-- **[slate](https://hex.pm/packages/slate)** — Type-safe DETS wrapper for Gleam
+WriteThrough sends changes to DETS before returning, but DETS can buffer
+them in memory. `sync()` flushes that buffer to the file. Neither mode
+provides `fsync(2)`-level protection against OS crashes or power loss.
+The [write-mode guide](/guides/write-modes/) explains the choice and links
+to the full durability guarantees.
 
-shelf coordinates both together, using Erlang's native `ets:to_dets/2` for efficient bulk saves. When loading from disk, entries are validated individually through user-provided decoders, ensuring type safety at the boundary between untyped DETS storage and your Gleam code.
+## Keep the owner alive
 
-## Key features
+The process that opens a table owns it. Other processes can read through
+the handle, but only the owner can write, save, reload, sync, or close.
+For a long-running application, open the table in a supervised actor or
+server and send mutation requests to that owner.
 
-- **Microsecond reads**: All reads go through ETS for consistent performance
-- **Cross-process reads**: ETS tables are created `protected`, so any process can read them concurrently while a single owner handles writes
-- **Runtime type safety**: Decoder-gated loading ensures data from disk matches your Gleam types
-- **Write modes**: Choose between WriteBack (batched) or WriteThrough (immediate persistence)
-- **Three table types**: `set`, `bag`, `duplicate_bag`
-- **Atomic counters**: Increment integer values atomically in ETS
-- **Safe resource management**: `with_table` ensures tables are always closed
-- **No native dependencies**: No NIFs or build steps; backed entirely by OTP's built-in ETS and DETS
+When the owner exits, ETS disappears and unsaved changes are lost.
+The next owner can reopen the DETS file and load its saved contents.
+See [process ownership](/advanced/limitations/#process-ownership) for the
+read/write split and crash behavior.
+
+## Save and close
+
+`save()` copies the ETS contents to a temporary DETS file, then renames
+that file over the database path. `close()` attempts a final save before
+releasing the resources. With `with_table`, shelf also releases resources
+if your callback returns an error or panics; a failed final save can still
+lose unsaved changes.
+
+Start with the [quick start](/quick-start/) to open, save, and reopen your
+first table. Use [persistence operations](/advanced/persistence-operations/)
+when you need to choose between saving, reloading, syncing, and closing.

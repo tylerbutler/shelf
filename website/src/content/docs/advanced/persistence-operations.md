@@ -42,7 +42,9 @@ let assert Ok(Nil) = set.save(table)
 - At application shutdown
 - After critical data changes
 
-In WriteThrough mode, every write goes to DETS directly (via `dets:insert`), so data is already persisted — you rarely need to call `save()` manually.
+In WriteThrough mode, each write reaches DETS before ETS, so you do not need
+a full snapshot after every change. DETS can buffer writes; use `sync()` to
+flush that buffer to the file.
 
 For exactly which on-disk layer this call advances data past, and what
 guarantees it gives across crashes, see [Durability story](#durability-story).
