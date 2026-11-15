@@ -2,6 +2,7 @@
 	"$schema": "./node_modules/wrangler/config-schema.json",
 	"name": "shelf-docs",
 	"compatibility_date": "2026-11-04",
+	"previews": {},
 	"assets": {
 		"directory": "./dist",
 		"html_handling": "auto-trailing-slash",
