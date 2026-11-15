@@ -75,9 +75,9 @@ let assert Ok(Nil) = set.delete_object(from: t, key: "key", value: "value")
 
 ## Atomic counters
 
-`update_counter` performs a lock-free atomic add inside ETS. It avoids
-the round-trip overhead of read-modify-write through an actor when many
-producers share a counter.
+The table owner can use `update_counter` to add to an integer value without
+a separate lookup and insert. Like other writes, this operation is owner-only.
+Producers in other processes must send increment requests to the owner.
 
 ```gleam
 let assert Ok(Nil) = set.insert(into: t, key: "page_views", value: 0)

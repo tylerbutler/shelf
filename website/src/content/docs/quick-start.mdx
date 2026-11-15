@@ -1,47 +1,94 @@
 ---
-title: Quick Start
-description: Get up and running with shelf in minutes.
+title: Quick start
+description: Save a table, then read its data in a separate application run.
 ---
 
-This guide walks you through basic persistent ETS operations with shelf.
+Use this guide in an existing Gleam application. You will save two entries,
+stop the application, and read the entries in a second run.
 
-## 1. Add shelf to your project
+## 1. Add shelf and create a data directory
+
+From your project directory, run:
 
 ```bash
 gleam add shelf
+mkdir -p /tmp/shelf-quick-start
 ```
 
-## 2. Open a persistent table
+This example uses a temporary directory. For application data you need to
+keep, choose a directory that survives system cleanup.
+
+## 2. Write and save the entries
+
+Replace your application's main module with:
 
 ```gleam
 import gleam/dynamic/decode
+import gleam/io
 import shelf/set
 
-pub fn main() {
-  // Open a persistent set — loads existing data from disk
+pub fn main() -> Nil {
   let assert Ok(table) =
-    set.open(name: "users", path: "data/users.dets", base_directory: "/app/data", key: decode.string, value: decode.int)
+    set.open(
+      name: "users",
+      path: "users.dets",
+      base_directory: "/tmp/shelf-quick-start",
+      key: decode.string,
+      value: decode.int,
+    )
 
-  // Fast writes (to ETS)
   let assert Ok(Nil) = set.insert(into: table, key: "alice", value: 42)
   let assert Ok(Nil) = set.insert(into: table, key: "bob", value: 99)
-
-  // Fast reads (from ETS)
   let assert Ok(42) = set.lookup(from: table, key: "alice")
 
-  // Persist to disk when ready
   let assert Ok(Nil) = set.save(table)
-
-  // Close auto-saves
   let assert Ok(Nil) = set.close(table)
+  io.println("Saved users to DETS.")
 }
 ```
 
-On next startup, `set.open` automatically loads the saved data back into ETS. The decoders ensure that every entry loaded from disk matches the expected types — any corrupted or mistyped entries are caught at load time.
+Run `gleam run`. The application prints `Saved users to DETS.` and exits.
+Writes use ETS in the default WriteBack mode. `save()` snapshots them to
+DETS; successful `close()` also saves before releasing the table.
 
-## Next steps
+## 3. Read the saved entries in a new run
 
-- Learn about [Set Tables](/guides/set-tables/) for unique key-value storage
-- Use [Bag Tables](/guides/bag-tables/) for multiple values per key
-- Configure [Write Modes](/guides/write-modes/) for your durability needs
-- Understand [Persistence Operations](/advanced/persistence-operations/) like save, reload, and sync
+Replace the main module with this version, which does not insert any data:
+
+```gleam
+import gleam/dynamic/decode
+import gleam/io
+import shelf/set
+
+pub fn main() -> Nil {
+  let assert Ok(table) =
+    set.open(
+      name: "users",
+      path: "users.dets",
+      base_directory: "/tmp/shelf-quick-start",
+      key: decode.string,
+      value: decode.int,
+    )
+
+  let assert Ok(42) = set.lookup(from: table, key: "alice")
+  let assert Ok(99) = set.lookup(from: table, key: "bob")
+  let assert Ok(Nil) = set.close(table)
+  io.println("Saved users loaded from DETS.")
+}
+```
+
+Run `gleam run` again. The message `Saved users loaded from DETS.` confirms
+that the second application loaded the saved entries. Your decoders checked
+their keys and values before they reached ETS.
+
+The `let assert` statements make this small example stop on an error.
+In application code, handle the returned `Result` so you can report or
+recover from storage errors.
+
+## Choose your next step
+
+Use [set tables](/guides/set-tables/) for one value per key, or
+[bag tables](/guides/bag-tables/) for distinct values under one key.
+To decide when changes reach DETS and what survives a crash, read
+[write modes](/guides/write-modes/). For save, reload, sync, and close
+behavior, see [persistence operations](/advanced/persistence-operations/).
