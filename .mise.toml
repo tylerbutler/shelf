@@ -1,5 +1,9 @@
 [tools]
-"github:tylerbutler/trellis" = "1.3.0"
+erlang = "29.1.2"
+gleam = "1.19.2"
+just = "1.59.0"
+node = "22"
+"github:tylerbutler/trellis" = "1.5.0"
 "github:tylerbutler/licence_audit" = { version = "1.0.0-rc.2", matching_regex = '^licence_audit-v.*-(aarch64|x86_64)-(linux-(glibc|musl)|macos|windows)\.(tar\.gz|zip)$' }
 
 [env]

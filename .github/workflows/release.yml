@@ -27,17 +27,50 @@ permissions:
   statuses: write
 
 jobs:
+  tool-versions:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      trellis: ${{ steps.versions.outputs.trellis }}
+      licence_audit: ${{ steps.versions.outputs.licence_audit }}
+      gleam: ${{ steps.versions.outputs.gleam }}
+      erlang: ${{ steps.versions.outputs.erlang }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
+
+      - name: Read mise tool versions
+        id: versions
+        run: |
+          python3 - <<'PY'
+          import os
+          import tomllib
+
+          with open(".mise.toml", "rb") as config:
+              tools = tomllib.load(config)["tools"]
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              for name in ("trellis", "licence_audit", "gleam", "erlang"):
+                  key = f"github:tylerbutler/{name}" if name in ("trellis", "licence_audit") else name
+                  version = tools[key]
+                  if isinstance(version, dict):
+                      version = version["version"]
+                  output.write(f"{name}={version}\n")
+          PY
+
   release:
+    needs: tool-versions
     uses: tylerbutler/actions/.github/workflows/trellis-release.yml@d7e1e50c375c5eb1a912a0849052ce8473881ecc # ratchet:tylerbutler/actions/.github/workflows/trellis-release.yml@main
     with:
-      trellis_version: "1.3.0"
+      trellis_version: ${{ needs.tool-versions.outputs.trellis }}
       release_mode: hex
       sbom_package: shelf
-      licence_audit_version: "1.0.0-rc.2"
+      licence_audit_version: ${{ needs.tool-versions.outputs.licence_audit }}
       base: main
       release_branch: release/pending
-      gleam_version: "1.19.2"
-      erlang_version: "27.2.1"
+      gleam_version: ${{ needs.tool-versions.outputs.gleam }}
+      erlang_version: ${{ needs.tool-versions.outputs.erlang }}
       pre: ${{ inputs.pre || '' }}
       set: ${{ inputs.set || '' }}
       bump: ${{ inputs.bump || '' }}
