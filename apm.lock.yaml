@@ -302,7 +302,7 @@ deployments:
   owners:
   - .
   active_owner: .
-  content_hash: sha256:663bbbe9027b039076a057e73425e1af17884e1bc9c147fa0a4f27ee549beec4
+  content_hash: sha256:0279ce82b0f2e1c89cfebd6a10e607f0d2c9a0f63ff7f171bfe90271936d9a63
 - kind: project-relative
   target: claude
   value: .claude/skills/caveman-commit
@@ -636,6 +636,24 @@ deployments:
   - cursor/plugins/pstack/skills/unslop
   active_owner: cursor/plugins/pstack/skills/unslop
   content_hash: sha256:ccab208e315ce05e2fab8eeee2f7879f1289b5c6844840b2d307adf31c79144f
+- kind: project-relative
+  target: copilot
+  value: .agents/skills/add-changelog-entry
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: null
+- kind: project-relative
+  target: copilot
+  value: .agents/skills/add-changelog-entry/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: sha256:0279ce82b0f2e1c89cfebd6a10e607f0d2c9a0f63ff7f171bfe90271936d9a63
 - kind: project-relative
   target: copilot
   value: .agents/skills/caveman-commit
@@ -1041,24 +1059,6 @@ deployments:
   - tylerbutler/apm-base
   active_owner: tylerbutler/apm-base
   content_hash: sha256:bf990755d11f1e73610d9cde3b656aa175c7f63cdd8d069158302c6496a5b77e
-- kind: project-relative
-  target: legacy
-  value: .agents/skills/add-changelog-entry
-  runtime: null
-  scope: project
-  owners:
-  - .
-  active_owner: .
-  content_hash: null
-- kind: project-relative
-  target: legacy
-  value: .agents/skills/add-changelog-entry/SKILL.md
-  runtime: null
-  scope: project
-  owners:
-  - .
-  active_owner: .
-  content_hash: sha256:663bbbe9027b039076a057e73425e1af17884e1bc9c147fa0a4f27ee549beec4
 local_deployed_files:
 - .agents/skills/add-changelog-entry
 - .agents/skills/add-changelog-entry/SKILL.md
@@ -1069,9 +1069,9 @@ local_deployed_files:
 - .github/agents/shelf-otp-expert.agent.md
 - .github/agents/shelf-otp-performance-expert.agent.md
 local_deployed_file_hashes:
-  .agents/skills/add-changelog-entry/SKILL.md: sha256:663bbbe9027b039076a057e73425e1af17884e1bc9c147fa0a4f27ee549beec4
+  .agents/skills/add-changelog-entry/SKILL.md: sha256:0279ce82b0f2e1c89cfebd6a10e607f0d2c9a0f63ff7f171bfe90271936d9a63
   .claude/agents/shelf-otp-expert.md: sha256:9b13780cffd4f8315c083c541d874f2c07eec3f38b58239dac916711dfa9a0b0
   .claude/agents/shelf-otp-performance-expert.md: sha256:1ab97c8c07ead738367b8118ee69d25926fef6b52105a9f72c348148075397d2
-  .claude/skills/add-changelog-entry/SKILL.md: sha256:663bbbe9027b039076a057e73425e1af17884e1bc9c147fa0a4f27ee549beec4
+  .claude/skills/add-changelog-entry/SKILL.md: sha256:0279ce82b0f2e1c89cfebd6a10e607f0d2c9a0f63ff7f171bfe90271936d9a63
   .github/agents/shelf-otp-expert.agent.md: sha256:9b13780cffd4f8315c083c541d874f2c07eec3f38b58239dac916711dfa9a0b0
   .github/agents/shelf-otp-performance-expert.agent.md: sha256:1ab97c8c07ead738367b8118ee69d25926fef6b52105a9f72c348148075397d2
