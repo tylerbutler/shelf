@@ -17,9 +17,10 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # ratchet:actions/setup-node@v4
+      - name: Install Node.js
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # ratchet:jdx/mise-action@v3
         with:
-          node-version: "22"
+          install_args: node
 
       - name: Install commitlint
         run: npm install --save-dev @commitlint/cli @commitlint/config-conventional
