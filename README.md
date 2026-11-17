@@ -238,6 +238,13 @@ atomic rename (use in WriteBack to persist your changes). `sync()` drains
 DETS's internal write buffer into the open DETS file (use in WriteThrough
 when pending DETS writes need to be reflected in the on-disk file).
 
+On POSIX filesystems, `save()` and `close()` preserve the DETS file's mode,
+owner (uid), and group (gid). Shelf checks these values before replacing
+the file. A metadata error stops the replacement and returns an error.
+This does not preserve ACLs, extended attributes, or file flags; see
+[file access controls](https://shelf.tylerbutler.com/advanced/persistence-operations/#file-access-controls)
+before using those protections.
+
 For the precise per-call durability guarantees and crash semantics, see
 the canonical [Durability story](https://shelf.tylerbutler.com/advanced/persistence-operations/#durability-story)
 in the website docs.
