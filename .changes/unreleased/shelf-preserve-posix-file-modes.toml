@@ -1,3 +1,9 @@
 package = "shelf"
 kind = "Fixed"
-body = "Preserve POSIX file modes, owner, and group during save() and close(); return an error before replacement if this metadata cannot be preserved."
+body = """
+Preserve POSIX file modes, owner, and group during `save()` and `close()`. ([#114](https://github.com/tylerbutler/shelf/pull/114))
+
+If Shelf cannot preserve this metadata, the operation returns `FileError` before replacing the original file. Applications must handle this error, including when the process cannot restore the existing owner or group.
+
+ACLs, extended attributes (including security labels), and file flags remain unsupported and can be lost during replacement.
+"""
