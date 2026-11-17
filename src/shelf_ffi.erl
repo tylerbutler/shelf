@@ -19,7 +19,8 @@
 ]).
 
 %% ── DETS path reservations ──────────────────────────────────────────────
-%% Each canonical path has one lifetime-exclusive reservation. Native DETS
+%% Each canonical path AND native file identity has a lifetime reservation.
+%% Paths are never case-folded or Unicode-normalized. Native DETS
 %% accepts arbitrary terms as names: the reference prevents stale cleanup
 %% from affecting a replacement, without allocating atoms from paths.
 %%
@@ -87,6 +88,7 @@ reserve_path(Path, Name) ->
         true -> ok;
         false ->
             case ets:lookup(?REGISTRY, Path) of
+                [{Path, Name}] -> ok;
                 [{Path, {shelf_dets, Owner, _, _} = Previous}] ->
                     %% Native DETS closes asynchronously on owner death.
                     %% Do not reclaim while its file server can still write.
@@ -94,29 +96,126 @@ reserve_path(Path, Name) ->
                         true ->
                             release_dead_reservation(Path, Previous),
                             reserve_path(Path, Name);
-                        false -> {error, name_conflict}
+                        false ->
+                            case reclaim_closed_identity(Path, Previous) of
+                                true -> reserve_path(Path, Name);
+                                false -> {error, name_conflict}
+                            end
                     end;
                 [] -> reserve_path(Path, Name)
             end
     end.
 
+%% An externally closed/deleted native file can leave a live ETS owner and
+%% a recycled inode. Reclaim only that retired identity, never its path key.
+%% A snapshot marker protects the legitimate native close/reopen gap and
+%% private replacement inode, which is not yet at the canonical pathname.
+reclaim_closed_identity({file_identity, _, _, _} = Key, Name) ->
+    case closed_identity_is_retired(Key, Name) of
+        true ->
+            await_dead_dets_close(Name),
+            case closed_identity_is_retired(Key, Name) of
+                true ->
+                    ets:delete_object(?REGISTRY, {Key, Name}),
+                    true;
+                false -> false
+            end;
+        false -> false
+    end;
+reclaim_closed_identity(_Path, _Name) -> false.
+
+closed_identity_is_retired(Key, Name) ->
+    not ets:member(?REGISTRY, {snapshot_active, Name}) andalso
+    dets:info(Name) =:= undefined andalso
+    case [Path || {Path, _} <- ets:match_object(?REGISTRY, {'_', Name}),
+                  is_binary(Path)] of
+        [Path] ->
+            case file:read_file_info(Path) of
+                {error, enoent} -> true;
+                {ok, #file_info{type = regular, major_device = Major,
+                               minor_device = Minor, inode = Inode}}
+                        when is_integer(Major), Major >= 0,
+                             is_integer(Minor), Minor >= 0,
+                             is_integer(Inode), Inode > 0 ->
+                    Key =/= {file_identity, Major, Minor, Inode};
+                _ -> false
+            end;
+        _ -> false
+    end.
+
 %% Delete only the matching lifetime's reservation. Explicit close/cleanup
 %% first validate the original ETS handle; owner-death cleanup waits for
-%% native DETS close. A failed save can fail to reopen DETS, losing its filename
-%% while its name remains reserved in the registry. Recover only a unique
-%% mapping: a name-wide match_delete could erase another path's reservation.
-unregister_dets_name(undefined, Dets) ->
+%% native DETS close. The unique name identifies the entire lifetime, even
+%% after failed reopen loses DETS' filename. Delete exact objects only:
+%% delayed guardian cleanup must never erase a replacement lifetime.
+unregister_dets_name(_Path, Dets) ->
     ensure_registry(),
-    case ets:match_object(?REGISTRY, {'_', Dets}) of
-        [{Path, Dets}] -> unregister_dets_name(Path, Dets);
-        [] -> ok;
-        [_, _ | _] -> ok  %% Ambiguous mapping: do not remove other paths.
-    end;
-unregister_dets_name(Path, Dets) ->
-    ensure_registry(),
-    %% Do not erase a replacement mapping with a different DETS name.
-    ets:delete_object(?REGISTRY, {Path, Dets}),
+    lists:foreach(fun(Object) -> ets:delete_object(?REGISTRY, Object) end,
+        ets:match_object(?REGISTRY, {'_', Dets})),
     ok.
+
+%% Opening can repair via rename, changing the inode. Serialize initial
+%% acquisition/native open/post-open publication on this node using OTP's
+%% monitored lock, owned by the guardian rather than the calling owner.
+%% No decoding runs under the lock. Save uses its already-reserved inodes.
+lock_open() ->
+    true = global:set_lock({shelf_native_open, self()}, [node()]),
+    ok.
+
+unlock_open() ->
+    global:del_lock({shelf_native_open, self()}, [node()]),
+    ok.
+
+%% DETS initializes missing files, but rejects pre-created zero-byte files.
+%% While absent, the guardian's opening lock excludes all other Shelf opens.
+%% The owner creates the final file through DETS; finish_open must reserve its
+%% identity before unlocking or decoding. Existing files are reserved first.
+%% Directories are trusted: this is not protection against external replacement.
+reserve_file(Path, Name) ->
+    case file:read_file_info(Path) of
+        {error, enoent} -> {ok, absent};
+        Info -> reserve_file_info(Path, Name, Info)
+    end.
+
+reserve_existing_file(Path, Name) ->
+    reserve_file_info(Path, Name, file:read_file_info(Path)).
+
+reserve_file_info(_Path, Name,
+        {ok, #file_info{type = regular, major_device = Major,
+                       minor_device = Minor, inode = Inode}})
+        when is_integer(Major), Major >= 0, is_integer(Minor), Minor >= 0,
+             is_integer(Inode), Inode > 0 ->
+    Key = {file_identity, Major, Minor, Inode},
+    case reserve_path(Key, Name) of
+        ok -> {ok, Key};
+        {error, _} = Error -> Error
+    end;
+reserve_file_info(Path, _Name, {ok, Info}) ->
+    identity_error(Path, {unsupported_identity, Info#file_info.type,
+        Info#file_info.major_device, Info#file_info.minor_device,
+        Info#file_info.inode});
+reserve_file_info(Path, _Name, {error, Reason}) ->
+    identity_error(Path, {stat, Reason}).
+
+identity_error(Path, Reason) ->
+    {error, {file_error, unicode:characters_to_binary(
+        io_lib:format("Cannot reserve native file identity for ~ts: ~p",
+                      [Path, Reason]))}}.
+
+%% Confirmed native open/reopen: retain only the current inode. Repair can
+%% replace an inode just as save does; its old hardlinks are now distinct.
+retain_current_identity(Path, Name) ->
+    case reserve_existing_file(Path, Name) of
+        {ok, Current} ->
+            lists:foreach(fun
+                ({{file_identity, _, _, _} = Key, _} = Object)
+                        when Key =/= Current ->
+                    ets:delete_object(?REGISTRY, Object);
+                (_) -> ok
+            end, ets:match_object(?REGISTRY, {'_', Name})),
+            ok;
+        {error, _} = Error -> Error
+    end.
 
 %% ── Open (no load) ──────────────────────────────────────────────────────
 %% Creates an ETS table + opens a DETS file but does NOT load DETS into ETS.
@@ -131,11 +230,21 @@ open_no_load(_Name, Path, Type) ->
     {Guardian, Monitor} = spawn_monitor(fun() ->
         Name = {shelf_dets, Owner, Lifetime, self()},
         OwnerMonitor = monitor(process, Owner),
+        lock_open(),
         case reserve_path(Path, Name) of
             ok ->
-                Owner ! {Name, reserved},
-                guard_reservation(Owner, OwnerMonitor, Path, Name, none);
-            {error, _} = Error -> Owner ! {Name, Error}
+                case reserve_file(Path, Name) of
+                    {ok, _Identity} ->
+                        Owner ! {Name, reserved},
+                        guard_reservation(Owner, OwnerMonitor, Path, Name, none);
+                    {error, _} = Error ->
+                        unregister_dets_name(Path, Name),
+                        unlock_open(),
+                        Owner ! {Name, Error}
+                end;
+            {error, _} = Error ->
+                unlock_open(),
+                Owner ! {Name, Error}
         end
     end),
     Name = {shelf_dets, Owner, Lifetime, Guardian},
@@ -156,18 +265,53 @@ open_reserved(Path, Type, Name, Guardian) ->
         {file, unicode:characters_to_list(Path)}, {type, Type}, {repair, true}
     ]) of
         {ok, Dets} ->
-            %% An unexpected ETS creation failure remains a process failure;
-            %% the guardian and native DETS still handle owner death.
-            Ets = ets:new(shelf_ets, [Type, protected, {keypos, 1}, {read_concurrency, true}]),
-            {ok, {Ets, Dets, Guardian}};
+            %% Repair may have replaced the inode. Publish before releasing
+            %% the node-local opening lock, and before any user decoding.
+            case snapshot_request(Guardian, finish_open) of
+                ok ->
+                    Ets = ets:new(shelf_ets, [Type, protected, {keypos, 1}, {read_concurrency, true}]),
+                    {ok, {Ets, Dets, Guardian}};
+                {error, _} = Error ->
+                    _ = dets:close(Dets),
+                    snapshot_request(Guardian, release_reservation),
+                    Error
+            end;
         {error, Reason} ->
-            unregister_dets_name(Path, Name),
-            stop_guardian(Guardian),
+            snapshot_request(Guardian, release_reservation),
             {error, translate_error(Reason)}
     end.
 
 guard_reservation(Owner, Monitor, Path, Name, Snapshot) ->
     receive
+        {finish_open, Owner, Request} ->
+            Result = retain_current_identity(Path, Name),
+            case Result of
+                ok -> unlock_open();
+                {error, _} -> ok  %% Keep locked until the owner closes DETS.
+            end,
+            Owner ! {Request, Result},
+            guard_reservation(Owner, Monitor, Path, Name, Snapshot);
+        {begin_recovery, Owner, Request} ->
+            %% The existing best-effort recovery can create or repair a file,
+            %% so it needs the same exposure barrier as initial native open.
+            lock_open(),
+            Owner ! {Request, ok},
+            guard_reservation(Owner, Monitor, Path, Name, Snapshot);
+        {finish_recovery, Owner, Request} ->
+            Result = case dets:info(Name) of
+                undefined -> ok; %% Native recovery failed; preserve its keys.
+                _ -> retain_current_identity(Path, Name)
+            end,
+            case Result of
+                ok -> unlock_open();
+                {error, _} -> ok
+            end,
+            Owner ! {Request, Result},
+            guard_reservation(Owner, Monitor, Path, Name, Snapshot);
+        {release_open_lock, Owner, Request} ->
+            unlock_open(),
+            Owner ! {Request, ok},
+            guard_reservation(Owner, Monitor, Path, Name, Snapshot);
         {acquire_snapshot, Owner, Request} when Snapshot =:= none ->
             %% The guardian acquires the directory itself: owner death at
             %% any point (even before the reply) cannot leave it untracked.
@@ -175,26 +319,50 @@ guard_reservation(Owner, Monitor, Path, Name, Snapshot) ->
                 {ok, Directory} ->
                     Temporary = {shelf_tmp, make_ref()},
                     Acquired = {Directory, Temporary},
+                    ets:insert(?REGISTRY, {{snapshot_active, Name}, Name}),
                     Owner ! {Request, {ok, Acquired}},
                     guard_reservation(Owner, Monitor, Path, Name, Acquired);
                 {error, _} = Error ->
                     Owner ! {Request, Error},
                     guard_reservation(Owner, Monitor, Path, Name, none)
             end;
+        {{reserve_snapshot, Temporary}, Owner, Request}
+            when Snapshot =/= none, element(2, Snapshot) =:= Temporary ->
+            {Directory, Temporary} = Snapshot,
+            TmpPath = filename:join(Directory, <<"snapshot.dets">>),
+            Reply = case reserve_existing_file(TmpPath, Name) of
+                {ok, _} -> ok;
+                {error, _} = Error -> Error
+            end,
+            Owner ! {Request, Reply},
+            guard_reservation(Owner, Monitor, Path, Name, Snapshot);
+        {confirm_snapshot, Owner, Request} ->
+            %% Original native close AND rename have succeeded. The old
+            %% inode is retired even if subsequent reopen fails; only the
+            %% replacement (reserved before exposure) still needs protection.
+            Owner ! {Request, retain_current_identity(Path, Name)},
+            guard_reservation(Owner, Monitor, Path, Name, Snapshot);
         {{finish_snapshot, Temporary}, Owner, Request}
             when Snapshot =/= none, element(2, Snapshot) =:= Temporary ->
             %% The caller's after block runs after closing temporary DETS.
             %% Cleanup and forgetting happen in this one process, avoiding
             %% a second deletion by a delayed owner-DOWN handler.
-            cleanup_snapshot_directory(Snapshot),
+            cleanup_finished_snapshot(Snapshot, Name),
+            ets:delete_object(?REGISTRY, {{snapshot_active, Name}, Name}),
             Owner ! {Request, ok},
             guard_reservation(Owner, Monitor, Path, Name, none);
+        {release_reservation, Owner, Request} ->
+            unregister_dets_name(Path, Name),
+            unlock_open(),
+            demonitor(Monitor, [flush]),
+            Owner ! {Request, ok};
         {'DOWN', Monitor, process, Owner, _} ->
             cleanup_dead_snapshot(Snapshot),
             %% This close also serializes behind any pending native open.
             %% The guardian is not a DETS opening user: close alone cannot
             %% release the dead owner's handle. Wait for its file server.
-            release_dead_reservation(Path, Name);
+            release_dead_reservation(Path, Name),
+            unlock_open();
         stop ->
             demonitor(Monitor, [flush]),
             ok
@@ -240,6 +408,29 @@ cleanup_snapshot_directory({Directory, _Temporary}) ->
     _ = file:delete(filename:join(Directory, <<"snapshot.dets">>)),
     _ = file:del_dir(Directory),
     ok.
+
+cleanup_finished_snapshot({Directory, Temporary} = Snapshot, Name) ->
+    TmpPath = filename:join(Directory, <<"snapshot.dets">>),
+    %% In this private trusted directory, a remaining temp pathname means
+    %% rename never published that inode. Capture its exact key BEFORE unlink.
+    %% Missing temp (successful rename, even with failed reopen), failed stat,
+    %% or a still-open native temp must conservatively retain reservations.
+    Abandoned = case {dets:info(Temporary), file:read_file_info(TmpPath)} of
+        {undefined, {ok, #file_info{type = regular, major_device = Major,
+                                   minor_device = Minor, inode = Inode}}}
+                when is_integer(Major), Major >= 0,
+                     is_integer(Minor), Minor >= 0,
+                     is_integer(Inode), Inode > 0 ->
+            {{file_identity, Major, Minor, Inode}, Name};
+        _ -> none
+    end,
+    cleanup_snapshot_directory(Snapshot),
+    case Abandoned of
+        none -> ok;
+        Object ->
+            ets:delete_object(?REGISTRY, Object),
+            ok
+    end.
 
 snapshot_request(Guardian, Operation) ->
     Request = monitor(process, Guardian),
@@ -366,12 +557,6 @@ copy_reload_bag_key(Ets, Scratch, Key) ->
     ets:insert(Ets, ets:lookup(Scratch, Key)),
     copy_reload_bag(Ets, Scratch, ets:next(Scratch, Key)).
 
-%% ── Guardian ────────────────────────────────────────────────────────────
-
-stop_guardian(Guardian) ->
-    Guardian ! stop,
-    ok.
-
 %% ── Cleanup ─────────────────────────────────────────────────────────────
 %% Delete ETS table and close DETS without saving. Used on validation failure
 %% and when a with_table scope cannot retain a retryable close failure.
@@ -419,21 +604,19 @@ preserve_table_after_close_error(_Path, table_closed) -> false;
 preserve_table_after_close_error(undefined, _Reason) -> false;
 preserve_table_after_close_error(_Path, _Reason) -> true.
 
-finalize_close(Ets, Dets, Guardian, Path) ->
+finalize_close(Ets, Dets, Guardian, _Path) ->
     CloseResult = close_dets_handle(Dets),
     _ = (catch ets:delete(Ets)),
-    unregister_dets_name(Path, Dets),
-    stop_guardian(Guardian),
+    snapshot_request(Guardian, release_reservation),
     case CloseResult of
         ok -> {ok, nil};
         {error, Reason} -> {error, Reason}
     end.
 
-teardown_resources(Ets, Dets, Guardian, Path) ->
+teardown_resources(Ets, Dets, Guardian, _Path) ->
     _ = close_dets_handle(Dets),
     _ = (catch ets:delete(Ets)),
-    unregister_dets_name(Path, Dets),
-    stop_guardian(Guardian),
+    snapshot_request(Guardian, release_reservation),
     ok.
 
 close_dets_handle(Dets) ->
@@ -612,6 +795,8 @@ save(Ets, {shelf_dets, _Owner, _Lifetime, Guardian} = Dets) ->
                                 after
                                     snapshot_request(Guardian, {finish_snapshot, Temporary})
                                 end;
+                            {error, {file_error, _}} = IdentityError ->
+                                IdentityError;
                             {error, TempReason} ->
                                 %% Keep the save error's native failure detail,
                                 %% as for a failed snapshot/open/rename below.
@@ -654,10 +839,22 @@ safe_save_impl(Ets, Dets, OrigPath, TmpPath, Type, TmpName) ->
         TmpDets = ets:to_dets(Ets, TmpDets),
         %% 3. Close temp (flushes to disk)
         ok = dets:close(TmpDets),
+        %% Reserve the replacement BEFORE original close/rename can expose
+        %% it. Metadata capture/apply hooks may share this boundary.
+        {shelf_dets, _, _, Guardian} = Dets,
+        case snapshot_request(Guardian, {reserve_snapshot, TmpName}) of
+            ok -> ok;
+            {error, IdentityError} -> throw({snapshot_identity, IdentityError})
+        end,
         %% 4. Close original DETS
         ok = dets:close(Dets),
         %% 5. Atomic rename (POSIX guarantees this is atomic)
         ok = file:rename(TmpPath, OrigPath),
+        case snapshot_request(Guardian, confirm_snapshot) of
+            ok -> ok;
+            {error, ConfirmationError} ->
+                throw({snapshot_identity, ConfirmationError})
+        end,
         %% 6. Reopen DETS using the same lifetime reservation
         DetsName = Dets,
         {ok, _} = dets:open_file(DetsName, [
@@ -674,16 +871,34 @@ safe_save_impl(Ets, Dets, OrigPath, TmpPath, Type, TmpName) ->
             %% Opening an already-open DETS table again increments this
             %% caller's open count. A later cleanup would then leave DETS
             %% open, and a reopened table could read stale disk contents.
-            case dets:info(Dets) of
+            Recovery = case dets:info(Dets) of
                 undefined ->
+                    RecoveryGuardian = element(4, Dets),
+                    ok = snapshot_request(RecoveryGuardian, begin_recovery),
                     _ = (catch dets:open_file(Dets, [
                         {file, unicode:characters_to_list(OrigPath)},
                         {type, Type},
                         {repair, true}
-                    ]));
+                    ])),
+                    case snapshot_request(RecoveryGuardian, finish_recovery) of
+                        ok -> ok;
+                        {error, _} = ReservationError ->
+                            %% Never leave a recovered native handle active
+                            %% without its identity, or unlock before close.
+                            _ = dets:close(Dets),
+                            snapshot_request(RecoveryGuardian, release_open_lock),
+                            ReservationError
+                    end;
                 _ -> ok
             end,
-            {error, translate_error(Error)}
+            case Recovery of
+                {error, _} -> Recovery;
+                ok ->
+                    case Error of
+                        {snapshot_identity, Detail} -> {error, Detail};
+                        _ -> {error, translate_error(Error)}
+                    end
+            end
     end.
 
 %% Flush DETS write buffer to OS.

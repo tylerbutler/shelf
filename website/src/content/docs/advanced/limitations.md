@@ -34,7 +34,11 @@ DETS is local to one Erlang node. Data is not replicated or distributed. For mul
 
 ## DETS File Paths Must Be Unique
 
-shelf uses unnamed ETS tables internally, so table names do not need to be globally unique. However, each DETS file path can only be open by one shelf table at a time. Opening a second table with the same resolved file path returns `Error(NameConflict)`.
+shelf uses unnamed ETS tables internally, so table names do not need to be globally unique. Within one VM, each canonical path and filesystem identity can have one live shelf table. Opening a second table through the same path, a hard link, or a filesystem-supported case or Unicode alias returns `Error(NameConflict)`. Reservations remain in place during save.
+
+shelf requires reliable device and nonzero inode values. If the filesystem cannot provide them, opening returns `Error(FileError(reason))` without loading entries or returning a table handle. Use a filesystem that provides these values. Reservations do not lock files against other VMs or prevent concurrent external path replacement; use trusted directories and contents.
+
+Save replaces the file at the original path. Other hard links continue to name the old file. After a successful save, you can open that distinct file as a separate table.
 
 Use distinct file paths for each table:
 
