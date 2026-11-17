@@ -249,6 +249,14 @@ For the precise per-call durability guarantees and crash semantics, see
 the canonical [Durability story](https://shelf.tylerbutler.com/advanced/persistence-operations/#durability-story)
 in the website docs.
 
+A VM crash can leave `.shelf-save-<pid>-<counter>` directories beside the
+database. Later `open()`, `save()`, and `close()` calls do not reclaim them.
+These directories have no database or host ownership marker; a name, PID, or
+age alone does not prove that a directory is safe to remove. Automatic recovery
+remains deferred. Follow the
+[manual cleanup procedure](https://shelf.tylerbutler.com/advanced/persistence-operations/#manual-cleanup-after-a-vm-crash)
+and leave any directory with uncertain ownership untouched.
+
 ## Type Safety
 
 All data loaded from DETS is validated through `gleam/dynamic/decode` decoders when a table is opened. This ensures types match your expectations, even when the DETS file was written by a previous session or a different version of your application.

@@ -65,6 +65,48 @@ controls to the replacement file. Do not rely on them to restrict access
 across `save()` or `close()`. Use a restricted parent directory and POSIX
 mode bits for access control.
 
+### Manual cleanup after a VM crash
+
+A VM crash during `save()` or the save in `close()` can leave a
+`.shelf-save-<pid>-<counter>` directory beside the database. It can contain
+`snapshot.dets`, DETS sidecars such as `snapshot.dets.1`, and file_sorter
+temporary files such as `fs_nonode@nohost_86491_386.17`. Leftovers can approach
+the table's size, and repeated crashes can consume more disk space.
+
+Later `open()`, `save()`, and `close()` calls do not remove these abandoned
+directories. Automatic recovery remains deferred in
+[#107](https://github.com/tylerbutler/shelf/issues/107); use manual cleanup.
+
+Existing directories, including legacy leftovers, have no database or host
+ownership marker. The directory name, PID, age, or expected filenames do not
+prove ownership or abandonment. Another VM can still be writing a snapshot,
+including for another database in the same parent directory.
+
+1. Stop all applications and BEAM VMs that can write to the parent directory,
+   including users of other databases and other hosts that share the storage.
+   Prevent restarts until cleanup ends. Closing one table in one VM is not
+   sufficient.
+2. Confirm the intended database path and back up the database file. Do not
+   replace it with a leftover `snapshot.dets`; an interrupted save can leave
+   an incomplete snapshot.
+3. Inspect one exact candidate directory without following symbolic links.
+   Use independent records of the interrupted save to establish ownership
+   of the directory and its contents. Shelf does not store that attribution.
+   If you cannot establish ownership, leave the directory untouched.
+4. Check all entries before deleting anything. If you find an unknown file,
+   a symbolic link, or a nested directory, leave the candidate untouched.
+   Otherwise, remove only the regular snapshot and sidecar files you have
+   confirmed belong to that abandoned save, then remove the empty directory.
+   Do not recurse, follow links, or delete sibling paths with a wildcard.
+5. If an inspection, backup, or removal fails, stop and retain the remaining
+   files. Record the exact path and error before investigating. Resume the
+   applications only after cleanup ends, then verify the expected persisted
+   data.
+
+Leave unrelated files, directories, and symbolic-link targets unchanged. If
+ownership remains uncertain, retain the candidate and investigate rather than
+delete it to reclaim space.
+
 ## reload
 
 Validates DETS entries in a scratch ETS table before discarding unsaved
