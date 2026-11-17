@@ -779,8 +779,10 @@ translate_error(not_found) -> not_found;
 translate_error(key_already_present) -> key_already_present;
 translate_error(name_conflict) -> name_conflict;
 translate_error(not_owner) -> not_owner;
-translate_error(type_mismatch) -> type_mismatch;
-translate_error({type_mismatch, Errors}) -> {type_mismatch, Errors};
+translate_error({type_mismatch, Filename}) ->
+    {file_error, unicode:characters_to_binary(
+        io_lib:format("DETS file has a different table type: ~ts", [Filename])
+    )};
 translate_error({invalid_path, Msg}) -> {invalid_path, Msg};
 translate_error(table_closed) -> table_closed;
 translate_error(badarg) -> table_closed;

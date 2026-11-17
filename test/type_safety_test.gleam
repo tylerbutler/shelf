@@ -1,6 +1,7 @@
 import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode
 import gleam/list
+import gleam/string
 import shelf
 import shelf/bag
 import shelf/duplicate_bag
@@ -157,6 +158,99 @@ pub fn strict_arity_preserves_valid_pairs_test() -> Nil {
       test_helper.cleanup(path)
     },
   )
+}
+
+@external(erlang, "close_test_ffi", "with_close_recovery_fixture")
+fn with_table_fixture(fun: fn(String) -> a) -> a
+
+pub fn native_table_kind_mismatch_has_typed_detail_test() -> Nil {
+  list.each(
+    [internal.Set, internal.Bag, internal.DuplicateBag],
+    fn(stored_kind) {
+      use path <- with_table_fixture()
+      let assert Ok(path) = shelf.validate_path(path, "/tmp")
+      let assert Ok(Nil) =
+        write_raw_dets(path, stored_kind, [
+          #(dynamic.string("key"), dynamic.string("preserved")),
+        ])
+      assert_table_kind_result(
+        set.open("kind", path, "/tmp", decode.string, decode.string),
+        stored_kind == internal.Set,
+        fn(table) { set.lookup(table, "key") },
+        set.close,
+      )
+      assert_table_kind_result(
+        bag.open("kind", path, "/tmp", decode.string, decode.string),
+        stored_kind == internal.Bag,
+        fn(table) {
+          let assert Ok(["preserved"]) = bag.lookup(table, "key")
+          Ok("preserved")
+        },
+        bag.close,
+      )
+      assert_table_kind_result(
+        duplicate_bag.open("kind", path, "/tmp", decode.string, decode.string),
+        stored_kind == internal.DuplicateBag,
+        fn(table) {
+          let assert Ok(["preserved"]) = duplicate_bag.lookup(table, "key")
+          Ok("preserved")
+        },
+        duplicate_bag.close,
+      )
+      // Reopen after every incompatible kind has been attempted.
+      let assert Ok(#(ets, dets, guardian)) =
+        internal.open_no_load("kind", path, stored_kind)
+      let assert Ok(Nil) =
+        internal.stream_validate_and_load(
+          ets,
+          dets,
+          internal.build_entry_decoder(decode.string, decode.string),
+        )
+      let assert Ok([#("key", "preserved")]) = internal.to_list(ets)
+      let assert Ok(Nil) = internal.close(ets, dets, guardian)
+      Nil
+    },
+  )
+}
+
+fn assert_table_kind_result(
+  result: Result(table, shelf.ShelfError),
+  compatible: Bool,
+  lookup: fn(table) -> Result(String, shelf.ShelfError),
+  close: fn(table) -> Result(Nil, shelf.ShelfError),
+) -> Nil {
+  case compatible {
+    True -> {
+      let assert Ok(table) = result
+      let assert Ok("preserved") = lookup(table)
+      let assert Ok(Nil) = close(table)
+      Nil
+    }
+    False -> {
+      let assert Error(shelf.FileError(detail)) = result
+      assert string.contains(detail, "DETS file has a different table type")
+      assert string.contains(detail, "table.dets")
+    }
+  }
+}
+
+pub fn native_table_kind_decoder_errors_remain_usable_test() -> Nil {
+  use path <- with_table_fixture()
+  let assert Ok(table) =
+    set.open("decoder", path, "/tmp", decode.string, decode.string)
+  let assert Ok(Nil) = set.insert(table, "key", "preserved")
+  let assert Ok(Nil) = set.close(table)
+  let assert Error(shelf.TypeMismatch(errors)) =
+    set.open("decoder", path, "/tmp", decode.string, decode.int)
+  let assert [error, ..] = errors
+  assert error.expected == "Int"
+  assert error.found != ""
+  assert error.path == ["1"]
+  let assert Ok(table) =
+    set.open("decoder", path, "/tmp", decode.string, decode.string)
+  let assert Ok("preserved") = set.lookup(table, "key")
+  let assert Ok(Nil) = set.close(table)
+  Nil
 }
 
 pub fn rejects_dets_data_with_wrong_value_type_test() -> Nil {
