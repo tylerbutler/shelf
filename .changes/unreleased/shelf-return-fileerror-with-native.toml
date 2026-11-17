@@ -1,0 +1,3 @@
+package = "shelf"
+kind = "Fixed"
+body = "Return FileError with native detail when a DETS file has a different table kind. Keep TypeMismatch for decoder failures."
