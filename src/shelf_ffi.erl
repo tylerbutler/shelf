@@ -538,10 +538,31 @@ to_list(Ets) ->
     end.
 
 fold(Ets, Fun, Acc0) ->
-    try ets:foldl(Fun, Acc0, Ets) of
-        Result -> {ok, Result}
+    Tag = make_ref(),
+    Callback = fun(Entry, Acc) ->
+        try Fun(Entry, Acc)
+        catch Class:Reason:Stack ->
+            %% ets:foldl's cleanup can itself raise badarg if the callback
+            %% deleted the table. Preserve the original even in that case.
+            put(Tag, {Class, Reason, Stack}),
+            throw(Tag)
+        end
+    end,
+    Result = try ets:foldl(Callback, Acc0, Ets) of
+        Value -> {ok, Value}
     catch
-        _:Reason -> {error, translate_error(Reason)}
+        _:StorageReason -> {error, StorageReason}
+    end,
+    %% A private per-invocation key also isolates nested folds and ordinary
+    %% accumulator values. Erase before either translating or re-raising.
+    case erase(Tag) of
+        undefined ->
+            case Result of
+                {ok, _} -> Result;
+                {error, Reason} -> {error, translate_error(Reason)}
+            end;
+        {Class, Reason, Stack} ->
+            erlang:raise(Class, Reason, Stack)
     end.
 
 size(Ets) ->

@@ -195,6 +195,11 @@ pub fn to_list(
 
 /// Fold over all entries. Order is unspecified.
 ///
+/// Returns `Error(TableClosed)` if the ETS table is closed or deleted.
+/// Callback exceptions, including panics and failed assertions, propagate
+/// with their original Erlang class, reason, and stack trace. This also applies
+/// if the callback closes the table before it raises.
+///
 pub fn fold(
   over table: PersistentBag(k, v),
   from initial: acc,

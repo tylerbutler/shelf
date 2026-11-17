@@ -276,7 +276,9 @@ Run the example in [`examples/src/shelf_examples/schema_migration.gleam`](exampl
 
 ## Error Handling
 
-All operations return `Result(value, ShelfError)`. The error type covers all failure modes:
+All operations return `Result(value, ShelfError)` for storage failures.
+Exceptions raised by a `fold` callback propagate to the caller; they are not
+converted to `ShelfError`.
 
 | Error | Cause |
 |-------|-------|
@@ -363,6 +365,18 @@ let assert Ok(total) = set.fold(over: table, from: 0, with: fn(sum, _key, value)
 // Export all data (careful — loads entire table into memory)
 let assert Ok(entries) = set.to_list(from: table)
 ```
+
+For all three table types, `fold` preserves a callback exception's original
+Erlang class (`error`, `throw`, or `exit`), reason, and stack trace. This includes
+Gleam panics and failed assertions, even if the callback closes the table before
+it raises. A closed or deleted ETS table still returns `Error(TableClosed)`
+when traversal itself fails.
+
+**Compatibility correction**: Earlier versions converted callback exceptions
+to `ShelfError`, and could report callback `badarg` errors as `TableClosed`.
+If your code relied on that behavior, handle expected failures in the callback
+or use your application's exception boundary. A surrounding `with_table` still
+applies its own callback rescue behavior.
 
 ## Limitations
 
