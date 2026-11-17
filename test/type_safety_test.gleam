@@ -1,11 +1,14 @@
 import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode
+import gleam/list
 import shelf
 import shelf/bag
 import shelf/duplicate_bag
 import shelf/internal
 import shelf/set
+import storage_safety_test
 import test_helper
+import unitest
 
 type RawDetsError {
   RawDetsError(String)
@@ -15,8 +18,146 @@ type RawDetsError {
 fn write_raw_dets(
   path: String,
   table_type: internal.TableKind,
-  entries: List(#(Dynamic, Dynamic)),
+  entries: List(a),
 ) -> Result(Nil, RawDetsError)
+
+@external(erlang, "type_safety_test_ffi", "read_raw_dets")
+fn read_raw_dets(
+  path: String,
+  table_type: internal.TableKind,
+) -> Result(List(Dynamic), RawDetsError)
+
+pub fn malformed_entries() -> List(Dynamic) {
+  [
+    dynamic.array([dynamic.string("bad")]),
+    dynamic.array([
+      dynamic.string("bad"),
+      dynamic.int(2),
+      dynamic.string("extra payload"),
+    ]),
+    dynamic.array([
+      dynamic.string("bad"),
+      dynamic.int(2),
+      dynamic.int(3),
+      dynamic.int(4),
+    ]),
+  ]
+}
+
+pub fn assert_pair_shape_error(
+  result: Result(a, shelf.ShelfError),
+  entry: Dynamic,
+) -> Nil {
+  let assert Error(shelf.TypeMismatch([error])) = result
+  assert error.expected == "Tuple of size 2"
+  assert error.found == dynamic.classify(entry)
+  assert error.path == []
+}
+
+fn rejects_oversized_entries(
+  kind: internal.TableKind,
+  open: fn(String, String) -> Result(table, shelf.ShelfError),
+) -> Nil {
+  use directory <- storage_safety_test.with_directory
+  let path = directory <> "/table.dets"
+  list.each(malformed_entries(), fn(entry) {
+    let entries = [
+      dynamic.array([dynamic.string("good"), dynamic.int(1)]),
+      entry,
+    ]
+    let assert Ok(Nil) = write_raw_dets(path, kind, entries)
+    assert_pair_shape_error(open(path, directory), entry)
+    // Failed open must release its reservation without saving decoded pairs.
+    assert_pair_shape_error(open(path, directory), entry)
+    let assert Ok(actual) = read_raw_dets(path, kind)
+    assert list.length(actual) == list.length(entries)
+    list.each(entries, fn(original) {
+      assert list.contains(actual, original)
+    })
+    test_helper.cleanup(path)
+  })
+}
+
+pub fn strict_arity_set_open_test() -> Nil {
+  use <- unitest.tag("strict_arity")
+  rejects_oversized_entries(internal.Set, fn(path, directory) {
+    set.open("strict_set", path, directory, decode.string, decode.int)
+  })
+}
+
+pub fn strict_arity_bag_open_test() -> Nil {
+  use <- unitest.tag("strict_arity")
+  rejects_oversized_entries(internal.Bag, fn(path, directory) {
+    bag.open("strict_bag", path, directory, decode.string, decode.int)
+  })
+}
+
+pub fn strict_arity_duplicate_bag_open_test() -> Nil {
+  use <- unitest.tag("strict_arity")
+  rejects_oversized_entries(internal.DuplicateBag, fn(path, directory) {
+    duplicate_bag.open(
+      "strict_duplicate_bag",
+      path,
+      directory,
+      decode.string,
+      decode.int,
+    )
+  })
+}
+
+pub fn strict_arity_checks_shape_before_decoding_test() -> Nil {
+  use <- unitest.tag("strict_arity")
+  use directory <- storage_safety_test.with_directory
+  let path = directory <> "/table.dets"
+  let key_decoder: decode.Decoder(String) = {
+    use _ <- decode.then(decode.string)
+    panic as "Malformed records must not reach field decoders"
+  }
+  list.each(malformed_entries(), fn(entry) {
+    let assert Ok(Nil) = write_raw_dets(path, internal.Set, [entry])
+    assert_pair_shape_error(
+      set.open("strict_before_decode", path, directory, key_decoder, decode.int),
+      entry,
+    )
+    test_helper.cleanup(path)
+  })
+}
+
+pub fn strict_arity_preserves_valid_pairs_test() -> Nil {
+  use <- unitest.tag("strict_arity")
+  use directory <- storage_safety_test.with_directory
+  let path = directory <> "/pairs.dets"
+  list.each(
+    [
+      #(internal.Set, 1, 0),
+      #(internal.Bag, 1, 1),
+      #(internal.DuplicateBag, 2, 1),
+    ],
+    fn(test_case) {
+      let #(kind, ones, twos) = test_case
+      let assert Ok(Nil) =
+        write_raw_dets(path, kind, [#("key", 1), #("key", 2), #("key", 1)])
+      let config = shelf.config("strict_pairs", path, directory)
+      let assert Ok(#(ets, dets, guardian, _, decoder)) =
+        internal.generic_open(config, kind, decode.string, decode.int)
+      let assert Ok(entries) = internal.to_list(ets)
+      assert list.count(entries, fn(entry) { entry == #("key", 1) }) == ones
+      assert list.count(entries, fn(entry) { entry == #("key", 2) }) == twos
+      assert list.length(entries) == ones + twos
+      let assert Ok(Nil) = internal.save(ets, dets)
+      let assert Ok(Nil) = internal.generic_reload(ets, dets, decoder)
+      let assert Ok(reloaded) = internal.to_list(ets)
+      assert reloaded == entries
+      let assert Ok(Nil) = internal.close(ets, dets, guardian)
+      let assert Ok(#(ets, dets, guardian, _, _)) =
+        internal.generic_open(config, kind, decode.string, decode.int)
+      let assert Ok(reopened) = internal.to_list(ets)
+      assert reopened == entries
+      let assert Ok(Nil) = internal.close(ets, dets, guardian)
+      test_helper.cleanup(path)
+    },
+  )
+}
 
 pub fn rejects_dets_data_with_wrong_value_type_test() -> Nil {
   let path = "/tmp/shelf_ts_wrong_value.dets"
