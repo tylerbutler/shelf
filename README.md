@@ -371,7 +371,8 @@ let assert Ok(entries) = set.to_list(from: table)
 - **Erlang only**: Requires the BEAM runtime (no JavaScript target)
 - **Single node**: DETS is local to one node (use Mnesia for distribution)
 - **Table names**: Names do not need to be globally unique — shelf uses unnamed ETS tables internally. However, DETS file paths must not conflict with other open tables.
-- **Exclusive paths**: Each canonical database path is reserved by one live shelf table per VM, including during save. A second open returns `NameConflict`, even in the same process. Internal DETS names are unique per-lifetime Erlang terms, not atoms derived from filenames.
+- **Exclusive files**: Each canonical database path and filesystem identity has one live shelf table per VM, including during save. A second open through a hard link or a filesystem-supported case or Unicode alias returns `NameConflict`, even in the same process. Internal DETS names are unique per-lifetime Erlang terms, not atoms derived from filenames.
+- **Filesystem identity**: Opening requires reliable device and nonzero inode values. If the filesystem cannot provide them, shelf returns `FileError` without loading entries or returning a table handle. Use a filesystem that provides these values.
 - **Process ownership**: ETS tables are owned by the process that called `open()` and are created `protected`, so reads work from any process but writes/lifecycle calls are owner-only. See [Process Ownership](https://shelf.tylerbutler.com/advanced/limitations/#process-ownership).
 - **Loading large tables**: Open and reload validate DETS entries in batches. Reload also needs a scratch ETS table and transfer memory. Details and limits: [Memory cost on open and reload](https://shelf.tylerbutler.com/advanced/persistence-operations/#memory-cost-on-open-and-reload).
 
@@ -379,7 +380,9 @@ let assert Ok(entries) = set.to_list(from: table)
 
 All DETS file paths are resolved against the provided `base_directory`, including symbolic links in existing directories and at the filename itself. Paths that escape the resolved base directory are rejected with `InvalidPath`, as are null bytes, link loops, and filesystem resolution errors. In-base aliases resolve to the same canonical path and therefore share one exclusive reservation. Unicode directories and filenames are preserved, and `/` is a valid base directory. Missing components can pass validation, but opening still requires the parent directory to exist.
 
-Use a trusted base directory and trusted contents. This check does not protect against concurrent external replacement of directories or symbolic links between validation and I/O, and does not detect hard-link aliases.
+Use a trusted base directory and trusted contents. Path validation does not protect against concurrent external replacement of directories or symbolic links between validation and I/O. Filesystem identity reservations prevent two shelf tables in one VM from opening the same file through aliases; they do not provide cross-VM file locks or check whether hard links point outside the base directory.
+
+Save replaces the file at the original path. Other hard links keep pointing to the old file; after a successful save, they name a distinct file and can open as a separate table.
 
 Snapshots use an exclusively created private sibling directory on the same filesystem, then rename its DETS file over the database. Save cleans up only its own temporary file and directory; an unrelated `<database>.tmp` is never used. The guardian acquires and tracks that location, cleaning it up after temporary DETS shutdown if the owner exits during save. A VM crash can still leave a private snapshot directory behind.
 

@@ -39,8 +39,13 @@
 /// links) or contain null bytes are rejected with `InvalidPath`. Paths
 /// are canonicalized and Unicode filenames are preserved.
 /// The base directory and its contents must be trusted: validation does
-/// not protect against concurrent external symlink/path replacement or
-/// hard-link aliases.
+/// not protect against concurrent external symlink/path replacement.
+/// Within one VM, shelf reserves both the canonical path and filesystem
+/// identity, including hard links and filesystem-supported case or Unicode
+/// aliases. These reservations do not lock files against other VMs.
+/// Opening requires a reliable device/inode identity; if the filesystem
+/// does not provide one, shelf returns `FileError` without loading entries
+/// or returning a table handle.
 ///
 /// ## Limitations
 ///
@@ -87,10 +92,12 @@ pub type ShelfError {
   /// read freely. Wrap the table in a supervised actor/server if you
   /// need cross-process writes.
   NotOwner
-  /// DETS file could not be found or created
+  /// DETS file could not be found or created, or its filesystem identity
+  /// could not be established.
   FileError(String)
-  /// This canonical path is reserved by another live shelf table, even
-  /// in the same process or while saving. Not related to the table name.
+  /// Another live shelf table reserves this canonical path or filesystem
+  /// identity, even in the same process or while saving.
+  /// Not related to the table name.
   NameConflict
   /// The DETS file path is invalid (escapes base directory, contains
   /// null bytes, or is otherwise unsafe)

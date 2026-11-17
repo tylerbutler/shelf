@@ -11,9 +11,10 @@ the limitation.
 
 `Error(NameConflict)` is returned when you try to open a DETS file that is
 already reserved by another live shelf table in the same VM, even in
-the same process or during save. shelf reserves canonical paths
-exclusively and uses a unique Erlang term for each DETS lifetime.
-Symbolic-link aliases within the base resolve to the same reservation.
+the same process or during save. shelf reserves both canonical paths
+and filesystem identities and uses a unique Erlang term for each DETS lifetime.
+This includes symbolic links within the base, hard links, and case or Unicode
+aliases that your filesystem treats as the same file.
 
 What to check:
 
@@ -111,8 +112,18 @@ allowed, Unicode names are preserved, and `/` is a valid base.
 
 Pick a base directory and contents you control. Validation does not protect
 against concurrent external directory/symlink replacement between validation
-and I/O, nor does it detect hard-link aliases. Missing components can pass
-validation, but opening still requires existing parent directories.
+and I/O. Identity reservations detect hard-link collisions within one VM,
+but do not check whether a hard link points outside the base. Missing
+components can pass validation, but opening still requires existing parent
+directories.
+
+## Why does `FileError` mention filesystem identity?
+
+shelf requires reliable device and nonzero inode values before loading entries
+or returning a table handle.
+If your filesystem cannot provide these values, use a filesystem that can.
+shelf does not fall back to path strings or case conversion, which could
+allow two tables to write to the same file.
 
 ## What is `FileSizeLimitExceeded`?
 
