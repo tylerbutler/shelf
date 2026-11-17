@@ -49,6 +49,22 @@ flush that buffer to the file.
 For exactly which on-disk layer this call advances data past, and what
 guarantees it gives across crashes, see [Durability story](#durability-story).
 
+### File access controls
+
+On POSIX filesystems, `save()` preserves the original file's permission and
+special mode bits, owner (uid), and group (gid). Shelf applies ownership to
+the snapshot before the final mode, since an ownership change can clear
+special mode bits. It reads back these values before replacing the original
+file. If a metadata read, update, or check fails, Shelf returns an error
+without replacing the original. You can correct the cause and retry with
+the same table handle. `close()` uses the same save procedure.
+
+The Erlang file metadata API does not expose ACLs, extended attributes
+(including security labels), or file flags. Shelf does not copy these
+controls to the replacement file. Do not rely on them to restrict access
+across `save()` or `close()`. Use a restricted parent directory and POSIX
+mode bits for access control.
+
 ## reload
 
 Validates DETS entries in a scratch ETS table before discarding unsaved

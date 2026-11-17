@@ -1,0 +1,3 @@
+package = "shelf"
+kind = "Fixed"
+body = "Preserve POSIX file modes, owner, and group during save() and close(); return an error before replacement if this metadata cannot be preserved."

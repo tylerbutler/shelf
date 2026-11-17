@@ -412,23 +412,32 @@ pub fn renamed_snapshot_failed_reopen_retains_replacement_identity_test() -> Nil
 pub fn recovery_creation_retires_old_and_reserves_new_identity_test() -> Nil {
   use directory <- fixture.with_directory()
   let path = directory <> "/table.dets"
-  let assert Ok(table) = open(directory, "table.dets")
-  hardlink(path, directory <> "/old.dets")
-  with_original_close_failure(table, fn() {
-    delete_file(path)
-    let assert Error(_) = set.save(table)
-    let assert Ok(Nil) = set.sync(table)
-    assert identity_reserved(path)
-    assert identity_count(table) == 1
-    assert !identity_reserved(directory <> "/old.dets")
-    let assert Ok(old) = open(directory, "old.dets")
-    hardlink(path, directory <> "/current.dets")
-    let assert Error(shelf.NameConflict) = open(directory, "current.dets")
-    let assert Ok(Nil) = set.close(old)
-    Nil
-  })
-  let assert Ok(Nil) = set.close(table)
-  Nil
+  with_paused_save(
+    fn() {
+      let assert Ok(table) = open(directory, "table.dets")
+      hardlink(path, directory <> "/old.dets")
+      with_original_close_failure(table, fn() { Nil })
+      Ok(table)
+    },
+    fn(table) {
+      let assert Error(_) = set.save(table)
+      let assert Ok(Nil) = set.sync(table)
+      assert identity_reserved(path)
+      assert identity_count(table) == 1
+      assert !identity_reserved(directory <> "/old.dets")
+      let assert Ok(old) = open(directory, "old.dets")
+      hardlink(path, directory <> "/current.dets")
+      let assert Error(shelf.NameConflict) = open(directory, "current.dets")
+      let assert Ok(Nil) = set.close(old)
+      let assert Ok(Nil) = set.close(table)
+      Ok(Nil)
+    },
+    fn() {
+      // Metadata capture/apply/verification have completed. The native
+      // original close has failed, but the owner has not started recovery.
+      delete_file(path)
+    },
+  )
 }
 
 pub fn closed_native_retired_identity_does_not_block_another_file_test() -> Nil {

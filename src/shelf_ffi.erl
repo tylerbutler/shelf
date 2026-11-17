@@ -839,6 +839,7 @@ make_save_directory(Path, Attempts) ->
 
 safe_save_impl(Ets, Dets, OrigPath, TmpPath, Type, TmpName) ->
     try
+        Metadata = save_metadata(read_original, OrigPath),
         %% 1. Open temp DETS
         {ok, TmpDets} = dets:open_file(TmpName, [
             {file, unicode:characters_to_list(TmpPath)},
@@ -849,8 +850,12 @@ safe_save_impl(Ets, Dets, OrigPath, TmpPath, Type, TmpName) ->
         TmpDets = ets:to_dets(Ets, TmpDets),
         %% 3. Close temp (flushes to disk)
         ok = dets:close(TmpDets),
+        %% Restore and verify POSIX access metadata before closing the original.
+        %% Ownership writes can clear set-id bits, so mode must be applied last.
+        %% Any failure leaves the original DETS open and its data untouched.
+        ok = apply_save_metadata(TmpPath, Metadata),
         %% Reserve the replacement BEFORE original close/rename can expose
-        %% it. Metadata capture/apply hooks may share this boundary.
+        %% it, after restoring and verifying its POSIX access metadata.
         {shelf_dets, _, _, Guardian} = Dets,
         case snapshot_request(Guardian, {reserve_snapshot, TmpName}) of
             ok -> ok;
@@ -909,6 +914,32 @@ safe_save_impl(Ets, Dets, OrigPath, TmpPath, Type, TmpName) ->
                         _ -> {error, translate_error(Error)}
                     end
             end
+    end.
+
+%% Only POSIX mode/uid/gid are represented here, not ACLs or extended metadata.
+save_metadata(Stage, Path) ->
+    case file:read_file_info(Path) of
+        {ok, #file_info{mode = Mode, uid = Uid, gid = Gid}} ->
+            {Mode band 8#7777, Uid, Gid};
+        {error, Reason} ->
+            error({file_error, Path, {native_metadata, Stage, Reason}})
+    end.
+
+apply_save_metadata(Path, {Mode, Uid, Gid} = Expected) ->
+    write_save_metadata(apply_owner, Path, #file_info{uid = Uid, gid = Gid}),
+    write_save_metadata(apply_mode, Path, #file_info{mode = Mode}),
+    case save_metadata(verify_snapshot, Path) of
+        Expected -> ok;
+        Actual ->
+            error({file_error, Path, {native_metadata, verify_snapshot,
+                {mismatch, Expected, Actual}}})
+    end.
+
+write_save_metadata(Stage, Path, Info) ->
+    case file:write_file_info(Path, Info) of
+        ok -> ok;
+        {error, Reason} ->
+            error({file_error, Path, {native_metadata, Stage, Reason}})
     end.
 
 %% Flush DETS write buffer to OS.
