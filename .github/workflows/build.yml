@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    uses: ./.github/workflows/ci.yml
+
+  attest:
+    name: Attest build artifacts
+    needs: checks
+    if: github.workflow_ref == 'tylerbutler/shelf/.github/workflows/build.yml@refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Download Shelf SBOM
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # ratchet:actions/download-artifact@v4
+        with:
+          name: shelf-sbom
+          path: artifacts/sbom
+
+      - name: Download Shelf Hex archive
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # ratchet:actions/download-artifact@v4
+        with:
+          name: shelf-hex
+          path: artifacts/hex
+
+      - name: Attest Shelf archive and SBOM
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # ratchet:actions/attest-build-provenance@v4.2.2
+        with:
+          subject-path: |
+            artifacts/hex/shelf-*.tar
+            artifacts/sbom/shelf.cdx.json

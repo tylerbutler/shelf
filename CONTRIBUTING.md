@@ -60,6 +60,48 @@ the exact tag commit before it resumes attachment. It accepts an existing
 asset only if its bytes match; it does not overwrite a different document.
 Do not regenerate from a newer commit or move the tag to recover.
 
+## Build attestations
+
+On a direct push to `main`, `build.yml` calls the read-only reusable CI
+workflow, which uploads the exported `shelf-<version>.tar` as `shelf-hex`.
+After CI succeeds, a separate job uses GitHub's build provenance action
+to attest the archive and `shelf.cdx.json` from the same run. Only this job
+has OIDC and attestation write permissions; it does not check out or run
+project code. Pull requests and other reusable CI callers do not sign
+artifacts or need signing permissions.
+
+Download the files from a successful `main` push run and verify their bytes.
+Set `run_id` to that run's numeric ID:
+
+```sh
+source_sha=$(gh run view "$run_id" --repo tylerbutler/shelf \
+  --json headSha --jq .headSha)
+gh run download "$run_id" --repo tylerbutler/shelf \
+  --name shelf-hex --dir ci-hex
+gh run download "$run_id" --repo tylerbutler/shelf \
+  --name shelf-sbom --dir ci-sbom
+gh attestation verify ci-hex/shelf-*.tar --repo tylerbutler/shelf \
+  --signer-workflow tylerbutler/shelf/.github/workflows/build.yml \
+  --source-ref refs/heads/main --source-digest "$source_sha" \
+  --deny-self-hosted-runners
+gh attestation verify ci-sbom/shelf.cdx.json --repo tylerbutler/shelf \
+  --signer-workflow tylerbutler/shelf/.github/workflows/build.yml \
+  --source-ref refs/heads/main --source-digest "$source_sha" \
+  --deny-self-hosted-runners
+```
+
+Verify the inner files, not GitHub's artifact-download ZIP wrappers.
+CI provenance covers that CI export; it does not prove that Hex serves
+the same archive. SBOM provenance identifies the document's producer,
+not the build provenance of a package that contains it.
+
+Published Hex packages do not yet have archive build provenance. Gleam
+1.19.2 builds its upload in memory without exposing the exact archive.
+Independent exports can differ in timestamps and dependency metadata
+order. Release provenance needs publisher support to capture the submitted
+bytes and recover them on retries, or to reproduce the full archive.
+The release workflow remains unchanged.
+
 ## Changelogs and publication
 
 Use [trellis](https://trellis.tylerbutler.com/docs/changelog/) for changelogs
