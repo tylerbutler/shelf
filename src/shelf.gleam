@@ -92,8 +92,9 @@ pub type ShelfError {
   /// read freely. Wrap the table in a supervised actor/server if you
   /// need cross-process writes.
   NotOwner
-  /// DETS file could not be found or created, or its filesystem identity
-  /// could not be established.
+  /// DETS file could not be found, created, or opened with the requested
+  /// table kind, or its filesystem identity could not be established.
+  /// The message includes the native error detail.
   FileError(String)
   /// Another live shelf table reserves this canonical path or filesystem
   /// identity, even in the same process or while saving.
@@ -109,6 +110,7 @@ pub type ShelfError {
   /// Returned when opening a table whose DETS file contains entries that
   /// fail to decode with the provided key/value decoders. The list of
   /// `DecodeError`s describes which fields failed and why.
+  /// A different DETS table kind returns `FileError`, not `TypeMismatch`.
   TypeMismatch(List(decode.DecodeError))
   /// Erlang-level error (catch-all)
   ErlangError(String)
