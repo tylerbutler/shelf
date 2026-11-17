@@ -246,6 +246,12 @@ in the website docs.
 
 All data loaded from DETS is validated through `gleam/dynamic/decode` decoders when a table is opened. This ensures types match your expectations, even when the DETS file was written by a previous session or a different version of your application.
 
+Each DETS record must be exactly a two-element tuple, `#(key, value)`.
+For every table type, `open()` and `reload()` return `Error(TypeMismatch(...))`
+for records with extra fields, before running the key and value decoders.
+A failed open preserves the stored records. A failed reload leaves the live
+ETS contents unchanged.
+
 ```gleam
 import gleam/dynamic/decode
 
@@ -266,6 +272,11 @@ Within a running session, Gleam's type system guarantees correctness — decoder
 ### Schema Migration
 
 If you change the key or value types between application versions, `open()` returns `Error(TypeMismatch(...))` because existing DETS data fails the new decoders.
+
+For files written by other Erlang or Elixir code with larger records, use
+native DETS tools to migrate each record to `#(key, value)` at a new path.
+Keep all required fields inside the key or value; Shelf does not discard extra
+fields. Keep the original file until you verify the migrated data.
 
 Strategies for handling schema changes:
 1. **Delete and rebuild**: Delete the DETS file and repopulate from your source of truth.

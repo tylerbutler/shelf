@@ -464,6 +464,16 @@ dets_fold_into_ets_strict(Dets, Ets, DecoderFun) ->
     try
         Result = dets:foldl(
             fun(Entry, {Count, Batch}) ->
+                %% Field decoders accept larger tuples; reject them before
+                %% decoding can silently discard persisted fields.
+                case is_tuple(Entry) andalso tuple_size(Entry) =:= 2 of
+                    true -> ok;
+                    false ->
+                        throw({type_mismatch, [
+                            {decode_error, <<"Tuple of size 2">>,
+                                gleam_stdlib:classify_dynamic(Entry), []}
+                        ]})
+                end,
                 case DecoderFun(Entry) of
                     {ok, Pair} ->
                         NewBatch = [Pair | Batch],

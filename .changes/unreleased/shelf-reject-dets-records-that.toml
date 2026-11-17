@@ -1,0 +1,3 @@
+package = "shelf"
+kind = "Fixed"
+body = "Reject DETS records that are not exactly key-value pairs before decoding on open or reload. Return TypeMismatch without discarding extra fields; migrate larger native DETS records to pairs before opening them with Shelf."
