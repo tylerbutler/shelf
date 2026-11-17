@@ -1,7 +1,0 @@
-package = "shelf"
-kind = "Fixed"
-body = """
-Return `FileError` with native detail for a DETS table-kind mismatch. ([#108](https://github.com/tylerbutler/shelf/pull/108))
-
-Handle an incompatible table kind as `FileError` and reopen with the file's original table kind. No data migration is needed. Decoder validation failures still return `TypeMismatch`.
-"""
