@@ -253,6 +253,12 @@ in the website docs.
 
 All data loaded from DETS is validated through `gleam/dynamic/decode` decoders when a table is opened. This ensures types match your expectations, even when the DETS file was written by a previous session or a different version of your application.
 
+Each DETS record must be exactly a two-element tuple, `#(key, value)`.
+For every table type, `open()` and `reload()` return `Error(TypeMismatch(...))`
+for records with extra fields, before running the key and value decoders.
+A failed open preserves the stored records. A failed reload leaves the live
+ETS contents unchanged.
+
 ```gleam
 import gleam/dynamic/decode
 
@@ -274,6 +280,11 @@ Within a running session, Gleam's type system guarantees correctness — decoder
 
 If you change the key or value types between application versions, `open()` returns `Error(TypeMismatch(...))` because existing DETS data fails the new decoders.
 
+For files written by other Erlang or Elixir code with larger records, use
+native DETS tools to migrate each record to `#(key, value)` at a new path.
+Keep all required fields inside the key or value; Shelf does not discard extra
+fields. Keep the original file until you verify the migrated data.
+
 Strategies for handling schema changes:
 1. **Delete and rebuild**: Delete the DETS file and repopulate from your source of truth.
 2. **Run a migration**: Open the old DETS file with the *old* decoders as a temporary shelf table, transform the entries, write them to a temporary path with the *new* decoders, then atomically `rename` the new file over the old one and reopen.
@@ -283,7 +294,9 @@ Run the example in [`examples/src/shelf_examples/schema_migration.gleam`](exampl
 
 ## Error Handling
 
-All operations return `Result(value, ShelfError)`. The error type covers all failure modes:
+All operations return `Result(value, ShelfError)` for storage failures.
+Exceptions raised by a `fold` callback propagate to the caller; they are not
+converted to `ShelfError`.
 
 | Error | Cause |
 |-------|-------|
@@ -371,6 +384,18 @@ let assert Ok(total) = set.fold(over: table, from: 0, with: fn(sum, _key, value)
 let assert Ok(entries) = set.to_list(from: table)
 ```
 
+For all three table types, `fold` preserves a callback exception's original
+Erlang class (`error`, `throw`, or `exit`), reason, and stack trace. This includes
+Gleam panics and failed assertions, even if the callback closes the table before
+it raises. A closed or deleted ETS table still returns `Error(TableClosed)`
+when traversal itself fails.
+
+**Compatibility correction**: Earlier versions converted callback exceptions
+to `ShelfError`, and could report callback `badarg` errors as `TableClosed`.
+If your code relied on that behavior, handle expected failures in the callback
+or use your application's exception boundary. A surrounding `with_table` still
+applies its own callback rescue behavior.
+
 ## Limitations
 
 - **DETS file size**: 2 GB maximum per table
@@ -378,7 +403,8 @@ let assert Ok(entries) = set.to_list(from: table)
 - **Erlang only**: Requires the BEAM runtime (no JavaScript target)
 - **Single node**: DETS is local to one node (use Mnesia for distribution)
 - **Table names**: Names do not need to be globally unique — shelf uses unnamed ETS tables internally. However, DETS file paths must not conflict with other open tables.
-- **Exclusive paths**: Each canonical database path is reserved by one live shelf table per VM, including during save. A second open returns `NameConflict`, even in the same process. Internal DETS names are unique per-lifetime Erlang terms, not atoms derived from filenames.
+- **Exclusive files**: Each canonical database path and filesystem identity has one live shelf table per VM, including during save. A second open through a hard link or a filesystem-supported case or Unicode alias returns `NameConflict`, even in the same process. Internal DETS names are unique per-lifetime Erlang terms, not atoms derived from filenames.
+- **Filesystem identity**: Opening requires reliable device and nonzero inode values. If the filesystem cannot provide them, shelf returns `FileError` without loading entries or returning a table handle. Use a filesystem that provides these values.
 - **Process ownership**: ETS tables are owned by the process that called `open()` and are created `protected`, so reads work from any process but writes/lifecycle calls are owner-only. See [Process Ownership](https://shelf.tylerbutler.com/advanced/limitations/#process-ownership).
 - **Loading large tables**: Open and reload validate DETS entries in batches. Reload also needs a scratch ETS table and transfer memory. Details and limits: [Memory cost on open and reload](https://shelf.tylerbutler.com/advanced/persistence-operations/#memory-cost-on-open-and-reload).
 
@@ -386,7 +412,9 @@ let assert Ok(entries) = set.to_list(from: table)
 
 All DETS file paths are resolved against the provided `base_directory`, including symbolic links in existing directories and at the filename itself. Paths that escape the resolved base directory are rejected with `InvalidPath`, as are null bytes, link loops, and filesystem resolution errors. In-base aliases resolve to the same canonical path and therefore share one exclusive reservation. Unicode directories and filenames are preserved, and `/` is a valid base directory. Missing components can pass validation, but opening still requires the parent directory to exist.
 
-Use a trusted base directory and trusted contents. This check does not protect against concurrent external replacement of directories or symbolic links between validation and I/O, and does not detect hard-link aliases.
+Use a trusted base directory and trusted contents. Path validation does not protect against concurrent external replacement of directories or symbolic links between validation and I/O. Filesystem identity reservations prevent two shelf tables in one VM from opening the same file through aliases; they do not provide cross-VM file locks or check whether hard links point outside the base directory.
+
+Save replaces the file at the original path. Other hard links keep pointing to the old file; after a successful save, they name a distinct file and can open as a separate table.
 
 Snapshots use an exclusively created private sibling directory on the same filesystem, then rename its DETS file over the database. Save cleans up only its own temporary file and directory; an unrelated `<database>.tmp` is never used. The guardian acquires and tracks that location, cleaning it up after temporary DETS shutdown if the owner exits during save. A VM crash can still leave a private snapshot directory behind.
 

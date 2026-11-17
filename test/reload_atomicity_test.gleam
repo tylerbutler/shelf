@@ -1,3 +1,4 @@
+import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode
 import gleam/erlang/atom
 import gleam/erlang/process
@@ -7,12 +8,89 @@ import shelf
 import shelf/bag
 import shelf/duplicate_bag
 import shelf/set
+import storage_safety_test
 import test_helper
+import type_safety_test
 import unitest
 
 /// Write a raw entry directly into DETS, bypassing shelf's type checks.
 @external(erlang, "reload_atomicity_test_ffi", "write_raw_dets_entry")
 fn write_raw_dets_entry(path: String, key: String, value: a) -> Nil
+
+@external(erlang, "type_safety_test_ffi", "insert_raw_dets")
+fn insert_raw_dets(table: table, entry: Dynamic) -> Nil
+
+fn rejects_oversized_reload(
+  open: fn(String, String) -> Result(table, shelf.ShelfError),
+  insert: fn(table, String, Int) -> Result(Nil, shelf.ShelfError),
+  reload: fn(table) -> Result(Nil, shelf.ShelfError),
+  to_list: fn(table) -> Result(List(#(String, Int)), shelf.ShelfError),
+  close: fn(table) -> Result(Nil, shelf.ShelfError),
+) -> Nil {
+  use directory <- storage_safety_test.with_directory
+  let path = directory <> "/table.dets"
+  list.each(type_safety_test.malformed_entries(), fn(entry) {
+    let assert Ok(table) = open(path, directory)
+    let assert Ok(Nil) = insert(table, "unsaved", 99)
+    insert_raw_dets(
+      table,
+      dynamic.array([dynamic.string("valid_disk_pair"), dynamic.int(1)]),
+    )
+    insert_raw_dets(table, entry)
+    type_safety_test.assert_pair_shape_error(reload(table), entry)
+    let assert Ok([#("unsaved", 99)]) = to_list(table)
+    // Repeated failure must leave the same handle and disk payload intact.
+    type_safety_test.assert_pair_shape_error(reload(table), entry)
+    let assert Ok(Nil) = insert(table, "still_usable", 100)
+    let assert Ok(Nil) = close(table)
+    test_helper.cleanup(path)
+  })
+}
+
+pub fn strict_arity_set_reload_test() -> Nil {
+  use <- unitest.tag("strict_arity")
+  rejects_oversized_reload(
+    fn(path, directory) {
+      set.open("strict_set_reload", path, directory, decode.string, decode.int)
+    },
+    set.insert,
+    set.reload,
+    set.to_list,
+    set.close,
+  )
+}
+
+pub fn strict_arity_bag_reload_test() -> Nil {
+  use <- unitest.tag("strict_arity")
+  rejects_oversized_reload(
+    fn(path, directory) {
+      bag.open("strict_bag_reload", path, directory, decode.string, decode.int)
+    },
+    bag.insert,
+    bag.reload,
+    bag.to_list,
+    bag.close,
+  )
+}
+
+pub fn strict_arity_duplicate_bag_reload_test() -> Nil {
+  use <- unitest.tag("strict_arity")
+  rejects_oversized_reload(
+    fn(path, directory) {
+      duplicate_bag.open(
+        "strict_duplicate_bag_reload",
+        path,
+        directory,
+        decode.string,
+        decode.int,
+      )
+    },
+    duplicate_bag.insert,
+    duplicate_bag.reload,
+    duplicate_bag.to_list,
+    duplicate_bag.close,
+  )
+}
 
 pub fn reload_failure_preserves_original_ets_data_test() -> Nil {
   let path = "/tmp/shelf_reload_atom.dets"

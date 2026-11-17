@@ -1,0 +1,3 @@
+package = "shelf"
+kind = "Fixed"
+body = "Prevent concurrent opens through hard links and filesystem-supported case or Unicode aliases. Reserve filesystem identity across save and cleanup; return FileError when reliable device/inode identity is unavailable."
