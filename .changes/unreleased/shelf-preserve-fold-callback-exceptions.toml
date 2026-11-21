@@ -1,7 +1,0 @@
-package = "shelf"
-kind = "Fixed"
-body = """
-Preserve `fold` callback exceptions for all three table types. ([#109](https://github.com/tylerbutler/shelf/pull/109))
-
-Callback exceptions propagate with their original Erlang class, reason, and stack trace, even if the callback closes the table. If you relied on conversion to `ShelfError`, handle expected failures in the callback or at your application's exception boundary. Closed-table traversal still returns `TableClosed`; `with_table` rescue behavior is unchanged.
-"""

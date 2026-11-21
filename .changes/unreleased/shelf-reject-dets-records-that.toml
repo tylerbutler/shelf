@@ -1,9 +1,0 @@
-package = "shelf"
-kind = "Fixed"
-body = """
-Reject DETS records that are not two-element key-value tuples on `open()` or `reload()`. ([#110](https://github.com/tylerbutler/shelf/pull/110))
-
-Return `TypeMismatch` before decoding instead of discarding extra fields. A failed open preserves stored records; a failed reload leaves live ETS contents unchanged.
-
-Use native DETS tools to migrate larger records to `#(key, value)` at a new path. Keep required extra fields inside the key or value, and retain the original file until you verify the migrated data.
-"""
