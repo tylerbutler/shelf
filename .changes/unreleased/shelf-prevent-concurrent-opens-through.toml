@@ -1,9 +1,0 @@
-package = "shelf"
-kind = "Fixed"
-body = """
-Prevent concurrent opens within one VM through hard links and filesystem-supported case or Unicode aliases. ([#112](https://github.com/tylerbutler/shelf/pull/112))
-
-A second open returns `NameConflict`, including during save. Opening now requires reliable device and nonzero inode values; otherwise it returns `FileError`. Use a filesystem that provides these values and trusted directories. Reservations do not provide cross-VM file locks.
-
-Save replaces the file at the original path. Other hard links retain the old file and can then open as separate tables.
-"""
