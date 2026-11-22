@@ -18,21 +18,7 @@ let assert Ok(table) =
   set.open(name: "users", path: "users.dets", base_directory: "/app/data", key: decode.string, value: decode.int)
 ```
 
-If the DETS file exists, its contents are loaded into ETS automatically. If the file doesn't exist, both tables start empty.
-
-For WriteThrough, open the table with `open_config` instead:
-
-```gleam
-import gleam/dynamic/decode
-import shelf
-import shelf/set
-
-let config =
-  shelf.config(name: "users", path: "users.dets", base_directory: "/app/data")
-  |> shelf.write_mode(shelf.WriteThrough)
-
-let assert Ok(table) = set.open_config(config: config, key: decode.string, value: decode.int)
-```
+If the DETS file exists, its contents are loaded into ETS automatically. If the file doesn't exist, the table starts empty.
 
 ## Writing Data
 
@@ -107,15 +93,39 @@ let assert Ok(9) = set.update_counter(in: table, key: "page_views", increment: -
 Other processes must send increment requests to the owner.
 :::
 
-## Resource Management
+## Save and close
 
-Close the table to save the changes and release its resources:
+These examples use WriteBack, so changes stay in ETS until you save or
+close the table. Successful close saves the remaining contents and releases
+the table:
 
 ```gleam
 let assert Ok(Nil) = set.close(table)
 ```
 
-Use `with_table` to ensure a table is always closed, even if an error occurs:
+The example deleted every entry before it added the counter, so reopening
+`users.dets` gives you a table with only `page_views`. See
+[write modes](/guides/write-modes/) to choose when to persist.
+
+## Other ways to open a set
+
+To send each write to DETS as it happens, open the table with
+`open_config` and WriteThrough instead:
+
+```gleam
+import gleam/dynamic/decode
+import shelf
+import shelf/set
+
+let config =
+  shelf.config(name: "users", path: "users.dets", base_directory: "/app/data")
+  |> shelf.write_mode(shelf.WriteThrough)
+
+let assert Ok(table) = set.open_config(config: config, key: decode.string, value: decode.int)
+```
+
+For a short-lived table, `with_table` opens it, runs your callback, and
+closes it even if an error occurs:
 
 ```gleam
 let assert Ok(Nil) = {

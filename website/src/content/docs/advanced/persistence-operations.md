@@ -20,14 +20,16 @@ Atomically snapshots the entire ETS table into DETS, replacing all DETS contents
 
 The save uses a temp-file-plus-rename strategy for crash safety: data is written to a temporary file first, then atomically renamed over the original DETS file. If the process is killed mid-save, the original file remains intact until the rename succeeds.
 
-Each snapshot acquires a private sibling directory exclusively, keeping the
-temporary file on the same filesystem. It never uses an unrelated
-`<database>.tmp` file. Success and handled failures clean up only that save's
-temporary file and directory. The guardian acquires and tracks the location;
-if the owner exits during save, it waits for temporary DETS shutdown before
-cleaning up. A VM crash can still leave the private directory behind.
-The database path stays exclusively reserved throughout
-the original DETS close/reopen.
+The rename is atomic only on one filesystem, so each save first creates a
+private directory beside the database and writes the temporary file there.
+It creates the directory exclusively and never touches an unrelated
+`<database>.tmp` file. When the save succeeds or fails in a handled way, it
+removes only its own temporary file and directory. The guardian tracks the
+directory too: if the owner exits during save, it waits for the temporary
+DETS file to close and then cleans up. Only a VM crash leaves the directory
+behind; see [Manual cleanup after a VM crash](#manual-cleanup-after-a-vm-crash).
+While save closes and reopens the original DETS file, the database path stays
+reserved, so no other table can open it in between.
 
 Internally, the ETS-to-DETS copy uses `ets:to_dets/2`, which transfers entries inside the Erlang VM without materializing the table as a list.
 
@@ -65,7 +67,132 @@ controls to the replacement file. Do not rely on them to restrict access
 across `save()` or `close()`. Use a restricted parent directory and POSIX
 mode bits for access control.
 
-### Manual cleanup after a VM crash
+## reload
+
+Validates DETS entries in a scratch ETS table before discarding unsaved
+changes. Validation failure leaves the live table unchanged. On success,
+reload clears the live table and copies the validated entries into it.
+Concurrent readers can see empty or partially reloaded contents during
+this transfer; reload is not a transaction.
+
+```gleam
+// Undo unsaved changes
+let assert Ok(Nil) = set.reload(table)
+```
+
+**When to use**: In WriteBack mode, use `reload()` to discard in-memory changes and revert to the last saved state. In WriteThrough mode, ETS and DETS are always in sync, so `reload()` is rarely needed.
+
+## sync
+
+Forces DETS's internal write buffer out to the open DETS file by calling
+`dets:sync/1`. Useful in WriteThrough mode after a critical write, when you
+need pending DETS buffers reflected in the on-disk file before continuing.
+
+```gleam
+let assert Ok(Nil) = set.sync(table)
+```
+
+In WriteBack mode `sync()` is rarely needed — `save()` already writes a
+fresh DETS file and reopens it.
+
+## close
+
+Performs a final `save()`, closes the DETS file, and deletes the ETS table. The table handle must not be used after closing.
+
+```gleam
+let assert Ok(Nil) = set.close(table)
+```
+
+For guaranteed cleanup, use `with_table` instead of manual open/close:
+
+```gleam
+let assert Ok(Nil) = {
+  use table <- set.with_table("cache", "data/cache.dets", base_directory: "/app/data", key: decode.string, value: decode.string)
+  set.insert(into: table, key: "key", value: "value")
+}
+// table is automatically closed here
+```
+
+## Persistence Flow
+
+```mermaid
+%% Mermaid stacks subgraphs in reverse declaration order, so WriteThrough is
+%% declared first to render WriteBack on top — matching the WriteBack-first
+%% ordering every other page uses. Swapping these reverses the diagram.
+flowchart LR
+  subgraph wt["WriteThrough mode"]
+    direction LR
+    I2[insert] -->|"dets:insert"| D2[DETS]
+    I2 -->|"ets:insert"| E2[ETS]
+    D2 -->|"sync()"| F2[filesystem]
+  end
+  subgraph wb["WriteBack mode"]
+    direction LR
+    I1[insert] -->|write| E1[ETS]
+    E1 -->|"save()"| D1[DETS]
+    D1 -->|"sync()"| F1[filesystem]
+  end
+```
+
+## Durability story
+
+Data goes through several layers between an `insert()` call and physical
+storage. Each call moves data past one or more of these layers:
+
+| Layer | Where data lives | Call that advances data past this layer |
+|-------|------------------|------------------------------------------|
+| 1 | Application memory | `insert()`, `delete_*`, `update_counter` |
+| 2 | ETS table (in-process) | WriteBack: `save()`. WriteThrough: every write |
+| 3 | DETS in-memory buffer | `sync()` (open DETS) or `save()` (closes a temp DETS, which flushes) |
+| 4 | DETS file content (OS page cache) | `save()` writes a temp file then atomically `rename()`s over the original |
+| 5 | Physical disk | Not exposed — DETS does not surface `fsync(2)` on the file or its directory |
+
+What the calls actually do:
+
+- **`save()`** snapshots ETS → a *temporary* DETS file (`ets:to_dets/2`), closes
+  that temp file (flushing its buffer), then atomically `file:rename/2`s it
+  over the original DETS path and reopens at the original path. The rename
+  is POSIX-atomic, so a process or VM crash mid-`save()` leaves either the
+  previous file or the new file fully present — never a half-written file.
+- **`sync()`** calls `dets:sync/1` on the *currently open* DETS, draining its
+  in-memory write buffer into the file. It does **not** invoke `fsync(2)` on
+  the file descriptor and does **not** fsync the containing directory.
+- **`reload()`** replaces the ETS contents with the validated contents of the
+  DETS file. It does not change durability — it changes which copy of the
+  data the table reflects.
+- **`close()`** performs a `save()` and then closes DETS / deletes ETS.
+
+Practical guarantees:
+
+| You want… | Then call |
+|-----------|-----------|
+| WriteBack changes safe across a process crash | `save()` |
+| WriteThrough writes flushed past DETS's buffer into the file | `sync()` |
+| Strongest crash safety shelf can provide | `save()` — the atomic rename needs no further shelf call |
+| `fsync(2)`-level guarantees against OS crash / power loss | Not provided. If you need this, call out to a process that opens the DETS file path with `file:open/2` and `file:sync/1`, or place the data directory on a filesystem mounted with stronger durability semantics. |
+
+## Memory cost on open and reload
+
+On open, shelf streams DETS entries through `dets:foldl/3`, validates them
+with your decoders, and inserts them into ETS in batches of 5,000 entries.
+It does not create a list of the full table.
+
+Reload first loads a scratch ETS table while the live table remains in
+memory. After validation, it clears the live table and transfers entries
+from scratch. Set transfers use selection batches of 5,000 entries. Bags
+and duplicate bags copy one complete key group at a time to preserve value
+order and duplicates. A single large key group can still require a
+full-table-sized list.
+
+Plan for both ETS tables, transfer batches, and DETS and decoder memory
+during reload. The batch size limits entry counts, not bytes; memory use
+depends on the size of your values and the runtime. Reducing transfer
+memory does not remove the scratch table.
+
+Open and reload costs grow with the number and size of entries. Reads
+after loading use ETS without further DETS I/O.
+
+## Manual cleanup after a VM crash
 
 A VM crash during `save()` or the save in `close()` can leave a
 `.shelf-save-<pid>-<counter>` directory beside the database. It can contain
@@ -106,132 +233,3 @@ including for another database in the same parent directory.
 Leave unrelated files, directories, and symbolic-link targets unchanged. If
 ownership remains uncertain, retain the candidate and investigate rather than
 delete it to reclaim space.
-
-## reload
-
-Validates DETS entries in a scratch ETS table before discarding unsaved
-changes. Validation failure leaves the live table unchanged. On success,
-reload clears the live table and copies the validated entries into it.
-Concurrent readers can see empty or partially reloaded contents during
-this transfer; reload is not a transaction.
-
-```gleam
-// Undo unsaved changes
-let assert Ok(Nil) = set.reload(table)
-```
-
-**When to use**: In WriteBack mode, use `reload()` to discard in-memory changes and revert to the last saved state. In WriteThrough mode, ETS and DETS are always in sync, so `reload()` is rarely needed.
-
-## sync
-
-Forces DETS's internal write buffer out to the open DETS file by calling
-`dets:sync/1`. Useful in WriteThrough mode after a critical write, when you
-need pending DETS buffers reflected in the on-disk file before continuing.
-
-```gleam
-let assert Ok(Nil) = set.sync(table)
-```
-
-In WriteBack mode `sync()` is rarely needed — `save()` already writes a
-fresh DETS file and reopens it.
-
-## Durability story
-
-Data goes through several layers between an `insert()` call and physical
-storage. This section is the **single source of truth** for which call
-addresses which layer; other pages link here.
-
-| Layer | Where data lives | Call that advances data past this layer |
-|-------|------------------|------------------------------------------|
-| 1 | Application memory | `insert()`, `delete_*`, `update_counter` |
-| 2 | ETS table (in-process) | WriteBack: `save()`. WriteThrough: every write |
-| 3 | DETS in-memory buffer | `sync()` (open DETS) or `save()` (closes a temp DETS, which flushes) |
-| 4 | DETS file content (OS page cache) | `save()` writes a temp file then atomically `rename()`s over the original |
-| 5 | Physical disk | Not exposed — DETS does not surface `fsync(2)` on the file or its directory |
-
-What the calls actually do:
-
-- **`save()`** snapshots ETS → a *temporary* DETS file (`ets:to_dets/2`), closes
-  that temp file (flushing its buffer), then atomically `file:rename/2`s it
-  over the original DETS path and reopens at the original path. The rename
-  is POSIX-atomic, so a process or VM crash mid-`save()` leaves either the
-  previous file or the new file fully present — never a half-written file.
-- **`sync()`** calls `dets:sync/1` on the *currently open* DETS, draining its
-  in-memory write buffer into the file. It does **not** invoke `fsync(2)` on
-  the file descriptor and does **not** fsync the containing directory.
-- **`reload()`** discards the ETS table and rebuilds it from the on-disk DETS
-  file. It does not change durability — it changes which copy of the data
-  the table reflects.
-- **`close()`** performs a `save()` and then closes DETS / deletes ETS.
-
-Practical guarantees:
-
-| You want… | Then call |
-|-----------|-----------|
-| WriteBack changes safe across a process crash | `save()` |
-| WriteThrough writes flushed past DETS's buffer into the file | `sync()` |
-| Strongest crash safety shelf can provide | `save()` (atomic rename, then no further shelf call is needed in WriteBack) |
-| `fsync(2)`-level guarantees against OS crash / power loss | Not provided. If you need this, call out to a process that opens the DETS file path with `file:open/2` and `file:sync/1`, or place the data directory on a filesystem mounted with stronger durability semantics. |
-
-## Memory cost on open and reload
-
-On open, shelf streams DETS entries through `dets:foldl/3`, validates them
-with your decoders, and inserts them into ETS in batches of 5,000 entries.
-It does not create a list of the full table.
-
-Reload first loads a scratch ETS table while the live table remains in
-memory. After validation, it clears the live table and transfers entries
-from scratch. Set transfers use selection batches of 5,000 entries. Bags
-and duplicate bags copy one complete key group at a time to preserve value
-order and duplicates. A single large key group can still require a
-full-table-sized list.
-
-Plan for both ETS tables, transfer batches, and DETS and decoder memory
-during reload. The batch size limits entry counts, not bytes; memory use
-depends on the size of your values and the runtime. Reducing transfer
-memory does not remove the scratch table.
-
-Open and reload costs grow with the number and size of entries. Reads
-after loading use ETS without further DETS I/O.
-
-This is the canonical reference for shelf's load-time memory and time
-cost; other pages link here.
-
-## close
-
-Performs a final `save()`, closes the DETS file, and deletes the ETS table. The table handle must not be used after closing.
-
-```gleam
-let assert Ok(Nil) = set.close(table)
-```
-
-For guaranteed cleanup, use `with_table` instead of manual open/close:
-
-```gleam
-let assert Ok(Nil) = {
-  use table <- set.with_table("cache", "data/cache.dets", base_directory: "/app/data", key: decode.string, value: decode.string)
-  set.insert(into: table, key: "key", value: "value")
-}
-// table is automatically closed here
-```
-
-## Persistence Flow
-
-```mermaid
-%% Mermaid stacks subgraphs in reverse declaration order, so WriteThrough is
-%% declared first to render WriteBack on top — matching the WriteBack-first
-%% ordering every other page uses. Swapping these reverses the diagram.
-flowchart LR
-  subgraph wt["WriteThrough mode"]
-    direction LR
-    I2[insert] -->|"dets:insert"| D2[DETS]
-    I2 -->|"ets:insert"| E2[ETS]
-    D2 -->|"sync()"| F2[filesystem]
-  end
-  subgraph wb["WriteBack mode"]
-    direction LR
-    I1[insert] -->|write| E1[ETS]
-    E1 -->|"save()"| D1[DETS]
-    D1 -->|"sync()"| F1[filesystem]
-  end
-```

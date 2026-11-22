@@ -3,7 +3,7 @@ title: Limitations
 description: Known limitations of shelf and its underlying storage engines.
 ---
 
-shelf inherits limitations from its underlying storage engines (ETS and DETS). Understanding these helps you design your application correctly.
+Most of shelf's limits come from ETS and DETS, the OTP storage engines it wraps. The rest come from the choices shelf makes to keep one table per file and one writer per table.
 
 ## DETS File Size: 2 GB Maximum
 
@@ -34,11 +34,7 @@ DETS is local to one Erlang node. Data is not replicated or distributed. For mul
 
 ## DETS File Paths Must Be Unique
 
-shelf uses unnamed ETS tables internally, so table names do not need to be globally unique. Within one VM, each canonical path and filesystem identity can have one live shelf table. Opening a second table through the same path, a hard link, or a filesystem-supported case or Unicode alias returns `Error(NameConflict)`. Reservations remain in place during save.
-
-shelf requires reliable device and nonzero inode values. If the filesystem cannot provide them, opening returns `Error(FileError(reason))` without loading entries or returning a table handle. Use a filesystem that provides these values. Reservations do not lock files against other VMs or prevent concurrent external path replacement; use trusted directories and contents.
-
-Save replaces the file at the original path. Other hard links continue to name the old file. After a successful save, you can open that distinct file as a separate table.
+shelf uses unnamed ETS tables internally, so table names are only labels and do not need to be unique. The file is what must be unique: within one VM, each canonical path and filesystem identity can have one live shelf table. Opening a second table through the same path, a hard link, or a filesystem-supported case or Unicode alias returns `Error(NameConflict)`. Reservations remain in place during save.
 
 Use distinct file paths for each table:
 
@@ -50,6 +46,16 @@ set.open(name: "cache", path: "cache.dets", base_directory: "/app/data", key: de
 // This would conflict if "sessions.dets" is already open
 set.open(name: "other_sessions", path: "sessions.dets", base_directory: "/app/data", key: decode.string, value: decode.string)
 ```
+
+### Filesystem identity
+
+To recognize the same file under two names, shelf needs reliable device and nonzero inode values. If the filesystem cannot provide them, opening returns `Error(FileError(reason))` without loading entries or returning a table handle. Use a filesystem that provides these values.
+
+These reservations work inside one VM only. They do not lock files against other VMs or prevent concurrent external path replacement, so use trusted directories and contents.
+
+### Hard links and save
+
+Save replaces the file at the original path. Other hard links continue to name the old file. After a successful save, you can open that distinct file as a separate table.
 
 ## Process Ownership
 
@@ -64,24 +70,7 @@ If you need cross-process writes, wrap the table in a supervised actor/server th
 
 If the owning process crashes or exits, the ETS table is automatically deleted — any unsaved data is lost. The DETS file on disk remains intact. When the application restarts and calls `open()` again, data is reloaded from the DETS file.
 
-To mitigate this:
-- Use `with_table` for short-lived operations
-- In long-running applications, open tables in a supervised process (e.g., an OTP GenServer or Gleam actor)
-- Use WriteThrough mode for critical data to minimize the window of potential data loss
-
-## Error Handling
-
-All shelf operations return `Result(value, ShelfError)`. The error variants are:
-
-| Error | Cause |
-|-------|-------|
-| `NotFound` | Key doesn't exist (from `lookup`) |
-| `KeyAlreadyPresent` | Key exists (from `insert_new`, set tables only) |
-| `TableClosed` | Table has been closed or doesn't exist |
-| `NotOwner` | The calling process is not the table owner (see Process Ownership above) |
-| `NameConflict` | A DETS file at this path is already open by another shelf table |
-| `InvalidPath(String)` | File path escapes the base directory or contains unsafe characters |
-| `FileError(String)` | DETS file couldn't be found, created, or opened |
-| `FileSizeLimitExceeded` | DETS file exceeds the 2 GB limit |
-| `TypeMismatch(List(DecodeError))` | Data loaded from DETS failed decoder validation |
-| `ErlangError(String)` | Catch-all for unexpected Erlang-level errors |
+To limit the loss:
+- In long-running applications, open tables in a supervised process (e.g., an OTP GenServer or Gleam actor), so a restart reopens the table
+- In WriteBack mode, save on a schedule that matches how much you can lose
+- Use WriteThrough mode for critical data, so each change reaches DETS before the write returns

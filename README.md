@@ -81,69 +81,17 @@ how to check them in a separate application run.
 └──────────────────┴──────────────────┘
 ```
 
-**Reads** use ETS without DETS I/O after loading.
+Every table follows the same life: you open it, your decoders check the
+saved data, you read and write through ETS, and you save the changes to
+DETS. The sections below follow that order.
 
-**Writes** follow the selected write mode:
+## Open: Choose a Table Type
 
-| Write Mode | Behavior | Use Case |
-|-----------|----------|----------|
-| `WriteBack` (default) | ETS only; call `save()` to persist | High-throughput, periodic snapshots |
-| `WriteThrough` | DETS first, then ETS on every write | Persist each change without a full snapshot |
-
-## Write Modes
-
-### WriteBack (default)
-
-Writes go to ETS only. You control when to persist:
-
-```gleam
-let assert Ok(table) =
-  set.open(name: "sessions", path: "data/sessions.dets",
-    base_directory: "/app/data",
-    key: decode.string, value: session_decoder)
-
-// These are ETS-only (fast)
-let assert Ok(Nil) = set.insert(into: table, key: "user:123", value: session)
-let assert Ok(Nil) = set.insert(into: table, key: "user:456", value: session)
-
-// Persist when ready (e.g., on a timer, after N writes)
-let assert Ok(Nil) = set.save(table)
-
-// Undo unsaved changes
-let assert Ok(Nil) = set.reload(table)
-```
-
-> **Note**: In WriteBack mode, data written since the last `save()` is lost if the process crashes.
-> Design your save schedule accordingly (e.g., periodic timer, after N writes, or at clean shutdown).
-
-### WriteThrough
-
-Every write goes to DETS before ETS:
-
-```gleam
-let config =
-  shelf.config(name: "accounts", path: "data/accounts.dets",
-    base_directory: "/app/data")
-  |> shelf.write_mode(shelf.WriteThrough)
-
-let assert Ok(table) =
-  set.open_config(config: config,
-    key: decode.string, value: account_decoder)
-
-// This writes to both ETS and DETS
-let assert Ok(Nil) = set.insert(into: table, key: "acct:789", value: account)
-```
-
-DETS can buffer these writes in memory. Use `sync()` to flush that buffer to
-the file. Neither mode provides `fsync(2)`-level protection against OS crashes
-or power loss; see [Persistence Operations](#persistence-operations).
-
-## Table Types
+Each table type has its own module and opaque handle: `PersistentSet(k, v)`,
+`PersistentBag(k, v)`, or `PersistentDuplicateBag(k, v)`. They differ in
+what happens when you insert a second value for the same key.
 
 ### Set — unique keys
-
-Each table type uses an opaque handle: `PersistentSet(k, v)`,
-`PersistentBag(k, v)`, or `PersistentDuplicateBag(k, v)`.
 
 ```gleam
 import shelf
@@ -158,6 +106,8 @@ let assert Error(shelf.KeyAlreadyPresent) = set.insert_new(into: table, key: "ke
 let assert Ok("value") = set.lookup(from: table, key: "key")
 let assert Ok(True) = set.member(of: table, key: "key")      // check existence
 ```
+
+Sets also support atomic integer counters with `update_counter`.
 
 ### Bag — multiple distinct values per key
 
@@ -188,28 +138,123 @@ let assert Ok(Nil) = duplicate_bag.insert(into: table, key: "click", value: "btn
 let assert Ok(["btn", "btn"]) = duplicate_bag.lookup(from: table, key: "click")
 ```
 
-### API Comparison
+For batch inserts, deletes, folds, counters, and a full comparison of the
+operations each type supports, see
+[Common Patterns](https://shelf.tylerbutler.com/guides/common-patterns/).
 
-Not all operations are available on every table type:
+## Load: Decoders Check Saved Data
 
-| Operation | Set | Bag | Duplicate Bag |
-|-----------|-----|-----|---------------|
-| `insert` | ✅ | ✅ | ✅ |
-| `insert_list` | ✅ | ✅ | ✅ |
-| `insert_new` | ✅ | — | — |
-| `lookup` | single value | `List(v)` | `List(v)` |
-| `member` | ✅ | ✅ | ✅ |
-| `delete_key` | ✅ | ✅ | ✅ |
-| `delete_object` | ✅ | ✅ | ✅ |
-| `delete_all` | ✅ | ✅ | ✅ |
-| `update_counter` | ✅ | — | — |
-| `fold` | ✅ | ✅ | ✅ |
-| `size` | ✅ | ✅ | ✅ |
-| `to_list` | ✅ | ✅ | ✅ |
+A DETS file can outlive the code that wrote it. When you open a table,
+Shelf passes every saved key and value through your `gleam/dynamic/decode`
+decoders before it loads them into ETS. If a value does not match the types
+your code expects now, `open()` returns `Error(TypeMismatch(...))` instead of
+a table with bad data in it. `reload()` runs the same checks.
 
-## Safe Resource Management
+After loading, Gleam's type system keeps the table correct, so `save()`
+needs no decoders and uses Erlang's bulk `ets:to_dets/2` transfer.
 
-Use `with_table` to ensure tables are always closed:
+Shelf always writes records as `#(key, value)`. A DETS file written by other
+Erlang or Elixir code can hold larger records, so Shelf rejects any record
+with extra fields with `TypeMismatch` before it runs your decoders. A failed
+open preserves the stored records, and a failed reload leaves the live ETS
+contents unchanged.
+
+> **Performance note**: The load streams entries through `dets:foldl`,
+> validates each entry, and inserts batches into ETS. Reload also keeps a
+> scratch table and needs transfer memory. See
+> [Memory cost on open and reload](https://shelf.tylerbutler.com/advanced/persistence-operations/#memory-cost-on-open-and-reload).
+
+### Schema Migration
+
+When you change the key or value types between application versions, the
+saved data fails the new decoders. You have two choices:
+
+1. **Delete and rebuild**: Delete the DETS file and repopulate it from your source of truth.
+2. **Run a migration**: Open the old file with the *old* decoders as a temporary shelf table, transform the entries, write them to a temporary path with the *new* decoders, then atomically `rename` the new file over the old one and reopen.
+
+For a file with larger records from other Erlang or Elixir code, first use
+native DETS tools to rewrite each record as `#(key, value)` at a new path.
+Keep every required field inside the key or value, because Shelf does not
+discard extra fields. Keep the original file until you verify the result.
+
+The website documents the procedure at [Schema Migration](https://shelf.tylerbutler.com/advanced/schema-migration/).
+Run the example in [`examples/src/shelf_examples/schema_migration.gleam`](examples/src/shelf_examples/schema_migration.gleam).
+
+## Write: Choose When Changes Reach DETS
+
+Reads always use ETS. The write mode decides when a change also reaches DETS:
+
+| Write Mode | Behavior | Use Case |
+|-----------|----------|----------|
+| `WriteBack` (default) | ETS only; call `save()` to persist | High-throughput, periodic snapshots |
+| `WriteThrough` | DETS first, then ETS on every write | Persist each change without a full snapshot |
+
+### WriteBack (default)
+
+Writes go to ETS only, and you decide when to persist them:
+
+```gleam
+let assert Ok(table) =
+  set.open(name: "sessions", path: "data/sessions.dets",
+    base_directory: "/app/data",
+    key: decode.string, value: session_decoder)
+
+// These are ETS-only (fast)
+let assert Ok(Nil) = set.insert(into: table, key: "user:123", value: session)
+let assert Ok(Nil) = set.insert(into: table, key: "user:456", value: session)
+
+// Persist when ready (e.g., on a timer, after N writes)
+let assert Ok(Nil) = set.save(table)
+
+// Undo unsaved changes
+let assert Ok(Nil) = set.reload(table)
+```
+
+The price of that speed is that a crash loses every write since the last
+`save()`. Choose a save schedule that matches how much you can lose: a
+periodic timer, every N writes, or clean shutdown.
+
+### WriteThrough
+
+Every write goes to DETS before ETS. If the DETS write fails, ETS does not
+change, so the two never disagree:
+
+```gleam
+let config =
+  shelf.config(name: "accounts", path: "data/accounts.dets",
+    base_directory: "/app/data")
+  |> shelf.write_mode(shelf.WriteThrough)
+
+let assert Ok(table) =
+  set.open_config(config: config,
+    key: decode.string, value: account_decoder)
+
+// This writes to both ETS and DETS
+let assert Ok(Nil) = set.insert(into: table, key: "acct:789", value: account)
+```
+
+DETS can still hold these writes in its own memory buffer. Call `sync()` to
+flush that buffer to the file. See [Durability](#durability) for what each
+mode does and does not protect against.
+
+## Save and Close
+
+Four calls move data between ETS and DETS:
+
+| Function | Behavior |
+|----------|----------|
+| `save(table)` | Atomic snapshot ETS → DETS (writes to temp file, then renames for crash safety) |
+| `reload(table)` | Discard ETS, reload from DETS |
+| `sync(table)` | Flush DETS write buffer to OS |
+| `close(table)` | Save + close DETS + delete ETS |
+
+`save()` and `sync()` solve different problems. In WriteBack, `save()`
+copies ETS into a temporary DETS file and renames it over the database, so
+the file holds either the old snapshot or the new one. In WriteThrough, the
+changes are already in DETS, and `sync()` drains DETS's buffer into the open
+file.
+
+Use `with_table` to make sure a table is always closed:
 
 ```gleam
 use table <- set.with_table("cache", "data/cache.dets",
@@ -219,105 +264,68 @@ set.insert(into: table, key: "key", value: "value")
 // table is auto-closed when the callback returns
 ```
 
-If the final save fails, `with_table` releases the table and returns an error.
-Unsaved changes are lost. A callback error takes precedence over a close
-error. Use explicit `close()` when you need to retain the handle and retry
-a failed save.
+If the final save fails, `with_table` releases the table and returns an
+error, and the unsaved changes are lost. A callback error takes precedence
+over a close error. When you need to keep the handle and retry a failed
+save, call `close()` yourself.
 
-## Persistence Operations
+### File metadata
 
-| Function | Behavior |
-|----------|----------|
-| `save(table)` | Atomic snapshot ETS → DETS (writes to temp file, then renames for crash safety) |
-| `reload(table)` | Discard ETS, reload from DETS |
-| `sync(table)` | Flush DETS write buffer to OS |
-| `close(table)` | Save + close DETS + delete ETS |
-
-**`save` vs `sync`**: `save()` snapshots ETS → DETS using a temp-file +
-atomic rename (use in WriteBack to persist your changes). `sync()` drains
-DETS's internal write buffer into the open DETS file (use in WriteThrough
-when pending DETS writes need to be reflected in the on-disk file).
-
-On POSIX filesystems, `save()` and `close()` preserve the DETS file's mode,
-owner (uid), and group (gid). Shelf checks these values before replacing
-the file. A metadata error stops the replacement and returns an error.
-This does not preserve ACLs, extended attributes, or file flags; see
+Because `save()` replaces the file, it must carry the file's access controls
+across. On POSIX filesystems, `save()` and `close()` preserve the mode, owner
+(uid), and group (gid), and check them before the replacement. If a metadata
+step fails, Shelf keeps the original file and returns an error. ACLs,
+extended attributes, and file flags are not preserved; see
 [file access controls](https://shelf.tylerbutler.com/advanced/persistence-operations/#file-access-controls)
-before using those protections.
+before you rely on them.
 
-For the precise per-call durability guarantees and crash semantics, see
-the canonical [Durability story](https://shelf.tylerbutler.com/advanced/persistence-operations/#durability-story)
-in the website docs.
+### Leftovers after a VM crash
 
-A VM crash can leave `.shelf-save-<pid>-<counter>` directories beside the
-database. Later `open()`, `save()`, and `close()` calls do not reclaim them.
-These directories have no database or host ownership marker; a name, PID, or
-age alone does not prove that a directory is safe to remove. Automatic recovery
-remains deferred. Follow the
-[manual cleanup procedure](https://shelf.tylerbutler.com/advanced/persistence-operations/#manual-cleanup-after-a-vm-crash)
-and leave any directory with uncertain ownership untouched.
+If the VM crashes during a save, it can leave a `.shelf-save-<pid>-<counter>`
+directory beside the database. Shelf does not remove these directories later,
+because it cannot tell an abandoned directory from one that another VM is
+still writing. The directory has no owner marker, and a name, PID, or age
+proves nothing. Remove them by hand with the
+[manual cleanup procedure](https://shelf.tylerbutler.com/advanced/persistence-operations/#manual-cleanup-after-a-vm-crash),
+and leave any directory whose owner you cannot confirm.
 
-## Type Safety
+### Durability
 
-All data loaded from DETS is validated through `gleam/dynamic/decode` decoders when a table is opened. This ensures types match your expectations, even when the DETS file was written by a previous session or a different version of your application.
+Each failure removes one more layer of protection. If the owner process
+exits, its ETS table goes with it: WriteBack loses unsaved changes, and
+WriteThrough changes stay in DETS. If the VM crashes, writes still in the
+DETS buffer can also be lost. If the OS crashes or the power fails, even a
+synced file can lose data, because DETS does not expose `fsync(2)`. If your
+application must survive that last case, choose another store. The
+[Durability story](https://shelf.tylerbutler.com/advanced/persistence-operations/#durability-story)
+gives the exact guarantee of each call.
 
-Each DETS record must be exactly a two-element tuple, `#(key, value)`.
-For every table type, `open()` and `reload()` return `Error(TypeMismatch(...))`
-for records with extra fields, before running the key and value decoders.
-A failed open preserves the stored records. A failed reload leaves the live
-ETS contents unchanged.
+## Process Ownership
 
-```gleam
-import gleam/dynamic/decode
+The process that calls `open()` owns the table. Shelf creates the ETS table
+as `protected`, so any process can read it, but only the owner can write or
+manage it (`insert`, `delete_*`, `update_counter`, `save`, `reload`, `sync`,
+`close`). Calls from other processes return `Error(NotOwner)`. For a
+long-running application, open the table in a supervised process and send
+it your write requests.
 
-// Decoders are required when opening any table
-let assert Ok(table) =
-  set.open(name: "users", path: "users.dets",
-    base_directory: "/app/data",
-    key: decode.string, value: decode.int)
-```
+The owner's life decides the table's life. If the owner crashes, ETS deletes
+the table and unsaved data is lost, but the DETS file stays, and the next
+`open()` loads it again.
 
-Within a running session, Gleam's type system guarantees correctness — decoders validate the DETS→ETS boundary on open and reload. The `save()` path is unaffected and still uses Erlang's efficient `ets:to_dets/2` bulk transfer.
+Because only the owner writes, writes never race each other. Readers in other
+processes, however, see each write as soon as ETS applies it, so they can see
+a multi-key update half-done. Shelf has no transactions. If readers must
+never see a partial update, send their reads through the owner as well.
 
-> **Performance note**: The DETS → ETS load streams entries through
-> `dets:foldl`, validates each entry, and inserts batches into ETS.
-> Reload also keeps a scratch table and needs transfer memory. See
-> [Memory cost on open and reload](https://shelf.tylerbutler.com/advanced/persistence-operations/#memory-cost-on-open-and-reload).
-
-### Schema Migration
-
-If you change the key or value types between application versions, `open()` returns `Error(TypeMismatch(...))` because existing DETS data fails the new decoders.
-
-For files written by other Erlang or Elixir code with larger records, use
-native DETS tools to migrate each record to `#(key, value)` at a new path.
-Keep all required fields inside the key or value; Shelf does not discard extra
-fields. Keep the original file until you verify the migrated data.
-
-Strategies for handling schema changes:
-1. **Delete and rebuild**: Delete the DETS file and repopulate from your source of truth.
-2. **Run a migration**: Open the old DETS file with the *old* decoders as a temporary shelf table, transform the entries, write them to a temporary path with the *new* decoders, then atomically `rename` the new file over the old one and reopen.
-
-The website documents the procedure at [Schema Migration](https://shelf.tylerbutler.com/advanced/schema-migration/).
-Run the example in [`examples/src/shelf_examples/schema_migration.gleam`](examples/src/shelf_examples/schema_migration.gleam).
+The website covers the details at
+[Process Ownership](https://shelf.tylerbutler.com/advanced/limitations/#process-ownership).
 
 ## Error Handling
 
 All operations return `Result(value, ShelfError)` for storage failures.
 Exceptions raised by a `fold` callback propagate to the caller; they are not
 converted to `ShelfError`.
-
-| Error | Cause |
-|-------|-------|
-| `NotFound` | Key doesn't exist (from `lookup`) |
-| `KeyAlreadyPresent` | Key exists (from `insert_new`) |
-| `TableClosed` | Table has been closed or doesn't exist |
-| `NotOwner` | The calling process is not the table owner (see [Process Ownership](#process-ownership)) |
-| `NameConflict` | A DETS file at this path is already open by another shelf table |
-| `InvalidPath(String)` | File path escapes the base directory or contains unsafe characters |
-| `FileError(String)` | DETS file couldn't be found, created, or opened |
-| `FileSizeLimitExceeded` | DETS file exceeds the 2 GB limit |
-| `TypeMismatch(List(DecodeError))` | Data loaded from DETS failed decoder validation |
-| `ErlangError(String)` | Catch-all for unexpected Erlang-level errors |
 
 ```gleam
 case set.open(name: "cache", path: "data/cache.dets",
@@ -333,76 +341,8 @@ case set.open(name: "cache", path: "data/cache.dets",
 }
 ```
 
-## Atomic Counters
-
-```gleam
-let assert Ok(table) =
-  set.open(name: "stats", path: "stats.dets",
-    base_directory: "/app/data",
-    key: decode.string, value: decode.int)
-set.insert(into: table, key: "page_views", value: 0)
-set.update_counter(in: table, key: "page_views", increment: 1)   // Ok(1)
-set.update_counter(in: table, key: "page_views", increment: 10)  // Ok(11)
-```
-
-## Common Operations
-
-### Batch Insert
-
-```gleam
-let assert Ok(Nil) = set.insert_list(into: table, entries: [
-  #("alice", 42),
-  #("bob", 99),
-  #("charlie", 7),
-])
-```
-
-### Delete
-
-```gleam
-let assert Ok(Nil) = set.delete_key(from: table, key: "alice")
-let assert Ok(Nil) = set.delete_all(from: table)
-```
-
-`delete_object` behaves differently depending on the table type:
-
-- **Bag / Duplicate Bag**: Removes a specific value while keeping other values for the same key.
-- **Set**: Acts as a compare-and-delete — only deletes if both the key and value match the stored entry.
-
-```gleam
-// Bag: removes only "red", keeps other values for "color"
-let assert Ok(Nil) = bag.delete_object(from: table, key: "color", value: "red")
-
-// Set: only deletes if the stored value for "key" matches "value"
-let assert Ok(Nil) = set.delete_object(from: table, key: "key", value: "value")
-```
-
-### Fold, Size, and Export
-
-```gleam
-// Count entries
-let assert Ok(count) = set.size(of: table)
-
-// Fold to compute aggregates
-let assert Ok(total) = set.fold(over: table, from: 0, with: fn(sum, _key, value) {
-  sum + value
-})
-
-// Export all data (careful — loads entire table into memory)
-let assert Ok(entries) = set.to_list(from: table)
-```
-
-For all three table types, `fold` preserves a callback exception's original
-Erlang class (`error`, `throw`, or `exit`), reason, and stack trace. This includes
-Gleam panics and failed assertions, even if the callback closes the table before
-it raises. A closed or deleted ETS table still returns `Error(TableClosed)`
-when traversal itself fails.
-
-**Compatibility correction**: Earlier versions converted callback exceptions
-to `ShelfError`, and could report callback `badarg` errors as `TableClosed`.
-If your code relied on that behavior, handle expected failures in the callback
-or use your application's exception boundary. A surrounding `with_table` still
-applies its own callback rescue behavior.
+[Troubleshooting](https://shelf.tylerbutler.com/advanced/troubleshooting/)
+lists every error variant and what to do about the common ones.
 
 ## Limitations
 
@@ -410,37 +350,37 @@ applies its own callback rescue behavior.
 - **No ordered set**: DETS doesn't support `ordered_set`
 - **Erlang only**: Requires the BEAM runtime (no JavaScript target)
 - **Single node**: DETS is local to one node (use Mnesia for distribution)
-- **Table names**: Names do not need to be globally unique — shelf uses unnamed ETS tables internally. However, DETS file paths must not conflict with other open tables.
-- **Exclusive files**: Each canonical database path and filesystem identity has one live shelf table per VM, including during save. A second open through a hard link or a filesystem-supported case or Unicode alias returns `NameConflict`, even in the same process. Internal DETS names are unique per-lifetime Erlang terms, not atoms derived from filenames.
-- **Filesystem identity**: Opening requires reliable device and nonzero inode values. If the filesystem cannot provide them, shelf returns `FileError` without loading entries or returning a table handle. Use a filesystem that provides these values.
-- **Process ownership**: ETS tables are owned by the process that called `open()` and are created `protected`, so reads work from any process but writes/lifecycle calls are owner-only. See [Process Ownership](https://shelf.tylerbutler.com/advanced/limitations/#process-ownership).
+- **One table per file**: Table names are only labels and need not be unique, but each database file can have one live shelf table per VM, including during save. A second open through the same path, a hard link, or a filesystem-supported case or Unicode alias returns `NameConflict`, even in the same process.
+- **Filesystem identity**: Opening requires reliable device and nonzero inode values. If the filesystem cannot provide them, shelf returns `FileError` without loading entries or returning a table handle.
 - **Loading large tables**: Open and reload validate DETS entries in batches. Reload also needs a scratch ETS table and transfer memory. Details and limits: [Memory cost on open and reload](https://shelf.tylerbutler.com/advanced/persistence-operations/#memory-cost-on-open-and-reload).
 
 ## Security
 
-All DETS file paths are resolved against the provided `base_directory`, including symbolic links in existing directories and at the filename itself. Paths that escape the resolved base directory are rejected with `InvalidPath`, as are null bytes, link loops, and filesystem resolution errors. In-base aliases resolve to the same canonical path and therefore share one exclusive reservation. Unicode directories and filenames are preserved, and `/` is a valid base directory. Missing components can pass validation, but opening still requires the parent directory to exist.
+Shelf trusts the base directory you give it, and it stops paths from leaving
+that directory. It resolves every DETS path against `base_directory`,
+including symbolic links in existing directories and at the filename. A path
+that escapes the resolved base returns `InvalidPath`, and so do null bytes,
+link loops, and resolution errors. Aliases inside the base resolve to the
+same canonical path and share one reservation. Unicode names are preserved,
+and `/` is a valid base directory. Missing components can pass validation,
+but opening still requires the parent directory to exist.
 
-Use a trusted base directory and trusted contents. Path validation does not protect against concurrent external replacement of directories or symbolic links between validation and I/O. Filesystem identity reservations prevent two shelf tables in one VM from opening the same file through aliases; they do not provide cross-VM file locks or check whether hard links point outside the base directory.
+These checks happen once, before I/O, and inside one VM. They do not stop
+another process from replacing a directory or symbolic link between
+validation and I/O, they do not lock files against other VMs, and they do
+not check whether a hard link points outside the base. Use a base directory
+and contents that you control.
 
-Save replaces the file at the original path. Other hard links keep pointing to the old file; after a successful save, they name a distinct file and can open as a separate table.
+Save replaces the file at the original path. Other hard links keep pointing
+to the old file, so after a successful save they name a distinct file that
+can open as a separate table.
 
-Snapshots use an exclusively created private sibling directory on the same filesystem, then rename its DETS file over the database. Save cleans up only its own temporary file and directory; an unrelated `<database>.tmp` is never used. The guardian acquires and tracks that location, cleaning it up after temporary DETS shutdown if the owner exits during save. A VM crash can still leave a private snapshot directory behind.
-
-## Process Ownership
-
-ETS tables are owned by the process that calls `open()`, and shelf creates them as `protected`. The website documents this in detail at [Process Ownership](https://shelf.tylerbutler.com/advanced/limitations/#process-ownership) — including the read/write split, `Error(NotOwner)` semantics, and recommended supervision patterns.
-
-In short: reads work from any process; writes and lifecycle calls (`insert`, `delete_*`, `update_counter`, `save`, `reload`, `sync`, `close`) must come from the owner.
-
-If the owning process crashes, the ETS table is deleted and unsaved data is lost. The DETS file is preserved — the next `open()` call reloads it.
-Use WriteThrough to send each change to DETS, but account for its buffering and
-the [durability limits](https://shelf.tylerbutler.com/advanced/persistence-operations/#durability-story).
-
-### Write Safety
-
-Within the owner process, all shelf operations are individual ETS/DETS calls — there is no built-in transaction support. If you need atomic multi-key updates, coordinate through a single process (e.g., a GenServer).
-
-For set tables, concurrent reads from other processes while the owner writes to *different* keys are safe. Writes to the *same* key result in last-writer-wins (no corruption, but potential data loss from the reader's perspective). Bag and duplicate bag tables follow the same model.
+A save writes its snapshot in a private sibling directory, which it creates
+exclusively on the same filesystem, then renames the DETS file over the
+database. It never uses an unrelated `<database>.tmp` file, and it cleans up
+only its own files. If the owner exits during save, the guardian cleans up
+after temporary DETS shutdown. Only a VM crash can leave the directory behind
+(see [Leftovers after a VM crash](#leftovers-after-a-vm-crash)).
 
 ## See Also
 
