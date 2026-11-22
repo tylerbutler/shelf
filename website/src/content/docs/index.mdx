@@ -69,10 +69,6 @@ in memory, and each DETS file stays below 2 GB. Choose a set for unique keys,
 a bag for distinct values per key, or a duplicate bag to keep repeated pairs.
 One owner process handles writes; other processes can read the table.
 
-For integer counters, `update_counter` performs an atomic increment.
-It is owner-only, like other writes; producers in other processes must send
-their requests to the owner.
-
 If you only need ETS, [bravo](https://hexdocs.pm/bravo) wraps it without disk
 persistence. If you only need DETS, [slate](https://hexdocs.pm/slate) wraps it
 without an ETS read cache. For transactions or multi-node persistence,

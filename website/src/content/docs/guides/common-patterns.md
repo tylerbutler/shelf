@@ -7,6 +7,27 @@ This page collects recipes for the operations you'll reach for most often
 across `set`, `bag`, and `duplicate_bag` tables. Each example assumes a
 table value `t` opened earlier with the appropriate decoders.
 
+## Which operations each table type supports
+
+Most operations work on all three table types. The exceptions come from
+what a key means: only a set has one value per key, so only a set can
+reject a second value or treat that value as a counter.
+
+| Operation | Set | Bag | Duplicate Bag |
+|-----------|-----|-----|---------------|
+| `insert` | ✅ | ✅ | ✅ |
+| `insert_list` | ✅ | ✅ | ✅ |
+| `insert_new` | ✅ | — | — |
+| `lookup` | single value | `List(v)` | `List(v)` |
+| `member` | ✅ | ✅ | ✅ |
+| `delete_key` | ✅ | ✅ | ✅ |
+| `delete_object` | ✅ | ✅ | ✅ |
+| `delete_all` | ✅ | ✅ | ✅ |
+| `update_counter` | ✅ | — | — |
+| `fold` | ✅ | ✅ | ✅ |
+| `size` | ✅ | ✅ | ✅ |
+| `to_list` | ✅ | ✅ | ✅ |
+
 ## Batch insert
 
 `insert_list` writes many entries in one call, which is cheaper than a
@@ -36,6 +57,13 @@ let assert Ok(total) = set.fold(over: t, from: 0, with: fn(sum, _key, val) {
 
 For bag and duplicate-bag tables, the same `fold` is called once per
 `#(key, value)` pair.
+
+If your callback raises, shelf does not convert the exception to a
+`ShelfError`. It re-raises it with the original Erlang class (`error`,
+`throw`, or `exit`), reason, and stack trace. This includes Gleam panics and
+failed assertions, even if the callback closes the table before it raises.
+Only a failure of the traversal itself, such as a closed or deleted ETS
+table, returns `Error(TableClosed)`.
 
 ## Counting and exporting
 

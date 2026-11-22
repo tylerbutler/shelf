@@ -4,7 +4,9 @@ description: Choose between WriteBack and WriteThrough persistence strategies.
 ---
 
 Choose when your writes reach DETS: save a batch with WriteBack, or send
-each change to DETS with WriteThrough. Both modes serve reads from ETS.
+each change to DETS with WriteThrough. Both modes serve reads from ETS,
+and all three table types support both. You choose the mode when you open
+the table.
 
 ## WriteBack (Default)
 
@@ -81,11 +83,12 @@ let assert Ok(Nil) = set.sync(table)
 layer-by-layer breakdown of what `save()` and `sync()` actually guarantee,
 see the canonical [Durability story](/advanced/persistence-operations/#durability-story).
 
-An owner-process exit removes ETS; the guardian closes DETS as part of
-cleanup. A VM crash can lose writes still in DETS's buffer. Neither
-WriteBack nor WriteThrough provides `fsync(2)`-level guarantees against
-OS crashes or power loss. Choose another store if your application needs
-those guarantees.
+Each failure removes one more layer. If the owner exits, ETS goes with it,
+but the guardian closes DETS, so WriteThrough changes stay in the file. If
+the VM crashes, the guardian cannot run, and writes still in the DETS buffer
+can be lost. If the OS crashes or the power fails, even synced data can be
+lost, because shelf cannot call `fsync(2)`. If your application must survive
+that last case, choose another store.
 
 ## Comparison
 
@@ -98,25 +101,3 @@ those guarantees.
 | When to persist | `save()` or successful close | Each write reaches DETS; `sync()` flushes its buffer |
 | `reload()` useful? | Yes — discards unsaved changes | Not typically — ETS and DETS are in sync |
 | Best for | Caches, sessions, high-throughput | Accounts, config, audit logs |
-
-## Setting Write Mode
-
-Write mode is set at table creation via `Config`:
-
-```gleam
-import gleam/dynamic/decode
-import shelf
-
-// WriteBack (the default — no config needed)
-let assert Ok(table) =
-  set.open(name: "cache", path: "data/cache.dets", base_directory: "/app/data", key: decode.string, value: decode.string)
-
-// WriteThrough (use config)
-let config =
-  shelf.config(name: "accounts", path: "data/accounts.dets", base_directory: "/app/data")
-  |> shelf.write_mode(shelf.WriteThrough)
-let assert Ok(table) =
-  set.open_config(config: config, key: decode.string, value: decode.string)
-```
-
-Write mode applies to all table types — `set`, `bag`, and `duplicate_bag` all support both modes.

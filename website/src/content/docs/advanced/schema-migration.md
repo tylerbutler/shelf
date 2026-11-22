@@ -133,10 +133,14 @@ the new one.
 
 ### How do I call `dets:open_file` directly from Gleam?
 
-You don't need to. shelf's `open()` already wraps `dets:open_file` and
-adds decoder-validated loading on top. For migrations, the recommended
-pattern is to use shelf with two different decoders (one per version)
-rather than dropping into raw Erlang.
+For a file that shelf wrote, you don't need to. shelf's `open()` already
+wraps `dets:open_file` and adds decoder-validated loading on top, so use
+shelf with two different decoders (one per version).
+
+The exception is a file written by other Erlang or Elixir code with records
+larger than `#(key, value)`. shelf rejects those records before decoding, so
+use native DETS tools to rewrite each one as `#(key, value)` at a new path
+first. Keep the original file until you verify the result.
 
 ### Are there cleanup steps after the rename?
 

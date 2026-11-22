@@ -4,8 +4,9 @@ description: Common shelf errors and operational symptoms, with pointers to the 
 ---
 
 This page collects the questions that come up most often when integrating
-shelf. Each entry references the relevant error variant or the source of
-the limitation.
+shelf. Each entry starts from a symptom, explains its cause, and points to
+the fix. The [error reference](#error-reference) at the end lists every
+error variant.
 
 ## I'm getting `NameConflict` on `open()` — why?
 
@@ -50,17 +51,17 @@ failed.
 
 ## My ETS data disappeared after a crash — is the DETS file safe?
 
-Yes. ETS is in-process memory, so when the owning process exits the ETS
-table is deleted. The DETS file on disk is a separate artifact and is
-left intact. The next `open()` call streams it back into a fresh ETS
-table.
+The file stays, with everything that reached it. ETS is in-process memory,
+so when the owning process exits the ETS table is deleted. The DETS file on
+disk is separate and is left intact. The next `open()` call streams it back
+into a fresh ETS table. What the file holds depends on your write mode.
 
 To minimise data loss across crashes:
 
 - In **WriteBack** mode, save() is the explicit persistence call —
   schedule it (timer, after every N writes, at clean shutdown).
-- In **WriteThrough** mode, every write reaches DETS immediately, so the
-  change reaches DETS before ETS. DETS can still buffer it in memory;
+- In **WriteThrough** mode, every write reaches DETS before ETS, so an
+  owner crash loses nothing. DETS can still buffer the write in memory;
   call `sync()` to flush that buffer to the file. A VM crash can lose
   buffered writes, and shelf does not provide `fsync(2)`-level guarantees
   against OS crashes or power loss.
@@ -130,3 +131,20 @@ allow two tables to write to the same file.
 DETS files are capped at **2 GB** per table — this is a DETS limit, not a
 shelf one. If you hit it, partition data across multiple tables or move
 to Mnesia / a real database.
+
+## Error reference
+
+Every shelf operation returns `Result(value, ShelfError)`. When an error is not covered above, find its cause here:
+
+| Error | Cause |
+|-------|-------|
+| `NotFound` | Key doesn't exist (from `lookup`) |
+| `KeyAlreadyPresent` | Key exists (from `insert_new`, set tables only) |
+| `TableClosed` | Table has been closed or doesn't exist |
+| `NotOwner` | The calling process is not the table owner (see [Process Ownership](/advanced/limitations/#process-ownership)) |
+| `NameConflict` | A DETS file at this path is already open by another shelf table |
+| `InvalidPath(String)` | File path escapes the base directory or contains unsafe characters |
+| `FileError(String)` | DETS file couldn't be found, created, or opened |
+| `FileSizeLimitExceeded` | DETS file exceeds the 2 GB limit |
+| `TypeMismatch(List(DecodeError))` | Data loaded from DETS failed decoder validation |
+| `ErlangError(String)` | Catch-all for unexpected Erlang-level errors |
