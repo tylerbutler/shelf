@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.1.4 - 2026-11-23
+
+#### Fixed
+
+##### Interrupted save directories can be removed with explicit cleanup.
+
+Use `shelf.cleanup_snapshot(directory:, base_directory:)` to remove one abandoned snapshot directory, including DETS sidecars and recognized sorter files. The function rejects links and unknown entries before deletion. Confirm abandonment and stop all writers first; Shelf does not probe OS processes or scan sibling directories.
+
 ## v1.1.3 - 2026-11-17
 
 #### Fixed
