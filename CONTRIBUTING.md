@@ -11,6 +11,11 @@ just format
 just --list
 ```
 
+Run the persistence suite on macOS, where Shelf can verify extended file
+protections. On Linux, run `gleam test -- --tag unsupported_platform` to
+check that `save()` and `close()` reject unsupported replacements without
+changing the original file. CI runs both platform paths.
+
 Run `just audit-check` to enforce the dependency licence policy and check
 known vulnerabilities through OSV. CI runs the same command before its build
 checks. The policy permits Apache-2.0, BSD-3-Clause, and MIT. The audit covers

@@ -295,19 +295,19 @@ pub fn closed_set_does_not_clean_up_reopened_table_test() -> Nil {
   )
 }
 
-pub fn set_removes_registry_entry_after_recovery_reopen_fails_test() -> Nil {
-  assert_cleanup_after_recovery_reopen_fails(set_operations())
+pub fn set_removes_registry_entry_after_final_save_metadata_fails_test() -> Nil {
+  assert_cleanup_after_final_save_metadata_fails(set_operations())
 }
 
-pub fn bag_removes_registry_entry_after_recovery_reopen_fails_test() -> Nil {
-  assert_cleanup_after_recovery_reopen_fails(bag_operations())
+pub fn bag_removes_registry_entry_after_final_save_metadata_fails_test() -> Nil {
+  assert_cleanup_after_final_save_metadata_fails(bag_operations())
 }
 
-pub fn duplicate_bag_removes_registry_entry_after_recovery_reopen_fails_test() -> Nil {
-  assert_cleanup_after_recovery_reopen_fails(duplicate_bag_operations())
+pub fn duplicate_bag_removes_registry_entry_after_final_save_metadata_fails_test() -> Nil {
+  assert_cleanup_after_final_save_metadata_fails(duplicate_bag_operations())
 }
 
-fn assert_cleanup_after_recovery_reopen_fails(
+fn assert_cleanup_after_final_save_metadata_fails(
   operations: TableOperations(table),
 ) -> Nil {
   use path <- with_close_recovery_fixture()
@@ -319,15 +319,15 @@ fn assert_cleanup_after_recovery_reopen_fails(
       let monitor = process.monitor(guardian)
       let dets = dets_reference_for_path(path)
       assert !dets_is_closed(dets)
-      // The temp snapshot can succeed, but replacing the original pathname
-      // with a directory makes both rename and recovery reopen fail.
+      // Replacing the original pathname with a directory makes metadata
+      // preflight fail. with_table must still clean up its owned handles.
       let assert Ok(Nil) = test_helper.delete_file(path)
       test_helper.create_directory(path)
       process.send(captured, #(table, guardian, monitor, dets))
       Ok(Nil)
     })
-  let assert Error(shelf.ErlangError(detail)) = result
-  assert string.contains(detail, "eisdir")
+  let assert Error(shelf.FileError(detail)) = result
+  assert string.contains(detail, "native_metadata")
   let assert Ok(#(original, guardian, monitor, dets)) =
     process.receive(captured, within: 1000)
   assert dets_is_closed(dets)

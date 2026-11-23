@@ -17,6 +17,10 @@ guarantees against OS crashes and power loss.
 
 ## Quick Start
 
+`save()` and `close()` require a supported local macOS filesystem and
+metadata tools. They return `FileError` on Linux and other platforms.
+Read [file metadata](#file-metadata) before running the example.
+
 ```sh
 gleam add shelf
 mkdir -p /tmp/shelf-quick-start
@@ -272,12 +276,16 @@ save, call `close()` yourself.
 ### File metadata
 
 Because `save()` replaces the file, it must carry the file's access controls
-across. On POSIX filesystems, `save()` and `close()` preserve the mode, owner
-(uid), and group (gid), and check them before the replacement. If a metadata
-step fails, Shelf keeps the original file and returns an error. ACLs,
-extended attributes, and file flags are not preserved; see
+across. `save()` and `close()` check the mode, owner (uid), group (gid),
+ACLs, extended attributes, and file flags before the replacement. Shelf
+supports these operations on macOS only and uses platform tools for the
+controls that Erlang cannot read. On Linux and other platforms, or when
+the tools cannot preserve and verify the protections, Shelf keeps the
+original file and returns `FileError`. This includes the final save in
+`with_table()`. Correct the cause and retry with the same table handle
+when you use manual `close()`. See
 [file access controls](https://shelf.tylerbutler.com/advanced/persistence-operations/#file-access-controls)
-before you rely on them.
+for supported platforms, required tools, and limits.
 
 ### Leftovers after a VM crash
 

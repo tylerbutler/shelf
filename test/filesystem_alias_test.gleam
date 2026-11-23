@@ -333,7 +333,7 @@ pub fn absent_canonical_alias_first_open_race_test() -> Nil {
   })
 }
 
-pub fn failed_rename_cleanup_releases_all_lifetime_keys_test() -> Nil {
+pub fn metadata_rejection_retains_lifetime_until_successful_close_test() -> Nil {
   use directory <- fixture.with_directory()
   let path = directory <> "/table.dets"
   let assert Ok(table) = open(directory, "table.dets")
@@ -343,7 +343,8 @@ pub fn failed_rename_cleanup_releases_all_lifetime_keys_test() -> Nil {
     let assert Error(shelf.NameConflict) = open(directory, "alias.dets")
     Nil
   })
-  assert set.close(table) == Error(shelf.TableClosed)
+  // Preflight failed before original close; restoring its path permits retry.
+  let assert Ok(Nil) = set.close(table)
   assert !identity_reserved(path)
   let assert Ok(replacement) = open(directory, "alias.dets")
   let assert Ok(Nil) = set.close(replacement)

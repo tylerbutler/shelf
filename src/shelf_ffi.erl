@@ -326,6 +326,26 @@ guard_reservation(Owner, Monitor, Path, Name, Snapshot) ->
                     Owner ! {Request, Error},
                     guard_reservation(Owner, Monitor, Path, Name, none)
             end;
+        {{metadata_tool, Executable, Args, Consumer}, Owner, Request}
+                when Snapshot =/= none ->
+            %% The snapshot guardian owns the OS port as well as the
+            %% pathname. Cancellation must reap writers BEFORE cleanup.
+            {ToolDirectory, _} = Snapshot,
+            Reply = shelf_metadata:run(Owner, Monitor, Executable, Args, Consumer,
+                unicode:characters_to_list(ToolDirectory)),
+            Owner ! {Request, Reply},
+            guard_reservation(Owner, Monitor, Path, Name, Snapshot);
+        {{metadata_link, Source}, Owner, Request} when Snapshot =/= none ->
+            {Directory, _} = Snapshot,
+            Reply = file:make_link(Source,
+                filename:join(Directory, <<"metadata-source">>)),
+            Owner ! {Request, Reply},
+            guard_reservation(Owner, Monitor, Path, Name, Snapshot);
+        {metadata_unlink, Owner, Request} when Snapshot =/= none ->
+            {Directory, _} = Snapshot,
+            Reply = file:delete(filename:join(Directory, <<"metadata-source">>)),
+            Owner ! {Request, Reply},
+            guard_reservation(Owner, Monitor, Path, Name, Snapshot);
         {{reserve_snapshot, Temporary}, Owner, Request}
             when Snapshot =/= none, element(2, Snapshot) =:= Temporary ->
             {Directory, Temporary} = Snapshot,
@@ -405,6 +425,7 @@ cleanup_dead_snapshot({_Directory, Temporary} = Snapshot) ->
     cleanup_snapshot_directory(Snapshot).
 
 cleanup_snapshot_directory({Directory, _Temporary}) ->
+    shelf_metadata:cleanup_directory(Directory),
     _ = file:delete(filename:join(Directory, <<"snapshot.dets">>)),
     _ = file:del_dir(Directory),
     ok.
@@ -797,6 +818,9 @@ save(Ets, {shelf_dets, _Owner, _Lifetime, Guardian} = Dets) ->
                     undefined ->
                         {error, table_closed};
                     _ ->
+                        %% No POSIX-only fallback: other platforms cannot
+                        %% establish the complete protection contract.
+                        ok = save_platform(OrigPath),
                         Type = dets:info(Dets, type),
                         case snapshot_request(Guardian, acquire_snapshot) of
                             {ok, {Directory, Temporary}} ->
@@ -817,6 +841,9 @@ save(Ets, {shelf_dets, _Owner, _Lifetime, Guardian} = Dets) ->
                 _:Reason -> {error, translate_error(Reason)}
             end
     end.
+
+save_platform(Path) ->
+    shelf_metadata:check_platform(Path).
 
 make_save_directory(_Path, 0) ->
     {error, {file_error, temp_directory, eexist}};
@@ -840,12 +867,24 @@ make_save_directory(Path, Attempts) ->
 safe_save_impl(Ets, Dets, OrigPath, TmpPath, Type, TmpName) ->
     try
         Metadata = save_metadata(read_original, OrigPath),
-        %% 1. Open temp DETS
+        {shelf_dets, _, _, MetadataGuardian} = Dets,
+        ok = shelf_metadata:prepare_directory(MetadataGuardian,
+            filename:dirname(TmpPath)),
+        Extended = shelf_metadata:read(MetadataGuardian, read_original, OrigPath,
+            filename:dirname(TmpPath)),
+        %% 1. Initialize empty DETS inside the verified ACL-private directory.
+        %% DETS cannot initialize an existing zero-byte placeholder.
         {ok, TmpDets} = dets:open_file(TmpName, [
             {file, unicode:characters_to_list(TmpPath)},
             {type, Type},
             {repair, false}
         ]),
+        %% Establish and verify the replacement's protections before any
+        %% ETS data is transferred. Check a fresh read/write open as well:
+        %% DETS's existing descriptor could otherwise bypass a restrictive
+        %% ACL/mode that would make reopening after replacement fail.
+        ok = apply_complete_save_metadata(MetadataGuardian, TmpPath, Metadata, Extended),
+        ok = verify_save_access(TmpPath),
         %% 2. Snapshot ETS into temp DETS
         TmpDets = ets:to_dets(Ets, TmpDets),
         %% 3. Close temp (flushes to disk)
@@ -853,7 +892,16 @@ safe_save_impl(Ets, Dets, OrigPath, TmpPath, Type, TmpName) ->
         %% Restore and verify POSIX access metadata before closing the original.
         %% Ownership writes can clear set-id bits, so mode must be applied last.
         %% Any failure leaves the original DETS open and its data untouched.
-        ok = apply_save_metadata(TmpPath, Metadata),
+        ok = apply_complete_save_metadata(MetadataGuardian, TmpPath, Metadata, Extended),
+        %% Recheck the still-open original immediately before reservation
+        %% and close. Reject observed protection changes, not stale copies.
+        ok = shelf_metadata:verify(MetadataGuardian, verify_original, OrigPath,
+            filename:dirname(TmpPath), Extended),
+        case save_metadata(verify_original, OrigPath) of
+            Metadata -> ok;
+            _ -> error({file_error, OrigPath,
+                {native_metadata, verify_original, mismatch}})
+        end,
         %% Reserve the replacement BEFORE original close/rename can expose
         %% it, after restoring and verifying its POSIX access metadata.
         {shelf_dets, _, _, Guardian} = Dets,
@@ -916,7 +964,7 @@ safe_save_impl(Ets, Dets, OrigPath, TmpPath, Type, TmpName) ->
             end
     end.
 
-%% Only POSIX mode/uid/gid are represented here, not ACLs or extended metadata.
+%% POSIX ownership is applied before mode (chown may clear set-id bits).
 save_metadata(Stage, Path) ->
     case file:read_file_info(Path) of
         {ok, #file_info{mode = Mode, uid = Uid, gid = Gid}} ->
@@ -930,9 +978,19 @@ apply_save_metadata(Path, {Mode, Uid, Gid} = Expected) ->
     write_save_metadata(apply_mode, Path, #file_info{mode = Mode}),
     case save_metadata(verify_snapshot, Path) of
         Expected -> ok;
-        Actual ->
+        _Actual ->
             error({file_error, Path, {native_metadata, verify_snapshot,
-                {mismatch, Expected, Actual}}})
+                mismatch}})
+    end.
+
+apply_complete_save_metadata(Guardian, Path, Metadata, {Acl, Attributes} = Extended) ->
+    ok = apply_save_metadata(Path, Metadata),
+    ok = shelf_metadata:apply(Guardian, Path, Acl, Attributes),
+    ok = shelf_metadata:verify(Guardian, verify_snapshot, Path,
+        filename:dirname(Path), Extended),
+    case save_metadata(verify_snapshot, Path) of
+        Metadata -> ok;
+        _ -> error({file_error, Path, {native_metadata, verify_snapshot, mismatch}})
     end.
 
 write_save_metadata(Stage, Path, Info) ->
@@ -940,6 +998,18 @@ write_save_metadata(Stage, Path, Info) ->
         ok -> ok;
         {error, Reason} ->
             error({file_error, Path, {native_metadata, Stage, Reason}})
+    end.
+
+verify_save_access(Path) ->
+    case file:open(Path, [read, write, binary, raw]) of
+        {ok, File} ->
+            case file:close(File) of
+                ok -> ok;
+                {error, Reason} ->
+                    error({file_error, Path, {native_metadata, verify_access, Reason}})
+            end;
+        {error, Reason} ->
+            error({file_error, Path, {native_metadata, verify_access, Reason}})
     end.
 
 %% Flush DETS write buffer to OS.

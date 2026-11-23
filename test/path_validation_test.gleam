@@ -41,10 +41,11 @@ pub fn sibling_directory_with_shared_prefix_is_rejected_test() -> Nil {
 }
 
 pub fn filesystem_root_accepts_absolute_and_relative_descendants_test() -> Nil {
-  assert shelf.validate_path("/tmp/root.dets", "/") == Ok("/tmp/root.dets")
-  assert shelf.validate_path("tmp/root.dets", "/") == Ok("/tmp/root.dets")
-  assert shelf.validate_path("/../../tmp/root.dets", "/")
-    == Ok("/tmp/root.dets")
+  let assert Ok(temporary) = shelf.validate_path("/tmp", "/")
+  let expected = temporary <> "/root.dets"
+  assert shelf.validate_path("/tmp/root.dets", "/") == Ok(expected)
+  assert shelf.validate_path("tmp/root.dets", "/") == Ok(expected)
+  assert shelf.validate_path("/../../tmp/root.dets", "/") == Ok(expected)
 }
 
 pub fn filesystem_root_opens_absolute_and_relative_descendants_test() -> Nil {

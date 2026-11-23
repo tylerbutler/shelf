@@ -6,6 +6,11 @@ description: Save a table, then read its data in a separate application run.
 Use this guide in an existing Gleam application. You will save two entries,
 stop the application, and read the entries in a second run.
 
+Use a supported local macOS filesystem with the required metadata tools.
+`save()` and `close()` return `FileError` on Linux and other platforms.
+See [file access controls](/advanced/persistence-operations/#file-access-controls)
+for requirements and limits.
+
 ## 1. Add shelf and create a data directory
 
 From your project directory, run:

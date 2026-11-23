@@ -402,9 +402,9 @@ pub fn failed_save_cleans_only_its_private_snapshot_test() -> Nil {
     let assert Error(shelf.NameConflict) = open(directory, "table.dets")
     Nil
   })
-  // Save could not reopen the directory. Terminal close must still release
-  // the reservation, even though dets:info no longer remembers the filename.
-  assert set.close(table) == Error(shelf.TableClosed)
+  // Metadata preflight rejected the directory before closing original DETS.
+  // Once restored, the same handle can save/close and release its reservation.
+  let assert Ok(Nil) = set.close(table)
   let assert Ok(reopened) = open(directory, "table.dets")
   let assert Ok(Nil) = set.close(reopened)
   Nil

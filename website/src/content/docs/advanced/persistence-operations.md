@@ -53,19 +53,72 @@ guarantees it gives across crashes, see [Durability story](#durability-story).
 
 ### File access controls
 
-On POSIX filesystems, `save()` preserves the original file's permission and
-special mode bits, owner (uid), and group (gid). Shelf applies ownership to
+On supported macOS filesystems, `save()` preserves the original file's
+permission and special mode bits, owner (uid), and group (gid). Shelf applies ownership to
 the snapshot before the final mode, since an ownership change can clear
 special mode bits. It reads back these values before replacing the original
 file. If a metadata read, update, or check fails, Shelf returns an error
 without replacing the original. You can correct the cause and retry with
 the same table handle. `close()` uses the same save procedure.
 
-The Erlang file metadata API does not expose ACLs, extended attributes
-(including security labels), or file flags. Shelf does not copy these
-controls to the replacement file. Do not rely on them to restrict access
-across `save()` or `close()`. Use a restricted parent directory and POSIX
-mode bits for access control.
+Shelf uses platform tools to inspect and carry across ACLs, extended
+attributes (including security labels), and file flags. It checks the
+replacement's complete supported protection metadata before closing the
+original file. That check includes controls the snapshot inherits from
+its parent directory. Matching mode, owner, and group alone does not prove
+that the access controls survived.
+
+**Platform restriction:** `save()` and `close()` support macOS only.
+On Linux and other platforms, these calls return `FileError` before
+replacing the database. Linux tools can omit extended attributes that the
+calling process cannot inspect, so their output cannot prove complete
+preservation. This restriction also applies to the final save in
+`with_table()`. `open()`, reads, and WriteThrough mutations do not remove
+the need to handle a failed close.
+
+Use a local APFS or HFS filesystem. Shelf rejects unsupported filesystem
+and ACL formats, ACL-wide flags and principals it cannot reproduce,
+nonzero file flags, and ACLs that deny deletion of the replacement.
+It does not clear a flag or remove an ACL entry from the original to
+permit a save.
+
+Shelf accepts at most 126 ACL entries and 32 KiB of native ACL text.
+Extended attribute names must use printable ASCII and pass an exact
+round-trip check. Shelf bounds attributes to 128 names, 64 KiB per value,
+and 960 KiB in total. It rejects ambiguous names and metadata above these
+limits. A successful save means the replacement passed the complete
+supported metadata checks, including native ACL inheritance flags;
+`ls -e` output alone cannot establish that.
+
+The metadata checks use Apple's `ls`, `chmod`, `df`, `xattr`, `stat`,
+`chflags`, and `bsdtar` utilities. Keep the system tools available without
+shadowing them with incompatible commands. Shelf also requires a timeout
+utility to terminate and reap a metadata command before it cleans up the
+snapshot. A missing required utility causes `FileError`.
+
+The deadline wrapper must be Apple's `/usr/bin/timeout` or GNU coreutils
+9.0 or later at its standard Homebrew location under `/opt/homebrew` or
+`/usr/local`. Install coreutils with `brew install coreutils` if the system
+timeout is unavailable. Shelf does not accept an arbitrary `gtimeout`
+program from `PATH`. Each utility has a 30-second deadline; this is not
+a deadline for the entire save. Cleanup waits for the child to exit and
+be reaped. Uninterruptible kernel I/O can extend that wait.
+
+Native archive verification reads the original and snapshot files and
+discards their contents as it streams the metadata. These extra reads
+increase save cost but do not require another full database copy on disk.
+
+If a tool is missing, a metadata operation fails, or Shelf cannot verify a
+protection, `save()` and `close()` return `FileError` without replacing the
+original file. Shelf does not fall back to a POSIX-only copy or clear a
+protection on the original to make replacement succeed. Correct the cause
+and retry with the same handle. `with_table()` releases the handle after
+a final save failure, so use manual `close()` when you need to retry.
+
+Keep the database directory under your application's control. Other
+processes must coordinate changes to its paths and access controls with
+your application. The metadata checks and rename do not form a transaction
+with concurrent permission changes by another process.
 
 ## reload
 

@@ -1,0 +1,14 @@
+package = "shelf"
+kind = "Breaking"
+body = '''
+Atomic saves reject unverified file protections.
+
+Shelf preserves and verifies supported file protections before replacing a
+DETS file on macOS. Metadata failures leave the original file intact and
+allow a retry with the same handle.
+
+The `save()` and `close()` operations now return `FileError` on Linux and
+other unsupported platforms. This includes the final save in `with_table()`.
+Applications must handle these errors; do not rely on a POSIX-only metadata
+copy to preserve ACLs, extended attributes, security labels, or file flags.
+'''

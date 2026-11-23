@@ -1,7 +1,196 @@
 -module(save_metadata_test_ffi).
 -include_lib("kernel/include/file.hrl").
 -export([with_handle/2, metadata/1, prepare_metadata/2, with_missing_original/2,
-         prepare_group_failure/2, assert_closed/1]).
+         prepare_group_failure/2, assert_closed/1, is_macos/0, identity/1,
+         prepare_extended/1, protections/1, inherit_acl/1, with_flags/2,
+         with_unreadable_attributes/2, with_ambiguous_names/2,
+         with_missing_tools/1, rejects_incomplete_archive/1,
+         with_delete_denial/2, with_large_fork/2, owner_exit_barrier/1,
+         rejects_verification_mismatch/2, with_native_identity/2]).
+
+is_macos() ->
+    os:type() =:= {unix, darwin}.
+
+with_native_identity({persistent_set, _, Dets, _, _, _}, Fun) ->
+    Server = dets:info(Dets, owner),
+    true = is_pid(Server),
+    try Fun()
+    after Server = dets:info(Dets, owner)
+    end.
+
+identity(Path) ->
+    {ok, #file_info{major_device = Major, minor_device = Minor, inode = Inode}} =
+        file:read_file_info(Path),
+    {Major, Minor, Inode}.
+
+fixture_tool(Path, Tool, Args, Consumer) ->
+    Monitor = monitor(process, self()),
+    try
+        {ok, Output} = shelf_metadata:run(self(), Monitor, Tool, Args, Consumer,
+            unicode:characters_to_list(filename:dirname(Path))),
+        Output
+    after demonitor(Monitor, [flush])
+    end.
+
+prepare_extended(Path) ->
+    <<>> = fixture_tool(Path, "/bin/chmod", ["-N", Path], text),
+    %% Exercise ordered deny/allow entries, including the regular-file
+    %% inheritance bits that ls silently omits.
+    <<>> = fixture_tool(Path, "/bin/chmod",
+        ["+a#", "0", "group:everyone deny execute", Path], text),
+    <<>> = fixture_tool(Path, "/bin/chmod",
+        ["+a#", "1",
+         "group:everyone allow read,inherited,file_inherit,directory_inherit,limit_inherit,only_inherit",
+         Path], text),
+    <<>> = fixture_tool(Path, "/usr/bin/xattr",
+        ["-wx", "shelf.binary", "00FF0A0080FE", Path], text),
+    <<>> = fixture_tool(Path, "/usr/bin/xattr",
+        ["-wx", "shelf.second", "010203", Path], text),
+    <<>> = fixture_tool(Path, "/usr/bin/xattr",
+        ["-wx", "--", "-shelf spaced attribute", "FF000A", Path], text),
+    protections(Path).
+
+protections(Path) ->
+    {ok, #file_info{size = Size}} = file:read_file_info(Path),
+    Base = filename:basename(Path),
+    Name = <<"./", Base/binary>>,
+    Sidecar = fixture_tool(Path, "/usr/bin/bsdtar",
+        ["-c", "--format=pax", "--mac-metadata", "--no-acls",
+         "--no-xattrs", "--no-fflags", "--no-recursion", "-f", "-",
+         "-C", filename:dirname(Path), Name],
+        {archive, Size, Name, regular}),
+    Flags = fixture_tool(Path, "/usr/bin/stat", ["-f", "%f", Path], text),
+    %% A BitArray at the Gleam boundary, not an unsafe String conversion.
+    term_to_binary({Sidecar, Flags}).
+
+inherit_acl(Directory) ->
+    <<>> = fixture_tool(Directory, "/bin/chmod",
+        ["+a", "group:everyone allow read,execute,file_inherit,directory_inherit,only_inherit",
+         Directory], text),
+    nil.
+
+with_flags(Path, Fun) ->
+    <<>> = fixture_tool(Path, "/usr/bin/chflags", ["nodump", Path], text),
+    try
+        Result = Fun(),
+        <<"1\n">> = fixture_tool(Path, "/usr/bin/stat", ["-f", "%f", Path], text),
+        Result
+    after
+        <<>> = fixture_tool(Path, "/usr/bin/chflags", ["0", Path], text)
+    end.
+
+with_unreadable_attributes(Path, Fun) ->
+    <<>> = fixture_tool(Path, "/bin/chmod",
+        ["+a#", "0", "group:everyone deny readextattr", Path], text),
+    try Fun()
+    after
+        <<>> = fixture_tool(Path, "/bin/chmod", ["-a#", "0", Path], text)
+    end.
+
+with_ambiguous_names(Path, Fun) ->
+    Names = [<<"shelf.fragment.one">>, <<"shelf.fragment.two">>,
+             <<"shelf.fragment.one\nshelf.fragment.two">>],
+    lists:foreach(fun(Name) ->
+        <<>> = fixture_tool(Path, "/usr/bin/xattr",
+            ["-wx", Name, "73656372657476616C7565", Path], text)
+    end, Names),
+    try Fun()
+    after
+        lists:foreach(fun(Name) ->
+            <<>> = fixture_tool(Path, "/usr/bin/xattr", ["-d", Name, Path], text)
+        end, Names)
+    end.
+
+with_delete_denial(Path, Fun) ->
+    <<>> = fixture_tool(Path, "/bin/chmod",
+        ["+a#", "0", "group:everyone deny delete,only_inherit", Path], text),
+    try Fun()
+    after
+        <<>> = fixture_tool(Path, "/bin/chmod", ["-a#", "0", Path], text)
+    end.
+
+with_large_fork(Path, Fun) ->
+    Fork = <<Path/binary, "/..namedfork/rsrc">>,
+    ok = file:write_file(Fork, binary:copy(<<0>>, 65537)),
+    try Fun()
+    after
+        <<>> = fixture_tool(Path, "/usr/bin/xattr",
+            ["-d", "com.apple.ResourceFork", Path], text)
+    end.
+
+with_missing_tools(Fun) ->
+    Original = os:getenv("PATH"),
+    true = os:putenv("PATH", ""),
+    try Fun()
+    after
+        case Original of
+            false -> true = os:unsetenv("PATH");
+            _ -> true = os:putenv("PATH", Original)
+        end
+    end.
+
+rejects_incomplete_archive(Directory) ->
+    Path = filename:join(Directory, <<"incomplete.tar">>),
+    ok = file:write_file(Path, <<0:4096>>),
+    Monitor = monitor(process, self()),
+    try
+        shelf_metadata:run(self(), Monitor, "/bin/cat", [Path],
+            {archive, 0, <<"./entry">>, regular},
+            unicode:characters_to_list(Directory))
+            =:= {error, incomplete_archive}
+    after
+        demonitor(Monitor, [flush]),
+        ok = file:delete(Path)
+    end.
+
+owner_exit_barrier(Directory) ->
+    Owner = spawn(fun() -> receive stop -> ok end end),
+    Monitor = monitor(process, Owner),
+    Timer = erlang:send_after(20, Owner, stop),
+    Start = erlang:monotonic_time(millisecond),
+    try
+        Result = shelf_metadata:run(Owner, Monitor, "/bin/sleep", ["0.15"],
+            text, unicode:characters_to_list(Directory)),
+        Elapsed = erlang:monotonic_time(millisecond) - Start,
+        Result =:= {error, owner_exited} andalso Elapsed >= 100
+    after
+        _ = erlang:cancel_timer(Timer),
+        exit(Owner, kill),
+        demonitor(Monitor, [flush])
+    end.
+
+%% Exercise the same complete-set verifier used by save without relying on
+%% a timing-sensitive concurrent chmod/xattr race or production test hooks.
+rejects_verification_mismatch(
+        {persistent_set, _, _, Guardian, _, _}, Path) ->
+    Ref = monitor(process, Guardian),
+    Guardian ! {acquire_snapshot, self(), Ref},
+    try
+        receive
+            {Ref, {ok, {Directory, Temporary}}} ->
+                try
+                    ok = shelf_metadata:prepare_directory(Guardian, Directory),
+                    {Acl, Attributes} =
+                        shelf_metadata:read(Guardian, fixture, Path, Directory),
+                    Expected = {Acl,
+                        [{<<"shelf.absent">>, <<"73656372657476616C7565">>}
+                         | Attributes]},
+                    try shelf_metadata:verify(Guardian, verify_snapshot,
+                            Path, Directory, Expected) of
+                        ok -> false
+                    catch
+                        error:{file_error, Path,
+                                {native_metadata, verify_snapshot, mismatch}} -> true
+                    end
+                after
+                    Guardian ! {{finish_snapshot, Temporary}, self(), Ref},
+                    receive {Ref, ok} -> ok end
+                end;
+            {'DOWN', Ref, process, Guardian, Reason} ->
+                exit({fixture_guardian_failed, Reason})
+        end
+    after demonitor(Ref, [flush])
+    end.
 
 %% Never save during assertion-failure cleanup, which could hide evidence.
 with_handle({persistent_set, Ets, Dets, Guardian, _, _}, Fun) ->

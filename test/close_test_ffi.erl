@@ -21,7 +21,7 @@ with_close_recovery_fixture(Fun) ->
     ok = file:make_dir(Directory),
     Path = filename:join(Directory, "table.dets"),
     try
-        Fun(list_to_binary(Path))
+        Fun(storage_safety_test_ffi:canonical_path(Path))
     after
         remove_fixture_path(Path),
         remove_fixture_path(Path ++ ".tmp"),
@@ -37,21 +37,21 @@ remove_fixture_path(Path) ->
 
 %% Observe the exact registered name before inducing a real save failure.
 dets_reference_for_path(Path) ->
-    [{Path, Name}] = ets:lookup(shelf_dets_registry, Path),
+    Canonical = storage_safety_test_ffi:canonical_path(Path),
+    [{Canonical, Name}] = ets:lookup(shelf_dets_registry, Canonical),
     Name.
 
 dets_is_closed(Name) ->
     dets:info(Name) =:= undefined.
 
 registry_contains_path(Path) ->
-    ets:member(shelf_dets_registry, Path).
+    ets:member(shelf_dets_registry,
+        storage_safety_test_ffi:canonical_path(Path)).
 
 %% Close the DETS table behind shelf's back to simulate a terminal
 %% external failure.
 simulate_external_dets_close(Path) ->
-    Resolved = filename:absname(binary_to_list(Path)),
-    Normalized = list_to_binary(shelf_ffi:normalize_path(Resolved)),
-    [{Normalized, Name}] = ets:lookup(shelf_dets_registry, Normalized),
+    Name = dets_reference_for_path(Path),
     ok = dets:close(Name),
     nil.
 

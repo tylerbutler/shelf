@@ -2,7 +2,15 @@
 -export([with_directory/1, write_file/2, read_file/1, list_directory/1,
          make_directory/1, symlink/2, with_read_only/2, in_other_process/1,
          with_rename_failure/2, with_delayed_guardian/3,
-         with_interrupted_open/2, with_paused_save/3, with_killed_save/4]).
+         with_interrupted_open/2, with_paused_save/3, with_killed_save/4,
+         canonical_path/1]).
+
+%% Reuse the runtime's filesystem resolver, including platform aliases
+%% such as /tmp -> /private/tmp. Lexical normalization is not sufficient.
+canonical_path(Path) ->
+    {ok, Canonical} =
+        shelf_ffi:validate_path(unicode:characters_to_binary(Path), <<"/">>),
+    Canonical.
 
 %% All fixture files belong to an exclusively acquired directory. Do not
 %% follow links during recursive cleanup, or touch a pre-existing fixture.
@@ -12,7 +20,7 @@ with_directory(Fun) ->
         integer_to_list(erlang:unique_integer([positive, monotonic]))])),
     ok = file:make_dir(Directory),
     ok = file:change_mode(Directory, 8#700),
-    try Fun(Directory)
+    try Fun(canonical_path(Directory))
     after ok = file:del_dir_r(Directory)
     end.
 
@@ -75,7 +83,8 @@ await_down(Pid, Monitor) ->
     after 5000 -> error({fixture_monitor_timeout, Pid})
     end.
 
-%% Force rename failure after the temporary snapshot has been created.
+%% Substitute a directory at the original pathname. Protection preflight
+%% rejects it before original close; restoring the path permits retry.
 %% Restore the original filename even if the Gleam callback fails.
 with_rename_failure(Path, Fun) ->
     Backup = <<Path/binary, ".original">>,
