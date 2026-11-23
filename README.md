@@ -282,10 +282,12 @@ before you rely on them.
 ### Leftovers after a VM crash
 
 If the VM crashes during a save, it can leave a `.shelf-save-<pid>-<counter>`
-directory beside the database. Shelf does not remove these directories later,
-because it cannot tell an abandoned directory from one that another VM is
-still writing. The directory has no owner marker, and a name, PID, or age
-proves nothing. Remove them by hand with the
+directory beside the database. Shelf does not scan for these directories,
+because another VM can still be writing them. After you confirm abandonment
+and stop all writers, use `shelf.cleanup_snapshot(directory:, base_directory:)`
+to remove one exact directory, including DETS sidecars and sorter files.
+The function checks all entries before deletion and rejects links, nested
+directories, and unknown files. Follow the
 [manual cleanup procedure](https://shelf.tylerbutler.com/advanced/persistence-operations/#manual-cleanup-after-a-vm-crash),
 and leave any directory whose owner you cannot confirm.
 
