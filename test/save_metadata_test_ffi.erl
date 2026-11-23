@@ -184,7 +184,7 @@ rejects_verification_mismatch(
                     end
                 after
                     Guardian ! {{finish_snapshot, Temporary}, self(), Ref},
-                    receive {Ref, ok} -> ok end
+                    receive {Ref, {ok, nil}} -> ok end
                 end;
             {'DOWN', Ref, process, Guardian, Reason} ->
                 exit({fixture_guardian_failed, Reason})

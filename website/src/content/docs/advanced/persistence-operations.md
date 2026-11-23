@@ -24,7 +24,7 @@ The rename is atomic only on one filesystem, so each save first creates a
 private directory beside the database and writes the temporary file there.
 It creates the directory exclusively and never touches an unrelated
 `<database>.tmp` file. When the save succeeds or fails in a handled way, it
-removes only its own temporary file and directory. The guardian tracks the
+removes its snapshot, native sidecars, and directory. The guardian tracks the
 directory too: if the owner exits during save, it waits for the temporary
 DETS file to close and then cleans up. Only a VM crash leaves the directory
 behind; see [Manual cleanup after a VM crash](#manual-cleanup-after-a-vm-crash).
@@ -253,9 +253,10 @@ A VM crash during `save()` or the save in `close()` can leave a
 temporary files such as `fs_nonode@nohost_86491_386.17`. Leftovers can approach
 the table's size, and repeated crashes can consume more disk space.
 
-Later `open()`, `save()`, and `close()` calls do not remove these abandoned
-directories. Automatic recovery remains deferred in
-[#107](https://github.com/tylerbutler/shelf/issues/107); use manual cleanup.
+Later `open()`, `save()`, and `close()` calls do not scan for these abandoned
+directories. Use `shelf.cleanup_snapshot(directory:, base_directory:)` to
+remove one exact directory after you confirm abandonment and stop all
+writers. The function supports existing leftovers without an owner marker.
 
 Existing directories, including legacy leftovers, have no database or host
 ownership marker. The directory name, PID, age, or expected filenames do not
@@ -273,11 +274,12 @@ including for another database in the same parent directory.
    Use independent records of the interrupted save to establish ownership
    of the directory and its contents. Shelf does not store that attribution.
    If you cannot establish ownership, leave the directory untouched.
-4. Check all entries before deleting anything. If you find an unknown file,
-   a symbolic link, or a nested directory, leave the candidate untouched.
-   Otherwise, remove only the regular snapshot and sidecar files you have
-   confirmed belong to that abandoned save, then remove the empty directory.
-   Do not recurse, follow links, or delete sibling paths with a wildcard.
+4. Call `shelf.cleanup_snapshot` for that exact directory. It checks all
+   entries before deletion and rejects unknown files, symbolic links, nested
+   directories, and special files. It accepts regular `snapshot.dets`,
+   numeric `snapshot.dets.N` sidecars, and recognized file_sorter temporary
+   names. It removes those files, then the empty directory. It does not
+   recurse, scan siblings, or restore the interrupted snapshot.
 5. If an inspection, backup, or removal fails, stop and retain the remaining
    files. Record the exact path and error before investigating. Resume the
    applications only after cleanup ends, then verify the expected persisted
@@ -286,3 +288,26 @@ including for another database in the same parent directory.
 Leave unrelated files, directories, and symbolic-link targets unchanged. If
 ownership remains uncertain, retain the candidate and investigate rather than
 delete it to reclaim space.
+
+```gleam
+import shelf
+
+// Run only after completing steps 1 through 3 above.
+shelf.cleanup_snapshot(
+  directory: ".shelf-save-86491-18",
+  base_directory: "/app/data",
+)
+```
+
+The cleanup call resolves the directory against `base_directory` and rejects
+paths outside that base. A name, PID, or recognized file layout does not prove
+abandonment; you must establish that before calling. The function does not
+detect or prevent concurrent writers, and it requires trusted directories
+with no concurrent path replacement.
+
+Unsafe candidates return `InvalidPath`. Filesystem failures return
+`FileError` with the failing path and operation. A removal failure can leave
+part of the directory behind; correct the cause and retry that same directory.
+The call does not change the committed database. If your OTP version uses
+unrecognized sorter names, inspect and remove those files by hand after
+confirming ownership instead of renaming them to pass the check.

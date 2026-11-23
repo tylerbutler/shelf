@@ -14,7 +14,7 @@
     dets_insert/3, dets_insert_list/3,
     dets_delete_key/3, dets_delete_object/4, dets_delete_all/2,
     reload_atomic/3,
-    validate_path/2,
+    validate_path/2, cleanup_snapshot/2,
     normalize_path/1
 ]).
 
@@ -346,6 +346,18 @@ guard_reservation(Owner, Monitor, Path, Name, Snapshot) ->
             Reply = file:delete(filename:join(Directory, <<"metadata-source">>)),
             Owner ! {Request, Reply},
             guard_reservation(Owner, Monitor, Path, Name, Snapshot);
+        {acquire_snapshot, Owner, Request} ->
+            %% A failed cleanup remains tracked. Retry that exact directory
+            %% before acquiring another, rather than accumulating leftovers.
+            case cleanup_finished_snapshot(Snapshot, Name) of
+                {ok, nil} ->
+                    ets:delete_object(?REGISTRY, {{snapshot_active, Name}, Name}),
+                    self() ! {acquire_snapshot, Owner, Request},
+                    guard_reservation(Owner, Monitor, Path, Name, none);
+                {error, _} = Error ->
+                    Owner ! {Request, Error},
+                    guard_reservation(Owner, Monitor, Path, Name, Snapshot)
+            end;
         {{reserve_snapshot, Temporary}, Owner, Request}
             when Snapshot =/= none, element(2, Snapshot) =:= Temporary ->
             {Directory, Temporary} = Snapshot,
@@ -364,20 +376,23 @@ guard_reservation(Owner, Monitor, Path, Name, Snapshot) ->
             guard_reservation(Owner, Monitor, Path, Name, Snapshot);
         {{finish_snapshot, Temporary}, Owner, Request}
             when Snapshot =/= none, element(2, Snapshot) =:= Temporary ->
-            %% The caller's after block runs after closing temporary DETS.
-            %% Cleanup and forgetting happen in this one process, avoiding
-            %% a second deletion by a delayed owner-DOWN handler.
-            cleanup_finished_snapshot(Snapshot, Name),
-            ets:delete_object(?REGISTRY, {{snapshot_active, Name}, Name}),
-            Owner ! {Request, ok},
-            guard_reservation(Owner, Monitor, Path, Name, none);
+            Result = cleanup_finished_snapshot(Snapshot, Name),
+            Remaining = case Result of
+                {ok, nil} ->
+                    ets:delete_object(?REGISTRY, {{snapshot_active, Name}, Name}),
+                    none;
+                {error, _} -> Snapshot
+            end,
+            Owner ! {Request, Result},
+            guard_reservation(Owner, Monitor, Path, Name, Remaining);
         {release_reservation, Owner, Request} ->
+            log_snapshot_cleanup(cleanup_dead_snapshot(Snapshot)),
             unregister_dets_name(Path, Name),
             unlock_open(),
             demonitor(Monitor, [flush]),
             Owner ! {Request, ok};
         {'DOWN', Monitor, process, Owner, _} ->
-            cleanup_dead_snapshot(Snapshot),
+            log_snapshot_cleanup(cleanup_dead_snapshot(Snapshot)),
             %% This close also serializes behind any pending native open.
             %% The guardian is not a DETS opening user: close alone cannot
             %% release the dead owner's handle. Wait for its file server.
@@ -417,20 +432,182 @@ await_dead_dets_close(Name) ->
     _ = dets:close(Name),
     ok.
 
-cleanup_dead_snapshot(none) -> ok;
-cleanup_dead_snapshot({_Directory, Temporary} = Snapshot) ->
+cleanup_dead_snapshot(none) -> {ok, nil};
+cleanup_dead_snapshot({Directory, Temporary}) ->
     %% Native DETS, not the guardian, owns the dead caller's open count.
     %% Wait for pending temp opens/closes and the file server before unlink.
     await_dead_dets_close(Temporary),
-    cleanup_snapshot_directory(Snapshot).
+    cleanup_tracked_snapshot_directory(Directory).
 
-cleanup_snapshot_directory({Directory, _Temporary}) ->
-    shelf_metadata:cleanup_directory(Directory),
-    _ = file:delete(filename:join(Directory, <<"snapshot.dets">>)),
-    _ = file:del_dir(Directory),
-    ok.
+cleanup_tracked_snapshot_directory(Directory) ->
+    %% A failed cleanup may have been completed explicitly by the operator.
+    %% Forget an absent tracked directory, but public cleanup still reports
+    %% a missing candidate as FileError.
+    case file:read_link_info(Directory) of
+        {error, enoent} -> {ok, nil};
+        _ -> cleanup_snapshot_directory(Directory)
+    end.
 
-cleanup_finished_snapshot({Directory, Temporary} = Snapshot, Name) ->
+%% Operator-controlled maintenance: abandonment and stopped writers on ALL
+%% hosts are preconditions. No PID probing, sibling sweep, or recursive
+%% deletion. Trusted directories are still required (no replacement races).
+%% The Gleam boundary uses UTF-8 binaries and Result(Nil, ShelfError).
+cleanup_snapshot(Directory, Base) when is_binary(Directory), is_binary(Base) ->
+    case Directory =:= <<>> orelse
+         binary:match(Directory, <<0>>) =/= nomatch orelse
+         binary:match(Base, <<0>>) =/= nomatch of
+        true -> snapshot_invalid(Directory, <<"Path is empty or contains null bytes">>);
+        false ->
+            case validate_path(<<".">>, Base) of
+                {ok, CanonicalBase} ->
+                    Candidate = filename:absname(Directory, CanonicalBase),
+                    %% Inspect the requested leaf BEFORE validate_path follows
+                    %% it. Relative candidates use the resolved trusted base.
+                    case file:read_link_info(Candidate) of
+                        {ok, #file_info{type = symlink}} ->
+                            snapshot_invalid(Candidate, <<"Snapshot is a symbolic link">>);
+                        {error, Reason} when Reason =/= enoent ->
+                            snapshot_file_error(Candidate, read_link_info, Reason);
+                        _ ->
+                            case snapshot_directory_name(filename:basename(Candidate)) of
+                                false ->
+                                    snapshot_invalid(Candidate, <<"Not an exact snapshot directory">>);
+                                true ->
+                                    case validate_path(Directory, Base) of
+                                        {ok, CanonicalBase} ->
+                                            snapshot_invalid(CanonicalBase, <<"Cannot delete the trusted base directory">>);
+                                        {ok, Canonical} -> cleanup_snapshot_directory(Canonical);
+                                        {error, _} = Error -> Error
+                                    end
+                            end
+                    end;
+                {error, _} = Error -> Error
+            end
+    end.
+
+cleanup_snapshot_directory(Directory) ->
+    case snapshot_directory_name(filename:basename(Directory)) of
+        false -> snapshot_invalid(Directory, <<"Not a snapshot directory">>);
+        true ->
+            case file:read_link_info(Directory) of
+                {ok, #file_info{type = directory}} ->
+                    case file:list_dir_all(Directory) of
+                        {ok, Names} ->
+                            case preflight_snapshot(Directory, lists:sort(Names), []) of
+                                {ok, Files} ->
+                                    %% Preflight ALL entries before metadata
+                                    %% aliases/sidecars or native files are
+                                    %% unlinked. Both cleanup paths require
+                                    %% stopped writers in a trusted directory.
+                                    case shelf_metadata:cleanup_directory(Directory) of
+                                        ok ->
+                                            NativeFiles = [Path || Path <- Files,
+                                                not shelf_metadata:cleanup_file_name(
+                                                    filename:basename(Path))],
+                                            delete_snapshot_files(NativeFiles, Directory);
+                                        {error, {Operation, Path, Reason}} ->
+                                            snapshot_file_error(Path, Operation, Reason)
+                                    end;
+                                {error, _} = Error -> Error
+                            end;
+                        {error, Reason} ->
+                            snapshot_file_error(Directory, list_dir_all, Reason)
+                    end;
+                {ok, _} -> snapshot_invalid(Directory, <<"Snapshot is not a real directory">>);
+                {error, Reason} -> snapshot_file_error(Directory, read_link_info, Reason)
+            end
+    end.
+
+preflight_snapshot(_Directory, [], Files) -> {ok, lists:reverse(Files)};
+preflight_snapshot(Directory, [Name | Rest], Files) ->
+    Path = filename:join(Directory, Name),
+    case file:read_link_info(Path) of
+        {ok, #file_info{type = regular}} ->
+            case snapshot_entry_name(Name) of
+                true -> preflight_snapshot(Directory, Rest, [Path | Files]);
+                false -> snapshot_invalid(Path, <<"Unknown snapshot entry; nothing deleted">>)
+            end;
+        {ok, _} -> snapshot_invalid(Path, <<"Non-regular snapshot entry; nothing deleted">>);
+        {error, Reason} -> snapshot_file_error(Path, read_link_info, Reason)
+    end.
+
+delete_snapshot_files([], Directory) ->
+    case file:del_dir(Directory) of
+        ok -> {ok, nil};
+        {error, Reason} -> snapshot_file_error(Directory, del_dir, Reason)
+    end;
+delete_snapshot_files([Path | Rest], Directory) ->
+    case file:delete(Path) of
+        ok -> delete_snapshot_files(Rest, Directory);
+        {error, Reason} -> snapshot_file_error(Path, delete, Reason)
+    end.
+
+snapshot_directory_name(<<".shelf-save-", Suffix/binary>>) ->
+    case binary:split(Suffix, <<"-">>, [global]) of
+        [Pid, Counter] -> snapshot_digits(Pid) andalso snapshot_digits(Counter);
+        _ -> false
+    end;
+snapshot_directory_name(_) -> false.
+
+snapshot_entry_name(Name) ->
+    case unicode:characters_to_binary(Name) of
+        Binary when is_binary(Binary) -> snapshot_file_name(Binary);
+        _ -> false
+    end.
+
+snapshot_file_name(<<"snapshot.dets">>) -> true;
+snapshot_file_name(<<"snapshot.dets.", Counter/binary>>) -> snapshot_digits(Counter);
+snapshot_file_name(<<"fs_", Suffix/binary>>) ->
+    %% Verified installed OTP 27/28/29 file_sorter:tmp_prefix1/2 and
+    %% next_temp/1: node(), "_", os:getpid(), "_", positive unique, ".",
+    %% numeric sequence. Nodes can themselves contain underscores/dots.
+    case lists:reverse(binary:split(Suffix, <<"_">>, [global])) of
+        [Sequence, Pid | NodeParts] when NodeParts =/= [] ->
+            Node = iolist_to_binary(lists:join(<<"_">>, lists:reverse(NodeParts))),
+            Node =/= <<>> andalso snapshot_digits(Pid) andalso
+                case binary:split(Sequence, <<".">>, [global]) of
+                    [Unique, Counter] ->
+                        snapshot_digits(Unique) andalso snapshot_digits(Counter);
+                    _ -> false
+                end;
+        _ -> false
+    end;
+snapshot_file_name(Name) -> shelf_metadata:cleanup_file_name(Name).
+
+snapshot_digits(<<>>) -> false;
+snapshot_digits(Binary) -> snapshot_digits_rest(Binary).
+
+snapshot_digits_rest(<<>>) -> true;
+snapshot_digits_rest(<<Digit, Rest/binary>>) when Digit >= $0, Digit =< $9 ->
+    snapshot_digits_rest(Rest);
+snapshot_digits_rest(_) -> false.
+
+snapshot_invalid(Path, Detail) ->
+    {error, {invalid_path, unicode:characters_to_binary(
+        io_lib:format("~ts: ~ts", [snapshot_path_text(Path), Detail]))}}.
+
+snapshot_path_text(Path) ->
+    %% list_dir_all also exposes non-UTF-8 native filenames. Keep the error
+    %% a valid Gleam String rather than leaking a Unicode conversion tuple.
+    case unicode:characters_to_binary(Path) of
+        Text when is_binary(Text) -> Text;
+        _ -> io_lib:format("~p", [Path])
+    end.
+
+snapshot_file_error(Path, Operation, Reason) ->
+    %% Do not use translate_error: it discards paths for common POSIX errors.
+    %% Deletion is not transactional; preserve remaining entries for retry.
+    {error, {file_error, unicode:characters_to_binary(
+        io_lib:format("Snapshot cleanup ~p failed at ~ts: ~p; "
+                      "cleanup may be partial, inspect remaining entries before retry",
+                      [Operation, snapshot_path_text(Path), Reason]))}}.
+
+log_snapshot_cleanup({ok, nil}) -> ok;
+log_snapshot_cleanup({error, Error}) ->
+    logger:error("Shelf snapshot cleanup failed: ~p", [Error]).
+
+cleanup_finished_snapshot({Directory, Temporary}, Name) ->
+    await_dead_dets_close(Temporary),
     TmpPath = filename:join(Directory, <<"snapshot.dets">>),
     %% In this private trusted directory, a remaining temp pathname means
     %% rename never published that inode. Capture its exact key BEFORE unlink.
@@ -445,12 +622,17 @@ cleanup_finished_snapshot({Directory, Temporary} = Snapshot, Name) ->
             {{file_identity, Major, Minor, Inode}, Name};
         _ -> none
     end,
-    cleanup_snapshot_directory(Snapshot),
-    case Abandoned of
-        none -> ok;
-        Object ->
-            ets:delete_object(?REGISTRY, Object),
-            ok
+    case cleanup_tracked_snapshot_directory(Directory) of
+        {ok, nil} = Success ->
+            case Abandoned of
+                none -> ok;
+                Object ->
+                    ets:delete_object(?REGISTRY, Object)
+            end,
+            Success;
+        {error, _} = Error ->
+            %% Retain both directory tracking and inode protection on failure.
+            Error
     end.
 
 snapshot_request(Guardian, Operation) ->
@@ -825,12 +1007,17 @@ save(Ets, {shelf_dets, _Owner, _Lifetime, Guardian} = Dets) ->
                         case snapshot_request(Guardian, acquire_snapshot) of
                             {ok, {Directory, Temporary}} ->
                                 TmpPath = filename:join(Directory, <<"snapshot.dets">>),
-                                try safe_save_impl(Ets, Dets, OrigPath, TmpPath, Type, Temporary)
-                                after
-                                    snapshot_request(Guardian, {finish_snapshot, Temporary})
-                                end;
+                                SaveResult = try
+                                    safe_save_impl(Ets, Dets, OrigPath, TmpPath, Type, Temporary)
+                                catch
+                                    _:SaveReason -> {error, translate_error(SaveReason)}
+                                end,
+                                CleanupResult = snapshot_request(Guardian, {finish_snapshot, Temporary}),
+                                combine_snapshot_results(SaveResult, CleanupResult);
                             {error, {file_error, _}} = IdentityError ->
                                 IdentityError;
+                            {error, {invalid_path, _}} = CleanupError ->
+                                CleanupError;
                             {error, TempReason} ->
                                 %% Keep the save error's native failure detail,
                                 %% as for a failed snapshot/open/rename below.
@@ -844,6 +1031,11 @@ save(Ets, {shelf_dets, _Owner, _Lifetime, Guardian} = Dets) ->
 
 save_platform(Path) ->
     shelf_metadata:check_platform(Path).
+
+combine_snapshot_results({ok, nil}, CleanupResult) -> CleanupResult;
+combine_snapshot_results({error, _} = SaveError, CleanupResult) ->
+    log_snapshot_cleanup(CleanupResult),
+    SaveError.
 
 make_save_directory(_Path, 0) ->
     {error, {file_error, temp_directory, eexist}};

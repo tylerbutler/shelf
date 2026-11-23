@@ -4,7 +4,7 @@
 -module(shelf_metadata).
 -include_lib("kernel/include/file.hrl").
 -export([check_platform/1, read/4, prepare_directory/2, apply/4, run/6,
-         cleanup_directory/1, verify/5]).
+         cleanup_directory/1, cleanup_file_name/1, verify/5]).
 
 -define(META_LIMIT, 1048576).
 -define(TIMEOUT, 30000).
@@ -633,18 +633,31 @@ apply(G, Path, {_, Entries}, Attributes) ->
     _ = text(G, apply_flags, Path, chflags, ["0", Path]),
     ok.
 
-%% Only our own names, inside an exclusively acquired private directory.
-%% Called after the guardian's OS-child termination barrier on owner death.
+%% Only our own names. The shared cleanup path first preflights EVERY entry
+%% (including regular-file type checks) before calling this function.
+%% Guardian cleanup follows the OS-child termination barrier; operator
+%% cleanup requires all writers to have stopped on every host.
+cleanup_file_name(<<"metadata-source">>) -> true;
+cleanup_file_name(<<"tar.", Suffix:8/binary>>) ->
+    lists:all(fun(C) ->
+        (C >= $A andalso C =< $Z) orelse
+        (C >= $a andalso C =< $z) orelse
+        (C >= $0 andalso C =< $9)
+    end, binary_to_list(Suffix));
+cleanup_file_name(_) -> false.
+
 cleanup_directory(Directory) ->
-    _ = file:delete(filename:join(Directory, <<"metadata-source">>)),
-    case file:list_dir(Directory) of
+    case file:list_dir_all(Directory) of
         {ok, Names} ->
-            lists:foreach(fun(Name) ->
-                case re:run(Name, "^tar\\.[A-Za-z0-9]{8}$", [{capture, none}]) of
-                    match -> _ = file:delete(filename:join(Directory, Name));
-                    nomatch -> ok
-                end
-            end, Names);
-        {error, _} -> ok
-    end,
-    ok.
+            Files = [filename:join(Directory, Name) || Name <- Names,
+                cleanup_file_name(unicode:characters_to_binary(Name))],
+            delete_metadata_files(Files);
+        {error, Reason} -> {error, {list_dir_all, Directory, Reason}}
+    end.
+
+delete_metadata_files([]) -> ok;
+delete_metadata_files([Path | Rest]) ->
+    case file:delete(Path) of
+        ok -> delete_metadata_files(Rest);
+        {error, Reason} -> {error, {delete, Path, Reason}}
+    end.
