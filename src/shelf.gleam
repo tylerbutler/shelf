@@ -92,8 +92,8 @@ pub type ShelfError {
   /// read freely. Wrap the table in a supervised actor/server if you
   /// need cross-process writes.
   NotOwner
-  /// DETS file could not be found, created, or opened with the requested
-  /// table kind, or its filesystem identity could not be established.
+  /// A storage file could not be found, created, opened, or removed,
+  /// or its filesystem identity could not be established.
   /// The message includes the native error detail.
   FileError(String)
   /// Another live shelf table reserves this canonical path or filesystem
@@ -178,6 +178,49 @@ pub fn config(
 pub fn write_mode(config config: Config, mode mode: WriteMode) -> Config {
   Config(..config, write_mode: mode)
 }
+
+/// Remove one abandoned `.shelf-save-<pid>-<counter>` directory.
+///
+/// Before calling, confirm that the directory belongs to an interrupted
+/// save and stop all writers that can access its parent directory, including
+/// other VMs and hosts. A directory name, PID, or age does not prove that a
+/// save has stopped. This function does not detect writers or lock them out.
+///
+/// Resolves `directory` against `base_directory` and checks all entries
+/// before deleting any. Rejects symbolic links, nested directories, and
+/// unknown files. Removes only regular snapshot, DETS sidecar, and recognized
+/// file_sorter temporary files, then removes the empty directory.
+/// It does not scan siblings or restore an interrupted snapshot.
+///
+/// Requires trusted directories with no concurrent path replacement.
+/// A filesystem error can occur after some files have been removed; correct
+/// the cause and retry the same directory. The error includes the failing
+/// path and operation. The committed database remains unchanged.
+///
+/// ```gleam
+/// shelf.cleanup_snapshot(
+///   directory: ".shelf-save-86491-18",
+///   base_directory: "/app/data",
+/// )
+/// ```
+pub fn cleanup_snapshot(
+  directory directory: String,
+  base_directory base_directory: String,
+) -> Result(Nil, ShelfError) {
+  case
+    string.contains(directory, "\u{0}")
+    || string.contains(base_directory, "\u{0}")
+  {
+    True -> Error(InvalidPath("Path contains null bytes"))
+    False -> ffi_cleanup_snapshot(directory, base_directory)
+  }
+}
+
+@external(erlang, "shelf_ffi", "cleanup_snapshot")
+fn ffi_cleanup_snapshot(
+  directory: String,
+  base_directory: String,
+) -> Result(Nil, ShelfError)
 
 // ── Internal accessors ──────────────────────────────────────────────────
 // These allow sibling modules to read opaque Config fields.
